@@ -8,7 +8,11 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-export ORCHESTRATOR_SOCKET=data/orchestrator.sock
+# No ORCHESTRATOR_SOCKET export. This used to pin `data/orchestrator.sock`, a
+# relative path assuming a `data/` directory under the repository root that the
+# daemon has never written to — it places the socket directly in its data
+# directory. Left unset, the CLI's own discovery resolves the running daemon's
+# socket, honouring ORCHESTRATORD_DATA_DIR when the caller sets one (FR-163).
 CLI=./target/release/orchestrator
 
 # ── Verify daemon is running ──
@@ -19,7 +23,9 @@ fi
 
 # ── Verify CLI connectivity ──
 if ! "$CLI" task list >/dev/null 2>&1; then
-  echo "ERROR: CLI cannot connect to daemon via $ORCHESTRATOR_SOCKET"
+  echo "ERROR: CLI cannot connect to the running daemon."
+  echo "  The CLI resolves the socket from ORCHESTRATORD_DATA_DIR, or"
+  echo "  ~/.orchestratord/orchestrator.sock when that is unset."
   exit 1
 fi
 

@@ -264,9 +264,7 @@ impl ControlPlaneProtection {
         db_path: &Path,
         control_plane_dir: Option<&Path>,
     ) -> Result<Self> {
-        let dir = control_plane_dir
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| data_dir.join("control-plane"));
+        let dir = agent_orchestrator::paths::control_plane_dir(data_dir, control_plane_dir);
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("failed to create {}", dir.display()))?;
         let config_path = dir.join("protection.yaml");

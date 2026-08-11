@@ -182,10 +182,7 @@ pub fn load_uds_policy(
     data_dir: &Path,
     control_plane_dir: Option<&Path>,
 ) -> Result<Option<UdsAuthPolicy>> {
-    let cp_dir = match control_plane_dir {
-        Some(d) => d.to_path_buf(),
-        None => data_dir.join("control-plane"),
-    };
+    let cp_dir = agent_orchestrator::paths::control_plane_dir(data_dir, control_plane_dir);
     let path = cp_dir.join("uds-policy.yaml");
     if !path.exists() {
         return Ok(None);

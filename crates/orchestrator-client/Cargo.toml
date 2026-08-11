@@ -12,6 +12,7 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 dirs = "6"
+orchestrator-config = { path = "../orchestrator-config", version = "0.5.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 tokio = { version = "1.51", features = ["time", "net"] }

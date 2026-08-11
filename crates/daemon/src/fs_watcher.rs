@@ -8,7 +8,7 @@ use agent_orchestrator::trigger_engine::{TriggerEventPayload, broadcast_task_eve
 use chrono::Utc;
 use notify::Watcher;
 use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info, warn};
@@ -104,6 +104,27 @@ struct FsTriggerEntry {
 
 // ── Reload logic ─────────────────────────────────────────────────────────────
 
+/// Why a filesystem-trigger path must not be watched, or `None` to watch it.
+///
+/// `data_dir` is a parameter rather than an environment read, and that is the
+/// whole of the fix. This rule used to consult `ORCHESTRATORD_DATA_DIR`
+/// directly, so it did nothing at all in the default deployment — the variable
+/// is unset there and the data directory resolves from the home directory
+/// instead. A workspace rooted at `$HOME` therefore watched
+/// `~/.orchestratord`, and the daemon's own database writes fed the trigger
+/// that was watching them. Taking the resolved directory from `InnerState`
+/// makes the skip fire in the case it was written for.
+fn watch_exclusion(abs_path: &Path, data_dir: &Path) -> Option<&'static str> {
+    let path_str = abs_path.to_string_lossy();
+    if path_str.contains("/.git/") || path_str.ends_with("/.git") {
+        return Some("skipping .git path");
+    }
+    if abs_path.starts_with(data_dir) {
+        return Some("skipping daemon data directory");
+    }
+    None
+}
+
 fn reload_watches(
     state: &InnerState,
     watcher: &mut Option<notify::RecommendedWatcher>,
@@ -162,16 +183,9 @@ fn reload_watches(
                     );
                     continue;
                 }
-                // Skip .git and ORCHESTRATORD_DATA_DIR.
-                let path_str = abs_path.to_string_lossy();
-                if path_str.contains("/.git/") || path_str.ends_with("/.git") {
-                    warn!(path = %abs_path.display(), "skipping .git path");
-                    continue;
-                }
-                if let Ok(data_dir) = std::env::var("ORCHESTRATORD_DATA_DIR")
-                    && path_str.starts_with(&data_dir)
-                {
-                    warn!(path = %abs_path.display(), "skipping daemon data directory");
+                // Skip .git and the daemon's own data directory.
+                if let Some(reason) = watch_exclusion(&abs_path, &state.data_dir) {
+                    warn!(path = %abs_path.display(), "{reason}");
                     continue;
                 }
                 // Canonicalize to resolve symlinks (e.g. /var → /private/var on macOS).
@@ -337,6 +351,69 @@ fn handle_notify_event(
                 project: None,
                 exclude_trigger: None,
             },
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The regression FR-163 fixed. `data_dir` here is a path that appears in no
+    /// environment variable, which is the point: the previous rule read
+    /// `ORCHESTRATORD_DATA_DIR` and so returned `None` for this input — the
+    /// default deployment's exact situation, where the variable is unset and the
+    /// data directory comes from the home directory instead.
+    #[test]
+    fn a_path_inside_the_data_dir_is_excluded_without_consulting_the_environment() {
+        let data_dir = Path::new("/home/dev/.orchestratord");
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/.orchestratord/logs"), data_dir),
+            Some("skipping daemon data directory")
+        );
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/.orchestratord"), data_dir),
+            Some("skipping daemon data directory")
+        );
+    }
+
+    /// The over-reach the repair could have introduced. Matching was a string
+    /// prefix before, so a sibling whose name merely begins with the data dir's
+    /// would have been silently excluded too — the failure that costs nothing
+    /// until someone creates the directory. `Path::starts_with` compares whole
+    /// components, so it does not.
+    #[test]
+    fn a_sibling_whose_name_merely_begins_with_the_data_dir_is_still_watched() {
+        let data_dir = Path::new("/home/dev/.orchestratord");
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/.orchestratord-backup/src"), data_dir),
+            None
+        );
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/.orchestratord2"), data_dir),
+            None
+        );
+    }
+
+    #[test]
+    fn ordinary_workspace_paths_are_watched() {
+        let data_dir = Path::new("/home/dev/.orchestratord");
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/repo/src"), data_dir),
+            None
+        );
+    }
+
+    #[test]
+    fn git_paths_are_excluded_anywhere() {
+        let data_dir = Path::new("/home/dev/.orchestratord");
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/repo/.git"), data_dir),
+            Some("skipping .git path")
+        );
+        assert_eq!(
+            watch_exclusion(Path::new("/home/dev/repo/.git/refs"), data_dir),
+            Some("skipping .git path")
         );
     }
 }

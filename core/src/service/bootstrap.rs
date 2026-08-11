@@ -235,7 +235,7 @@ fn initialize_runtime(data_dir: &Path) -> Result<(std::path::PathBuf, std::path:
     let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)
         .with_context(|| format!("failed to create logs dir {}", logs_dir.display()))?;
-    let db_path = data_dir.join("agent_orchestrator.db");
+    let db_path = crate::paths::db_path(data_dir);
     PersistenceBootstrap::ensure_current(&db_path)?;
     // Ensure legacy key exists (backward compat)
     crate::secret_store_crypto::ensure_secret_key(data_dir, &db_path)?;

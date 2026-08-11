@@ -3246,6 +3246,7 @@ dependencies = [
  "anyhow",
  "dirs",
  "hyper-util",
+ "orchestrator-config",
  "serde",
  "serde_yaml",
  "tempfile",
@@ -3271,6 +3272,7 @@ version = "0.5.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "dirs",
  "glob",
  "libc",
  "serde",

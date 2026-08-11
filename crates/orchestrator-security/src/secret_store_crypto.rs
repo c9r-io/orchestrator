@@ -360,49 +360,27 @@ pub fn secret_key_meta_path(data_dir: &Path) -> PathBuf {
     data_dir.join(KEY_META_RELATIVE_PATH)
 }
 
-/// Resolves the application root from a database path in either nested or flat layouts.
-/// The operator's explicit choice beats layout inference. The daemon opens the
-/// database as a direct child of the resolved data dir (`bootstrap.rs`), so
-/// when `ORCHESTRATORD_DATA_DIR` names the database's parent, a parent that
-/// happens to be called `data` is a name, not a layout. Measured before this
-/// rule existed: a QA gate exporting `ORCHESTRATORD_DATA_DIR=$ROOT/data` had
-/// its key seeded at `$ROOT/data/secrets/` by boot while this function sent
-/// every SecretStore write looking under `$ROOT/secrets/` — writes reported
-/// "no active encryption key" while `secret key list` said active.
+/// Resolves the data directory holding `db_path` — the inverse of
+/// [`orchestrator_config::paths::db_path`].
+///
+/// The daemon opens the database as a direct child of the data directory, so
+/// the parent *is* the answer and there is nothing to infer. This function used
+/// to infer anyway: a parent named `data` was read as a nested layout and its
+/// grandparent returned instead. A QA gate exporting
+/// `ORCHESTRATORD_DATA_DIR=$ROOT/data` then had its key seeded at
+/// `$ROOT/data/secrets/` by boot while every SecretStore write looked under
+/// `$ROOT/secrets/` — writes reported "no active encryption key" while
+/// `secret key list` reported one active.
+///
+/// That was first patched by letting an explicit `ORCHESTRATORD_DATA_DIR` beat
+/// the inference. FR-163 removed both halves: the environment read existed only
+/// to overrule a guess, and with the guess gone it could only disagree with the
+/// path it was handed. A directory named `data` is a name, not a layout, and
+/// the round-trip property in `orchestrator_config::paths` is what keeps it one.
 pub fn resolve_data_dir_from_db_path(db_path: &Path) -> Result<PathBuf> {
-    let env_dir = std::env::var_os("ORCHESTRATORD_DATA_DIR").map(PathBuf::from);
-    resolve_data_dir_from_db_path_with_override(db_path, env_dir.as_deref())
-}
-
-/// The env read is a parameter so tests exercise the precedence without
-/// touching the process environment (the `resolve_logging_config_with_env`
-/// shape). Comparison is raw first, then canonicalized, so a macOS
-/// `/var` → `/private/var` symlink difference does not defeat the override.
-fn resolve_data_dir_from_db_path_with_override(
-    db_path: &Path,
-    override_dir: Option<&Path>,
-) -> Result<PathBuf> {
-    let parent = db_path
-        .parent()
-        .with_context(|| format!("db path has no parent: {}", db_path.display()))?;
-    if let Some(dir) = override_dir {
-        let matches = parent == dir
-            || match (std::fs::canonicalize(parent), std::fs::canonicalize(dir)) {
-                (Ok(canonical_parent), Ok(canonical_dir)) => canonical_parent == canonical_dir,
-                _ => false,
-            };
-        if matches {
-            return Ok(parent.to_path_buf());
-        }
-    }
-    if parent.file_name().and_then(|s| s.to_str()) == Some("data") {
-        parent
-            .parent()
-            .map(Path::to_path_buf)
-            .with_context(|| format!("data dir has no parent: {}", parent.display()))
-    } else {
-        Ok(parent.to_path_buf())
-    }
+    orchestrator_config::paths::data_dir_from_db_path(db_path)
+        .map(Path::to_path_buf)
+        .with_context(|| format!("db path has no parent: {}", db_path.display()))
 }
 
 /// Loads the existing primary key or initializes one when no encrypted SecretStore data exists.
@@ -739,68 +717,49 @@ mod tests {
         );
     }
 
+    /// The ticket's failing state, now unconditional. This used to need an
+    /// `ORCHESTRATORD_DATA_DIR` export to come out right; the heuristic that
+    /// made the export necessary is gone, so a data directory named `data`
+    /// resolves to itself with nothing set. Asserted here as well as in
+    /// `orchestrator_config::paths` because this is the crate whose keys went
+    /// to the wrong directory when it did not hold.
     #[test]
-    fn resolve_data_dir_from_db_path_accepts_data_and_flat_layouts() {
-        let temp = tempdir().expect("tempdir");
-        let nested = temp.path().join("data/agent_orchestrator.db");
-        let flat = temp.path().join("agent_orchestrator.db");
-
-        // Injected None rather than the env-reading wrapper: hermetic under a
-        // caller (e.g. a QA gate) that exports ORCHESTRATORD_DATA_DIR itself.
-        assert_eq!(
-            resolve_data_dir_from_db_path_with_override(&nested, None).expect("nested root"),
-            temp.path()
-        );
-        assert_eq!(
-            resolve_data_dir_from_db_path_with_override(&flat, None).expect("flat root"),
-            temp.path()
-        );
-    }
-
-    #[test]
-    fn explicit_data_dir_override_beats_the_data_layout_heuristic() {
+    fn a_data_dir_named_data_resolves_to_itself_with_no_environment_set() {
         let temp = tempdir().expect("tempdir");
         let data_dir = temp.path().join("data");
         std::fs::create_dir_all(&data_dir).expect("data dir");
         let db = data_dir.join("agent_orchestrator.db");
 
-        // The ticket's failing state: without the override this resolves to
-        // the grandparent and the keyring loads from a directory nothing
-        // seeded.
         assert_eq!(
-            resolve_data_dir_from_db_path_with_override(&db, Some(&data_dir)).expect("override"),
+            resolve_data_dir_from_db_path(&db).expect("resolve"),
             data_dir
         );
     }
 
+    /// The key path and the resolved data dir have to agree, which is the
+    /// property the heuristic broke. Asserting the two derivations meet is
+    /// stronger than asserting either one alone: the old code passed a
+    /// "resolves to some directory" check while sending reads and writes to
+    /// different ones.
     #[test]
-    fn an_override_naming_a_different_directory_leaves_the_heuristic_in_charge() {
+    fn the_resolved_data_dir_is_where_the_key_was_seeded() {
         let temp = tempdir().expect("tempdir");
-        let nested = temp.path().join("data/agent_orchestrator.db");
-        let elsewhere = temp.path().join("elsewhere");
+        for name in ["data", "orchestratord"] {
+            let data_dir = temp.path().join(name);
+            std::fs::create_dir_all(&data_dir).expect("data dir");
+            let db = orchestrator_config::paths::db_path(&data_dir);
 
-        // The override is a match condition, not a master key: an env value
-        // unrelated to this database changes nothing.
-        assert_eq!(
-            resolve_data_dir_from_db_path_with_override(&nested, Some(&elsewhere))
-                .expect("nested root"),
-            temp.path()
-        );
+            let resolved = resolve_data_dir_from_db_path(&db).expect("resolve");
+            assert_eq!(
+                secret_key_path(&resolved),
+                secret_key_path(&data_dir),
+                "key path diverged for a data dir named {name}"
+            );
+        }
     }
 
-    #[cfg(unix)]
     #[test]
-    fn a_canonically_equal_override_matches_through_symlinks() {
-        let temp = tempdir().expect("tempdir");
-        let data_dir = temp.path().join("data");
-        std::fs::create_dir_all(&data_dir).expect("data dir");
-        let link = temp.path().join("link");
-        std::os::unix::fs::symlink(&data_dir, &link).expect("symlink");
-        let db = data_dir.join("agent_orchestrator.db");
-
-        assert_eq!(
-            resolve_data_dir_from_db_path_with_override(&db, Some(&link)).expect("via symlink"),
-            data_dir
-        );
+    fn a_db_path_with_no_parent_is_an_error() {
+        assert!(resolve_data_dir_from_db_path(Path::new("/")).is_err());
     }
 }

@@ -341,9 +341,7 @@ pub fn prepare_secure_server(
     bind_addr: &SocketAddr,
     control_plane_dir: Option<&Path>,
 ) -> Result<SecureServerConfig> {
-    let dir = control_plane_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| data_dir.join("control-plane"));
+    let dir = agent_orchestrator::paths::control_plane_dir(data_dir, control_plane_dir);
     let paths = ControlPlanePaths::new(dir);
     bootstrap_control_plane(&paths, bind_addr)?;
     ensure_default_user_materials(data_dir, &paths, bind_addr)?;
@@ -378,9 +376,7 @@ pub fn issue_client_materials(
     subject_id: &str,
     role: Role,
 ) -> Result<PathBuf> {
-    let dir = control_plane_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| data_dir.join("control-plane"));
+    let dir = agent_orchestrator::paths::control_plane_dir(data_dir, control_plane_dir);
     let paths = ControlPlanePaths::new(dir);
     bootstrap_control_plane(&paths, bind_addr)?;
     let username = subject_id
@@ -699,9 +695,7 @@ fn signer_from_pem(ca_cert_pem: &str, ca_key_pem: &str) -> Result<Issuer<'static
 /// produces a consistent secret without any additional configuration.
 /// Returns `None` if the CA cert does not exist yet.
 pub fn derive_webhook_secret(data_dir: &Path, control_plane_dir: Option<&Path>) -> Option<String> {
-    let dir = control_plane_dir
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| data_dir.join("control-plane"));
+    let dir = agent_orchestrator::paths::control_plane_dir(data_dir, control_plane_dir);
     let ca_cert_path = dir.join("pki/ca.crt");
     let ca_cert = std::fs::read(&ca_cert_path).ok()?;
     let mut hasher = Sha256::new();

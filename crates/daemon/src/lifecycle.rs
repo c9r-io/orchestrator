@@ -111,13 +111,17 @@ pub fn sigterm_sender_pid() -> Option<i32> {
 }
 
 /// Returns the path to the daemon Unix Domain Socket.
+///
+/// Both names delegate to `orchestrator_config::paths` rather than joining a
+/// literal: the CLI and the client crate resolve the same two files and cannot
+/// see this module, so a literal here is half of a disagreement (FR-163).
 pub fn socket_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("orchestrator.sock")
+    agent_orchestrator::paths::socket_path(data_dir)
 }
 
 /// Returns the path to the daemon PID file.
 pub fn pid_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("daemon.pid")
+    agent_orchestrator::paths::pid_path(data_dir)
 }
 
 /// Write the current process PID to the PID file.

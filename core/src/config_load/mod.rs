@@ -19,8 +19,6 @@ pub(crate) use persist::serialize_config_snapshot;
 pub(crate) use self_heal::apply_self_heal_pass;
 pub(crate) use validate::validate_workflow_config_with_agents;
 
-use std::path::PathBuf;
-
 /// Returns the current UTC timestamp encoded as RFC 3339.
 ///
 /// Defined in `orchestrator-persistence` and re-exported here so the many
@@ -34,15 +32,15 @@ pub use orchestrator_persistence::now_ts;
 /// Returns the daemon data directory (`~/.orchestratord` by default).
 ///
 /// Override with the `ORCHESTRATORD_DATA_DIR` environment variable.
-pub fn data_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
-        return PathBuf::from(dir);
-    }
-    match dirs::home_dir() {
-        Some(home) => home.join(".orchestratord"),
-        None => PathBuf::from(".orchestratord"),
-    }
-}
+///
+/// Defined in `orchestrator-config` and re-exported here for the same reason
+/// `now_ts` above is: the client crate resolves this path too and cannot depend
+/// on `core`, so a definition here and a definition there is how a CLI and the
+/// daemon it talks to come to disagree about where the socket lives. FR-163
+/// measured four such derivations. `orchestrator_config::paths` is the one that
+/// remains; the rest of the runtime layout — socket, pidfile, database,
+/// control-plane directory — is spelled there too.
+pub use orchestrator_config::paths::data_dir;
 
 #[cfg(test)]
 pub(crate) mod tests {

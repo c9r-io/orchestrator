@@ -13,7 +13,7 @@ use crate::DaemonCommands;
 /// Dispatch a daemon subcommand.
 pub async fn dispatch(cmd: DaemonCommands) -> Result<()> {
     let data_dir = agent_orchestrator::config_load::data_dir();
-    let pid_path = data_dir.join("daemon.pid");
+    let pid_path = agent_orchestrator::paths::pid_path(&data_dir);
 
     match cmd {
         DaemonCommands::Stop => stop(&pid_path).await,

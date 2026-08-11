@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use orchestrator_config::paths;
 use std::path::{Path, PathBuf};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity, Uri};
 use tower::service_fn;
@@ -19,17 +20,37 @@ pub enum TransportKind {
     Tls,
 }
 
+/// Environment variable naming the daemon socket directly.
+pub const SOCKET_ENV: &str = "ORCHESTRATOR_SOCKET";
+
 /// Discover the daemon socket path from environment or default location.
+///
+/// `ORCHESTRATOR_SOCKET` names a socket outright and is the one thing this
+/// function knows that `orchestrator_config::paths` does not; everything below
+/// it is that module's answer, not a second opinion. FR-163 removed the second
+/// opinion — this function used to spell both `orchestrator.sock` and the home
+/// fallback itself.
 pub fn discover_socket_path() -> PathBuf {
-    if let Ok(path) = std::env::var("ORCHESTRATOR_SOCKET") {
+    if let Ok(path) = std::env::var(SOCKET_ENV) {
         return PathBuf::from(path);
     }
-    if let Ok(dir) = std::env::var("ORCHESTRATORD_DATA_DIR") {
-        return PathBuf::from(dir).join("orchestrator.sock");
+    paths::socket_path(&paths::data_dir())
+}
+
+/// Whether a daemon is currently accepting connections on `socket_path`.
+///
+/// The question is "is anyone listening", and `Path::exists` answers a different
+/// one. The daemon unlinks its socket when it binds and again on a clean
+/// shutdown, but a crash or `SIGKILL` leaves the inode behind, and an existence
+/// probe reads that corpse as a live daemon: the CLI commits to UDS, retries
+/// three times, and reports "Is the daemon running?" while a working TLS
+/// control plane sits one discovery step later. Connecting is the only probe
+/// that distinguishes the two.
+async fn socket_is_listening(socket_path: &Path) -> bool {
+    if !socket_path.exists() {
+        return false;
     }
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".orchestratord/orchestrator.sock")
+    tokio::net::UnixStream::connect(socket_path).await.is_ok()
 }
 
 /// Connect to the daemon using the best available transport.
@@ -40,15 +61,21 @@ pub fn discover_socket_path() -> PathBuf {
 /// Connection priority:
 /// 1. `ORCHESTRATOR_SOCKET` env (no explicit config) → UDS
 /// 2. Explicit control-plane config (flag or env) → TCP/TLS
-/// 3. Default socket file exists (`~/.orchestratord/orchestrator.sock`) → UDS
+/// 3. Default socket is **accepting connections** → UDS
 /// 4. Auto-discover `~/.orchestratord/control-plane/config.yaml` → TCP/TLS
 /// 5. Fallback → UDS
+///
+/// Step 3 probes by connecting, not by existence: a socket left behind by a
+/// crashed daemon must not capture the discovery chain that would otherwise
+/// reach step 4. Step 1 is deliberately *not* probed the same way — naming
+/// `ORCHESTRATOR_SOCKET` is an explicit choice of transport, and silently
+/// falling through to TLS because it happens to be down would hide the operator's
+/// own configuration from them.
 pub async fn connect(
     explicit_control_plane_config: Option<&str>,
 ) -> Result<(Channel, TransportKind)> {
     // 1. ORCHESTRATOR_SOCKET env → UDS
-    if explicit_control_plane_config.is_none() && std::env::var_os("ORCHESTRATOR_SOCKET").is_some()
-    {
+    if explicit_control_plane_config.is_none() && std::env::var_os(SOCKET_ENV).is_some() {
         return connect_uds().await.map(|ch| (ch, TransportKind::Uds));
     }
     // 2. Explicit config (--control-plane-config flag or env) → TCP/TLS
@@ -57,10 +84,10 @@ pub async fn connect(
             .await
             .map(|ch| (ch, TransportKind::Tls));
     }
-    // 3. Local socket file exists → UDS (skip when explicit config was requested)
+    // 3. Local socket is listening → UDS (skip when explicit config was requested)
     if explicit_control_plane_config.is_none() {
         let socket = discover_socket_path();
-        if socket.exists() {
+        if socket_is_listening(&socket).await {
             return connect_uds().await.map(|ch| (ch, TransportKind::Uds));
         }
     }
@@ -73,6 +100,15 @@ pub async fn connect(
     // 5. Fallback → UDS
     connect_uds().await.map(|ch| (ch, TransportKind::Uds))
 }
+
+/// Diagnostic printed when a socket file exists but nothing is accepting on it.
+///
+/// Asserted by name in `scripts/qa/test-stale-socket-discovery.sh`. The two
+/// failures need different words because they need different fixes: a missing
+/// socket means start the daemon, a dead socket means the last daemon did not
+/// exit cleanly and the file is debris. Reporting the second as the first is
+/// what sent operators looking for a daemon that was never going to be there.
+pub const STALE_SOCKET_DIAGNOSTIC: &str = "socket exists but nothing is listening";
 
 async fn connect_uds() -> Result<Channel> {
     let socket_path = discover_socket_path();
@@ -116,19 +152,33 @@ async fn connect_uds() -> Result<Channel> {
         }
     }
 
+    // The retries above exist to ride out a restarting daemon, so the stale-socket
+    // verdict is only reachable once they are spent: a socket that is still not
+    // accepting after three attempts is debris, not a daemon mid-`exec()`.
+    let context = format!(
+        "failed to connect to daemon at {} after {} attempts. {}",
+        socket_path.display(),
+        max_attempts,
+        stale_socket_advice(&socket_path)
+    );
     match last_err {
-        Some(e) => Err(e).with_context(|| {
-            format!(
-                "failed to connect to daemon at {} after {} attempts. Is the daemon running?",
-                socket_path.display(),
-                max_attempts,
-            )
-        }),
-        None => anyhow::bail!(
-            "failed to connect to daemon at {} after {} attempts. Is the daemon running?",
+        Some(e) => Err(e).context(context),
+        None => anyhow::bail!(context),
+    }
+}
+
+/// The trailing half of a UDS connection failure: what the operator should do.
+fn stale_socket_advice(socket_path: &Path) -> String {
+    if socket_path.exists() {
+        format!(
+            "The {} at {} — the daemon that created it exited without cleaning up, which is what a crash or SIGKILL leaves behind.\n  Start it with: orchestratord --foreground --workers 2\n  Or remove the stale socket: rm {}",
+            STALE_SOCKET_DIAGNOSTIC,
             socket_path.display(),
-            max_attempts,
-        ),
+            socket_path.display()
+        )
+    } else {
+        "Is the daemon running?\n  Start it with: orchestratord --foreground --workers 2"
+            .to_string()
     }
 }
 

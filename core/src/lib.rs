@@ -73,6 +73,9 @@ pub use orchestrator_persistence::session_control_audit;
 pub mod dynamic_orchestration;
 /// Environment resolution utilities for command execution.
 pub use orchestrator_config::env_resolve;
+/// Single-source derivation of the daemon runtime layout: data dir, socket,
+/// pidfile, database, control-plane directory.
+pub use orchestrator_config::paths;
 /// Canonical error categories and error classification helpers.
 pub mod error;
 /// TTL-based event cleanup, archival, and statistics.

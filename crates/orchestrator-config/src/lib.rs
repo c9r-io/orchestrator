@@ -26,6 +26,9 @@ pub mod dynamic_step;
 /// Environment resolution utilities for command execution.
 pub mod env_resolve;
 pub mod file_sharing;
+/// Single-source derivation of the daemon runtime layout (data dir, socket,
+/// pidfile, database, control-plane dir).
+pub mod paths;
 /// Plugin security policy — controls which CRD plugin commands are permitted.
 pub mod plugin_policy;
 /// Unified resource store and apply-result types.
