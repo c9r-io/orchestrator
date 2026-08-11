@@ -11,7 +11,7 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "7ffcc03063056e20daf96e2f8eed007cbcae8743",
+        "revision": "549c0b67f6b97711b6deef39538057987d574116",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -54,7 +54,12 @@
     },
     "scripts/qa/test-daemon-readiness.sh": {
       "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "549c0b67f6b97711b6deef39538057987d574116",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-expert-resources-governed-editing.sh": {
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
@@ -253,7 +258,7 @@
       "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "19d77f6381a31debd94c59454e816fde3b51e8f2",
+        "revision": "549c0b67f6b97711b6deef39538057987d574116",
         "exitStatus": 0,
         "worktreeDirty": false
       }
