@@ -11,7 +11,7 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-11",
-        "revision": "7e3cf62e6f8553b45a2163f04c52b728ba4d4a79",
+        "revision": "19d77f6381a31debd94c59454e816fde3b51e8f2",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -247,7 +247,12 @@
     },
     "scripts/qa/test-stale-socket-discovery.sh": {
       "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-11",
+        "revision": "19d77f6381a31debd94c59454e816fde3b51e8f2",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-webhook-trigger.sh": {
       "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md",
