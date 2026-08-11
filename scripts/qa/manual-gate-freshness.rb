@@ -6,12 +6,21 @@
 # Two different things live in this script, and only one of them can fail the
 # build. That split is the point of FR-158 rather than an implementation detail.
 #
-#   Reported, never enforced: staleness. A gate nobody has run in 90 days is
-#   listed and the exit status is unaffected. FR-158's subject is that the
-#   governance surface has become the repository's largest source of work, and a
-#   gate that goes red because a human has not followed a runbook lately would be
-#   one more thing to feed — it would be answered by running the cheapest thing
-#   that clears it, which is not the same as running the runbook.
+#   Reported, not enforced *here*: staleness. A gate nobody has run in 90 days
+#   is listed and the exit status of a bare run is unaffected. FR-158's subject
+#   is that the governance surface has become the repository's largest source of
+#   work, and a gate that goes red on every push because a human has not
+#   followed a runbook lately would be one more thing to feed — it would be
+#   answered by running the cheapest thing that clears it, which is not the same
+#   as running the runbook.
+#
+#   FR-165 keeps that split and adds one enforcement point at the far end:
+#   --strict runs in the release workflow, so stale evidence blocks a release
+#   without blocking a push. The daily cost stays zero and the ledger finally
+#   drives something.
+#
+#   Freshness is not recency alone. See the criterion below: a record counts
+#   only if the run it records succeeded on a clean tree.
 #
 #   Enforced: that this ledger and config/governance/qa-gate-surface.json agree
 #   about which gates are manual-runbook. That is a fact about two committed
@@ -22,7 +31,8 @@
 #
 # Usage:
 #   manual-gate-freshness.rb            report, and fail only on set disagreement
-#   manual-gate-freshness.rb --strict   also fail on stale entries (not used by CI)
+#   manual-gate-freshness.rb --strict   also fail on gates that are not fresh
+#                                       (release.yml, not ci.yml)
 
 require "json"
 require "date"
@@ -49,13 +59,20 @@ declared = manifest["scripts"]
   .map { |entry| entry["path"] }
   .sort
 
-# Fail closed on an empty read. This repository classifies 35 gates
-# manual-runbook, so an empty set means the manifest could not be parsed the way
-# this script expects — and zero rows and N passing rows are indistinguishable in
-# an exit code.
+# Fail closed on an empty read: zero rows and N passing rows are
+# indistinguishable in an exit code.
+#
+# The expected count is *derived*, never restated. This diagnostic used to say
+# "35 are expected" and was carrying that number while the manifest had moved to
+# 38 — the count is exactly the thing this file exists to let move, so a literal
+# here is stale the first time a gate is reclassified (§4.4 shape 7: derive the
+# expected value from the ledger, never restate it). The ledger is the right
+# second source precisely because the set-agreement check below is what keeps it
+# honest: if the two files ever disagree, that check fails and says so.
 if declared.empty?
+  expected = (ledger["gates"] || {}).length
   warn "the manifest declares no manual-runbook gates at all"
-  warn "  35 are expected; an empty set is a broken read, not a clean result"
+  warn "  the freshness ledger records #{expected}; an empty set is a broken read, not a clean result"
   exit 1
 end
 
@@ -77,30 +94,75 @@ end
 
 stale_after = ledger["staleAfterDays"] || 90
 today = Date.today
+
+# What counts as a run.
+#
+# Recency was once the whole criterion: `age.nil? || age > stale_after`, with
+# exitStatus and worktreeDirty printed beside the row but not consulted. That
+# asks a different question from the one this ledger is for. The subject is
+# "has this runbook been exercised, and did exercising it establish anything",
+# and a record whose exitStatus is 1 answers the first half yes and the second
+# half no while reading `ok` in every report — §4.4 shape 6, a status field
+# reporting something other than what you are asking. Measured when this was
+# written: test-attention-inbox.sh carried exitStatus 1 dated 2026-08-11 and
+# printed `ok`, and --strict passed it too.
+#
+# worktreeDirty voids a record for the same reason §4.6 condition 1 voids a
+# certification run: a gate exercised against uncommitted edits did not observe
+# the committed tree, so whatever it established was about a state that is not
+# in the repository. Both are recorded by scripts/lib/gate_runlog.sh precisely
+# so that something can act on them; until now nothing did.
+#
+# Each failing branch is labelled distinctly rather than collapsed into STALE,
+# so the report says *which way* a gate is unfresh. An operator's response to
+# `failed` (read the log, fix the gate) is not their response to `aged` (run
+# the runbook), and a single marker for both hides that.
 rows = declared.map do |path|
   entry = (ledger["gates"] || {})[path] || {}
   last = entry["lastRun"]
   if last.nil?
-    [path, nil, "never recorded"]
+    [path, nil, "never recorded", :never]
   else
     age = (today - Date.parse(last["date"])).to_i
     note = +"#{age}d ago at #{last["revision"].to_s[0, 8]}"
-    note << " (exit #{last["exitStatus"]})" unless last["exitStatus"].to_i.zero?
+    exit_status = last["exitStatus"].to_i
+    note << " (exit #{exit_status})" unless exit_status.zero?
     note << " (dirty worktree)" if last["worktreeDirty"]
-    [path, age, note]
+
+    reason =
+      if !exit_status.zero? then :failed
+      elsif last["worktreeDirty"] then :dirty
+      elsif age > stale_after then :aged
+      end
+    [path, age, note, reason]
   end
 end
 
-stale = rows.select { |_, age, _| age.nil? || age > stale_after }
+stale = rows.reject { |_, _, _, reason| reason.nil? }
+
+MARKERS = { never: "never", failed: "FAILED", dirty: "dirty", aged: "aged" }.freeze
 
 puts "Manual-runbook gate freshness (stale after #{stale_after} days)"
 puts ""
-rows.sort_by { |path, age, _| [age.nil? ? 0 : 1, -(age || 0), path] }.each do |path, age, note|
-  marker = age.nil? || age > stale_after ? "STALE" : "  ok "
-  puts format("  %-5s %-58s %s", marker, path.sub("scripts/qa/", ""), note)
+puts "  a gate is fresh only when its last recorded run succeeded (exit 0) on a"
+puts "  clean worktree within #{stale_after} days; the other three states are named"
+puts ""
+rows.sort_by { |path, age, _, _| [age.nil? ? 0 : 1, -(age || 0), path] }
+    .each do |path, _age, note, reason|
+  marker = reason.nil? ? "ok" : MARKERS.fetch(reason)
+  puts format("  %-6s %-58s %s", marker, path.sub("scripts/qa/", ""), note)
 end
 puts ""
-puts "#{stale.length} of #{rows.length} gate(s) stale or never recorded"
+
+# `each_with_object` rather than `filter_map`: macOS ships Ruby 2.6 and
+# filter_map arrived in 2.7 (the same note persistence-dependency.rb carries).
+by_reason = stale.group_by { |_, _, _, reason| reason }
+breakdown = MARKERS.keys.each_with_object([]) do |reason, acc|
+  count = by_reason[reason]
+  acc << "#{count.length} #{reason}" if count
+end
+puts "#{stale.length} of #{rows.length} gate(s) not fresh" +
+     (breakdown.empty? ? "" : " (#{breakdown.join(', ')})")
 
 unless errors.empty?
   warn ""
@@ -111,7 +173,11 @@ unless errors.empty?
 end
 
 if strict && !stale.empty?
-  warn "--strict: #{stale.length} stale gate(s)"
+  warn ""
+  warn "--strict: #{stale.length} gate(s) not fresh"
+  stale.sort_by { |path, _, _, _| path }.each do |path, _age, note, reason|
+    warn format("  %-6s %-58s %s", MARKERS.fetch(reason), path, note)
+  end
   exit 1
 end
 

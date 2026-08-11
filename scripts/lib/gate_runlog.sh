@@ -1,8 +1,11 @@
 # Execution freshness for the gates a human runs.
 #
-# 52 of this repository's 87 declared gates run on every push; the other 35 are
+# 56 of this repository's 94 declared gates run on every push; the other 38 are
 # `manual-runbook`, executed by a person following an owner QA document. Nothing
-# recorded when that last happened. `ci-job-liveness.json` tracks workflow jobs
+# recorded when that last happened. (These three numbers move with the manifest
+# and have gone stale once already — they read 52/87/35 until FR-165. Derive
+# them with `jq '[.scripts[]|select(.enforcement=="ci-required")]|length'` over
+# config/governance/qa-gate-surface.json rather than trusting this sentence.) `ci-job-liveness.json` tracks workflow jobs
 # and cannot see these, so a manual gate that stopped being run — or stopped
 # working — was indistinguishable from one someone ran this morning. FR-148
 # found `test-coordination-collapse.sh` broken since 07-25 and FR-149 found
@@ -10,10 +13,16 @@
 # reading rather than by any signal.
 #
 # What this records is *freshness*, not correctness: when a gate last ran, at
-# which revision, and what it exited with. The report is advisory and never
-# blocks — the point of FR-158 is to stop the governance surface growing, and a
-# gate that fails CI when a human has not run a runbook lately would be one more
-# thing to feed.
+# which revision, and what it exited with. The report is advisory in ci.yml and
+# never blocks a push — the point of FR-158 is to stop the governance surface
+# growing, and a gate that fails CI when a human has not run a runbook lately
+# would be one more thing to feed.
+#
+# FR-165 made the recorded status matter at one point: release.yml runs
+# manual-gate-freshness.rb --strict, and there a record counts only if the run
+# it describes exited 0 on a clean worktree. `exitStatus` and `worktreeDirty`
+# were written here from the start and read by nothing for as long as the
+# ledger existed, so a gate recorded as having failed still reported `ok`.
 #
 # Sourced, not executed, and armed *after* the gate installs its own trap:
 #   . "$REPO_ROOT/scripts/lib/gate_runlog.sh"

@@ -18,8 +18,6 @@
 #      going wrong. A gate without this reports success having read nothing.
 set -euo pipefail
 
-. "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GATE="scripts/qa/connectivity-path-single-source.rb"
@@ -35,7 +33,13 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/fr163-ledger-fixture.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
-gate_runlog_arm "scripts/qa/test-connectivity-path-single-source.sh"
+# No gate_runlog_arm here. This gate is ci-required, and the freshness ledger's
+# set is the manual-runbook set — arming it named a path the ledger does not
+# list, so gate_runlog's own "a gate absent from the ledger is not invented
+# here" branch declined to record and printed a warning on every attended local
+# run. Removed at FR-165. test-qa-gate-surface.sh asserts that every
+# manual-runbook gate arms the recorder; nothing asserted the converse, which is
+# how a ci-required gate came to carry the manual gate's boilerplate.
 
 # A scratch copy of the tree, so no mutation can touch the real one. Copied from
 # the *working tree* rather than from HEAD: a fixture that tests HEAD cannot see
