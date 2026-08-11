@@ -6,7 +6,7 @@
 
 
 <!-- BEGIN GENERATED FR REGISTRY -->
-> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：149 个历史编号 / 154 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：150 个历史编号 / 155 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
 
 | ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
 |----|------|--------|------|-------------|
@@ -172,6 +172,7 @@
 | FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | Proposed | git history |
 | FR-166 | 概念面收敛 —— 双词汇表、重叠 kind 与概念预算 | P2 | Proposed | git history |
 | FR-167 | Delete 路径的审计缺口——具名与信封双缺 | P1 | Proposed | git history |
+| FR-168 | Task 删除的引用处置策略 —— 级联清 1/8，其余七表无裁决 | P1 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明
