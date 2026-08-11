@@ -13,6 +13,8 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "Runtime layout has one spelling per name": "Added by FR-163 and not yet run by CI, so it has no measured cost. Reads tracked Rust source twice per file (masked and raw) with cfg(test) modules stripped; locally 414 files in about 4s, the same scan four existing ledgers already pay for. Replaced by a number on the next refresh.",
+    "Runtime layout ledger negative fixtures": "Added by FR-163 and not yet run by CI. Copies the tracked tree to a scratch directory and runs the ledger gate six times over it (before-run, four mutations, after-run), so expect roughly six times the gate above plus one tree copy. Replaced by a number on the next refresh."
   },
   "measurement": {
     "runId": "31398849814",
