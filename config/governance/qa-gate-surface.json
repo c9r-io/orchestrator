@@ -1114,6 +1114,34 @@
       "enforcement": "manual-runbook",
       "reason": "Layer 4 of the self-bootstrap survival mechanism: it polls the binary on disk, health-checks it with `--help`, and copies the .stable snapshot back after WATCHDOG_MAX_FAILURES consecutive failures. It runs as an unbounded foreground loop that overwrites target/release/orchestratord, so no CI job can execute it; the runbook drives it with a two-second poll against a deliberately corrupted binary. Classified here rather than as a developer-tool because it does make a claim — that a corrupt build is repaired — and QA self-bootstrap/02 is the procedure that checks it.",
       "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md"
+    },
+    {
+      "path": "scripts/qa/connectivity-path-single-source.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 2 — enumeration standing in for coverage, in its most expensive form: the set of places that spell a filename is exactly the set someone remembered, and the second speller is invisible because it breaks nothing today. FR-163 measured three pairs that had already drifted — a layout heuristic sending SecretStore reads and writes to different directories, a watcher skip that never fired in the default deployment, and a client bundle written one character away from where auto-discovery looked — and not one of them failed a test. The scanned set is derived from the tree, never listed, and the mirror condition fails when an allowlisted site stops matching, so the gate cannot go green by going blind.",
+      "note": "Offline: reads tracked Rust source with inline cfg(test) modules stripped. Asserts each runtime-layout name — data dir, socket, pidfile, database, control-plane dir, client dir, data-dir env var — is spelled in exactly one production file. Reads each file twice, masked and raw: the subjects are string literals that masking blanks, while comments must not be counted. Re-derives on every run whether rust_source.rb's test*.rs basename exclusion is hiding a spelling from it, rather than inheriting that known defect silently."
+    },
+    {
+      "path": "scripts/qa/test-connectivity-path-single-source.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation. These fixtures bracket the run with a before and an after, so a case failing for an unrelated reason cannot read as a case catching its mutation, and each asserts the diagnostic rather than the exit code because an exit code cannot say which of the ledger gate's branches fired.",
+      "note": "Negative fixtures for connectivity-path-single-source.rb, run against a scratch copy of the working tree. Four mutations: a spelling in a comment (must NOT trip the gate, or it is counting prose), a spelling in live code (must), the canonical file moved out of scan range (must trip the mirror condition rather than the presence one), and an emptied tree (must fail closed)."
+    },
+    {
+      "path": "scripts/qa/test-stale-socket-discovery.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts and hard-kills orchestratord instances and binds a TCP control-plane port, so it needs release binaries and a machine where a daemon may crash",
+      "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md"
     }
   ]
 }

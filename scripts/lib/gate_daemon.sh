@@ -84,6 +84,40 @@ gate_daemon_alive() {
   return 0
 }
 
+# Kill a daemon outright, for gates whose subject is what an *unclean* exit
+# leaves behind. SIGKILL only: no SIGTERM first, because a daemon that handles
+# SIGTERM unlinks its socket and pidfile on the way out, which is precisely the
+# debris such a gate needs to survive.
+#
+# This lives here rather than in the calling gate because the enforcement
+# surface forbids signalling a daemon PID outside this library, and that rule is
+# right — `wait` on a pidfile PID is a no-op, so a hand-rolled crash-stop
+# reports "killed" while the process is still running and the cleanup's `rm -rf`
+# races it. The correct response to needing a signal the contract lacks is to
+# add it to the contract, not to rename the variable until the scan stops
+# looking. Liveness is "exists and is not state Z" for the same reason
+# gate_daemon_stop uses that test: `kill -0` succeeds on an unreaped child.
+#
+# Returns 1, having printed why, if the process is still alive afterwards.
+gate_daemon_kill_hard() {
+  local pid="$1" waited=0
+  [[ -n "$pid" ]] || return 0
+
+  kill -KILL "$pid" 2>/dev/null || true
+  while gate_daemon_alive "$pid" && ((waited < GATE_DAEMON_KILL_GRACE_TENTHS)); do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  # Reaps the direct-child case; an instant failing no-op for a pidfile PID.
+  wait "$pid" 2>/dev/null || true
+
+  if gate_daemon_alive "$pid"; then
+    echo "[gate-daemon] pid $pid survived SIGKILL" >&2
+    return 1
+  fi
+  return 0
+}
+
 # Stop a daemon and confirm it actually stopped. Idempotent: an empty PID is a
 # no-op, so callers reset their variable (`DAEMON_PID=""`) after each call and
 # conditional starts need no guard. Returns 1 (having printed why) when the

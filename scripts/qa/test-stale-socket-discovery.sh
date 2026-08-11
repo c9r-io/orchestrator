@@ -39,6 +39,11 @@ BIND_ADDR="${BIND_ADDR:-127.0.0.1:19163}"
 STALE_DIAGNOSTIC="socket exists but nothing is listening"
 ABSENT_DIAGNOSTIC="daemon socket not found"
 
+command -v jq >/dev/null 2>&1 || {
+  echo "missing required command: jq" >&2
+  exit 1
+}
+
 if [[ ! -x "$ORCHD" || ! -x "$ORCH" ]]; then
   echo "release binaries not found; run: cargo build --release -p orchestratord -p orchestrator-cli" >&2
   exit 1
@@ -100,15 +105,16 @@ start_daemon_and_kill_hard() {
   fi
 
   # SIGKILL, not SIGTERM: a clean shutdown unlinks the socket and there would be
-  # nothing to test. gate_daemon_stop is deliberately not used here — it exists
-  # to stop daemons gracefully, and this case needs the ungraceful exit.
-  kill -KILL "$DAEMON_PID" 2>/dev/null || true
-  local dead=0
-  while gate_daemon_alive "$DAEMON_PID" && ((dead < 50)); do
-    sleep 0.1
-    dead=$((dead + 1))
-  done
-  wait "$DAEMON_PID" 2>/dev/null || true
+  # nothing to test. gate_daemon_kill_hard is the library's sanctioned form of
+  # that — signalling the PID here directly would be the very shape the
+  # enforcement surface forbids, and for a real reason (`wait` on a pidfile PID
+  # never waits, so the teardown would race a live writer).
+  if ! gate_daemon_kill_hard "$DAEMON_PID"; then
+    fail "premise: the daemon survived SIGKILL; the crash under test cannot be staged"
+    echo
+    echo "FR-163 stale-socket discovery: $PASS passed, $FAIL failed"
+    exit 1
+  fi
   DAEMON_PID=""
 }
 
@@ -202,20 +208,30 @@ else
   A_STATUS=$?
   set -e
 
-  # Reaching TLS is the assertion. Whether the RPC then succeeds depends on
-  # RBAC material this gate does not provision, so a TLS-shaped failure counts
-  # as reaching step 4 — what must not appear is the UDS dead end.
-  if grep -qF "$STALE_DIAGNOSTIC" <<<"$A_OUTPUT"; then
-    fail "scenario A: discovery stopped at the stale socket instead of falling through to TLS:"
+  # The end-to-end assertion, and it has to be the RPC actually working. An
+  # earlier version of this check accepted "the output mentions TLS or a
+  # transport error" and passed on a build with the exists() probe restored —
+  # the UDS dead end also prints "transport error", so the phrase discriminates
+  # nothing. The daemon provisions the local user as Admin when it writes the
+  # bundle, and it is still running here, so success is available and is the
+  # only thing that cannot be faked by a failure on the wrong transport.
+  if [[ "$A_STATUS" -ne 0 ]]; then
+    fail "scenario A: 'task list' failed with a stale socket present and a TLS control plane available:"
     sed 's/^/    /' <<<"$A_OUTPUT" >&2
-  elif grep -qF "$ABSENT_DIAGNOSTIC" <<<"$A_OUTPUT"; then
-    fail "scenario A: discovery reported a missing socket instead of falling through to TLS:"
+  elif ! jq -e 'type == "array" or type == "object"' >/dev/null 2>&1 <<<"$A_OUTPUT"; then
+    fail "scenario A: 'task list -o json' exited 0 but did not produce JSON:"
     sed 's/^/    /' <<<"$A_OUTPUT" >&2
-  elif [[ "$A_STATUS" -eq 0 ]] || grep -qEi 'tls|certificate|transport error|rbac|permission' <<<"$A_OUTPUT"; then
-    pass "scenario A: discovery fell through the stale socket and reached the TLS control plane"
   else
-    fail "scenario A: could not tell which transport was used; got:"
+    pass "scenario A: discovery fell through the stale socket and served the RPC over TLS"
+  fi
+
+  # Independent of the above, and the discriminator the first version lacked: a
+  # UDS attempt always names the socket path, a TLS one never does.
+  if grep -qF "$SOCKET_PATH" <<<"$A_OUTPUT"; then
+    fail "scenario A: the output names the socket path, so discovery went to UDS after all:"
     sed 's/^/    /' <<<"$A_OUTPUT" >&2
+  else
+    pass "scenario A: nothing in the output refers to the stale socket"
   fi
 fi
 

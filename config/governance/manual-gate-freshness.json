@@ -245,6 +245,10 @@
         "worktreeDirty": false
       }
     },
+    "scripts/qa/test-stale-socket-discovery.sh": {
+      "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md",
+      "lastRun": null
+    },
     "scripts/qa/test-webhook-trigger.sh": {
       "owner": "docs/qa/orchestrator/128-webhook-trigger-infrastructure.md",
       "lastRun": {

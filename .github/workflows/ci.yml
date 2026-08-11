@@ -397,6 +397,19 @@ jobs:
         continue-on-error: true
         run: ./scripts/qa/test-fixture-target-drift.sh
 
+      # FR-163: two pieces of code cannot be allowed to disagree about where the
+      # socket, the pidfile or the database lives. Three such pairs had already
+      # drifted before this gate existed, and none of them broke a test.
+      - name: Runtime layout has one spelling per name
+        id: path-single-source
+        continue-on-error: true
+        run: ./scripts/qa/connectivity-path-single-source.rb
+
+      - name: Runtime layout ledger negative fixtures
+        id: path-single-source-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-connectivity-path-single-source.sh
+
       # The policy itself is enforced by cargo-deny in security.yml. This asks
       # the other question — whether that invocation still carries the flags
       # that make it bind — and needs no cargo-deny binary to do it.
@@ -514,6 +527,8 @@ jobs:
             jq-status-fixtures=${{ steps.jq-status-fixtures.outcome }}
             fixture-drift=${{ steps.fixture-drift.outcome }}
             fixture-drift-fixtures=${{ steps.fixture-drift-fixtures.outcome }}
+            path-single-source=${{ steps.path-single-source.outcome }}
+            path-single-source-fixtures=${{ steps.path-single-source-fixtures.outcome }}
             dependency-policy=${{ steps.dependency-policy.outcome }}
             dependency-policy-fixtures=${{ steps.dependency-policy-fixtures.outcome }}
             pipefail-short-circuit=${{ steps.pipefail-short-circuit.outcome }}

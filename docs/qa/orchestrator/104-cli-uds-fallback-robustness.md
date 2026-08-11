@@ -24,7 +24,16 @@ self_referential_safe: true
 - **操作**: 执行 `orchestrator task list`
 - **预期**: CLI 通过 UDS 连接成功，不尝试 TCP
 
-> **Note:** `~/.orchestratord/control-plane/config.yaml` 不是 S1 的前置条件。UDS 优先路径仅检查 socket 文件是否存在（`connect()` 步骤 3），不依赖 control-plane 配置。
+> **Note (FR-163 更新):** UDS 优先路径不依赖 control-plane 配置，这一点不变；但步骤 3
+> 已从"检查 socket 文件是否存在"改为**连接探测**——存在但没人监听的陈旧 socket
+> 不再截住发现链，会继续落到步骤 4。故 S1 的前置需要的是一个**活着的** daemon，
+> 而不只是一个 socket 文件。
+>
+> 本注记原先写的是 `~/.orchestratord/control-plane/config.yaml`。那个路径从来没有
+> 任何东西写过——daemon 写的是 `~/.orchestrator/control-plane/config.yaml`，
+> 差一个字符，自动发现因此从未在 daemon 自己的产物上生效过。FR-163 已把两侧对齐，
+> 详见 [DD-178](../../design_doc/orchestrator/178-runtime-layout-single-source.md)
+> 与 [QA-215](215-connectivity-path-single-source.md)。
 
 ### S2: 显式 --control-plane-config 优先于本地 socket
 - **前置**: Repository root is the current working directory. Rust toolchain available.

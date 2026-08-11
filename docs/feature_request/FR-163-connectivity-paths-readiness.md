@@ -2,7 +2,7 @@
 
 ## 优先级: P2
 
-## 状态: Proposed
+## 状态: In Progress（需求 1、2 已闭环，见 DD-178/QA-215；需求 3、4 待第二轮）
 
 ## 背景
 
@@ -38,9 +38,9 @@
   `PathBuf::from(dir).join("orchestrator.sock")`。这是 client 与 daemon 之间真实的
   重复；原稿描述的"回退语义与规范版**不同**"经核验**不成立**——
   `home_dir()` 为 None 时 `config_load` 落到 `.orchestratord`、`connect` 落到
-  `./.orchestratord/orchestrator.sock`，二者语义相同（同一条 ticket
-  `20260811-stale-socket-traps-cli-discovery.md` 的"bonus defect"沿用了同一误判，
-  应一并订正为"CWD 依赖路径未向用户显示"，而非"与规范版不同"）。
+  `./.orchestratord/orchestrator.sock`，二者语义相同（open ticket
+  `20260811-stale-socket-traps-cli-discovery.md` 的"bonus defect"沿用了同一误判；
+  该 ticket 已随需求 2 闭环删除，订正内容并入 DD-178）。
 
 - **`fs_watcher` 的缺陷方向与原稿相反**（step 0 更正）：`fs_watcher.rs:171` 只在
   `ORCHESTRATORD_DATA_DIR` **已设置**时跳过 daemon 数据目录。默认部署（env 未设、
@@ -69,8 +69,9 @@
   （`lifecycle::cleanup`，`main.rs:1170`）。故陷阱仅在**崩溃/SIGKILL** 后成立，
   而非"任何一次停机后"。命中时 CLI 锁死 UDS 分支、重试 3 次后报错，
   不再落到 TLS 配置发现（`connect_uds`，`connect.rs:77-133`）。
-  DD-62 修的是镜像方向，此为残余。与 open ticket
-  `20260811-stale-socket-traps-cli-discovery.md` 同一标的，谁先动谁闭环。
+  DD-62 修的是镜像方向，此为残余。与 ticket
+  `20260811-stale-socket-traps-cli-discovery.md` 同一标的；**已随第一轮闭环，
+  ticket 已删除**。
 
 - **`--bind` 静默关闭 UDS**：`main.rs:932-961` 的 `if let Some(addr) = args.bind`
   / `else { …UDS… }` 互斥，无任何警告行（step 0 已核验）；用户文档仅
@@ -102,6 +103,11 @@
 
 ### 1. 路径解析单源
 
+> **已交付（第一轮）**。落点与本节的设想有一处不同并已记入 DD-178：单源模块是
+> **`orchestrator_config::paths`**，不是 `core::config_load` 或 `lifecycle` 的提升版
+> ——`orchestrator-client` 不依赖 `core`，helper 必须放在两边都够得着的地方；
+> `core::config_load::data_dir` 改为 re-export（与同文件 `now_ts` 同构）。
+
 `config_load::data_dir()` 成为唯一 data_dir 派生点；socket 路径收敛到单一
 helper（`lifecycle::socket_path` 或其提升版），由 client 与 daemon 共同消费，
 消除 `orchestrator.sock` 的第二处拼写。`fs_watcher.rs:171` 改为消费
@@ -117,9 +123,11 @@ helper（`lifecycle::socket_path` 或其提升版），由 client 与 daemon 共
 
 ### 2. 陈旧 socket 的连接级探测
 
+> **已交付（第一轮）**，见 DD-178 与 QA-215 S4。ticket
+> `20260811-stale-socket-traps-cli-discovery.md` 已删除。
+
 `exists()` 改为连接探测（或 connect 失败时继续落到下一发现分支）；错误信息
-区分"socket 在但没人听"与"socket 不存在"。闭环时一并删除 open ticket
-`20260811-stale-socket-traps-cli-discovery.md`。
+区分"socket 在但没人听"与"socket 不存在"。
 
 ### 3. 一个真正的就绪信号
 
@@ -141,23 +149,34 @@ helper（`lifecycle::socket_path` 或其提升版），由 client 与 daemon 共
 
 ## 验收标准
 
-- [ ] data_dir 派生机制从 4 降至 1、socket 路径拼写从 2 降至 1，由 rg 派生的
-      清单证明（具名保留项：`discover_socket_path` 的 `ORCHESTRATOR_SOCKET` 分支）
-- [ ] `fs_watcher` 行为断言：env 未设时，root 落在 data_dir 之上的 filesystem
-      trigger 仍跳过 daemon 数据目录（负夹具：当前实现必须让它红）
-- [ ] 陈旧 socket 场景行为测试：杀 daemon 留 inode → CLI 给出正确诊断或
-      自动落到下一分支（负夹具：inode 在、无监听）
-- [ ] 就绪信号存在且 QA 门禁至少 20 处轮询改为共享 helper（集合由 §背景 的
-      派生脚本重跑得出，差集为空或具名）
-- [ ] 文档含全部三个连接语义主题；quickstart 假陈述已订正（EN+ZH）；
-      guide 门禁（cli-doc-parity 族）通过
-- [ ] 全量门禁与工作区测试绿
+- [x] data_dir 派生机制从 4 降至 1、socket 路径拼写从 2 降至 1。实际交付强于此条：
+      `connectivity-path-single-source.rb` 断言 **7 个布局名字各只被拼写一次**
+      （data dir / socket / pidfile / db / control-plane dir / client dir / env var），
+      作用范围由 git 派生并带镜像条件。具名保留项两处：
+      `discover_socket_path` 的 `ORCHESTRATOR_SOCKET` 分支，
+      以及 `runner/policy.rs` 中筛查 `kill $(cat .../daemon.pid)` 的子串守卫。
+- [x] `fs_watcher` 行为断言（`crates/daemon/src/fs_watcher.rs` 单测）。负夹具双向实测：
+      改回读 env → 红；`Path::starts_with` 降级为字符串前缀 → 另一条红。
+- [x] 陈旧 socket 场景行为测试（`scripts/qa/test-stale-socket-discovery.sh`，7 项）。
+      负夹具实测 `4 passed, 3 failed`。断言诊断文本与 RPC 结果，从不断言退出码。
+- [ ] 就绪信号存在且 QA 门禁至少 20 处轮询改为共享 helper —— **第二轮**
+- [ ] 文档含全部三个连接语义主题；quickstart 假陈述已订正（EN+ZH）—— **第二轮**
+- [x] 全量门禁与工作区测试绿（第一轮范围）
+
+### 第一轮额外交付（不在原验收标准内）
+
+- [x] 修复自动发现第 4 步：daemon 写 `~/.orchestrator/control-plane/config.yaml`，
+      客户端却找 `~/.orchestratord/...`，差一个字符，该分支**从未生效过**。
+      由陈旧 socket 门禁的场景 A 发现。10 个以上 QA 门禁手工设
+      `ORCHESTRATOR_CONTROL_PLANE_CONFIG` 绕行即是其沉积物。
+- [x] `scripts/lib/gate_daemon.sh` 新增 `gate_daemon_kill_hard`：受控的崩溃停机，
+      供以"不干净退出留下什么"为主语的门禁使用。
 
 ## 依赖与关联
 
 - 承接 ticket `20260811-data-dir-heuristic-splits-key-paths`（已闭环，e5977135）；
-  关联 DD-62（UDS 回退健壮性）；覆盖 open ticket
-  `20260811-stale-socket-traps-cli-discovery.md`。
+  关联 DD-62（UDS 回退健壮性）；已覆盖并删除 ticket
+  `20260811-stale-socket-traps-cli-discovery.md`（第一轮）。
 - **原稿的 "DD-175 known limits" 引用不成立**（step 0 更正）：DD-175 是
   `175-provider-isolation-login-shell.md`，全文无 `data_dir` 或该启发式的任何提及。
   全仓没有任何 DD 记录这条 known limit——唯一记录它的文档就是本 FR。

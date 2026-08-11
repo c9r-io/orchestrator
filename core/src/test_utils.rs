@@ -328,7 +328,10 @@ impl TestState {
         let logs_dir = self.temp_root.join("logs");
         std::fs::create_dir_all(&logs_dir).expect("failed to create temp logs dir");
 
-        let db_path = self.temp_root.join("agent_orchestrator.db");
+        // Via the shared helper, not a literal: a harness that builds the layout
+        // by hand is a second definition of it, and a harness whose layout has
+        // quietly diverged from production tests the wrong thing while passing.
+        let db_path = crate::paths::db_path(&self.temp_root);
         init_schema(&db_path).expect("failed to initialize test schema");
         persist_raw_config(&db_path, self.config.clone(), "test-seed")
             .expect("failed to persist test config");

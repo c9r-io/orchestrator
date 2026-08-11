@@ -62,7 +62,7 @@ async fn socket_is_listening(socket_path: &Path) -> bool {
 /// 1. `ORCHESTRATOR_SOCKET` env (no explicit config) → UDS
 /// 2. Explicit control-plane config (flag or env) → TCP/TLS
 /// 3. Default socket is **accepting connections** → UDS
-/// 4. Auto-discover `~/.orchestratord/control-plane/config.yaml` → TCP/TLS
+/// 4. Auto-discover `~/.orchestrator/control-plane/config.yaml` → TCP/TLS
 /// 5. Fallback → UDS
 ///
 /// Step 3 probes by connecting, not by existence: a socket left behind by a

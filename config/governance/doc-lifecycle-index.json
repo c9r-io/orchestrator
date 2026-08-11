@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 464,
-    "active": 451,
+    "documents": 466,
+    "active": 453,
     "superseded": 13,
-    "withRelatedFr": 311
+    "withRelatedFr": 313
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -494,6 +494,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-164"
+      ]
+    },
+    "docs/design_doc/orchestrator/178-runtime-layout-single-source.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-163"
       ]
     },
     "docs/design_doc/orchestrator/18-prompt-delivery-abstraction.md": {
@@ -1851,6 +1857,12 @@
         "FR-164"
       ]
     },
+    "docs/qa/orchestrator/215-connectivity-path-single-source.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-163"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -2966,6 +2978,10 @@
     "FR-162": [
       "docs/design_doc/orchestrator/176-failure-visibility-contract.md",
       "docs/qa/orchestrator/213-failure-visibility-contract.md"
+    ],
+    "FR-163": [
+      "docs/design_doc/orchestrator/178-runtime-layout-single-source.md",
+      "docs/qa/orchestrator/215-connectivity-path-single-source.md"
     ],
     "FR-164": [
       "docs/design_doc/orchestrator/177-apply-audit-action-completeness.md",
