@@ -196,6 +196,22 @@ assertion is on the request actually constructed.
 
 ---
 
+## Checklist
+
+- [ ] 场景 1：无信封 SecretStore apply 在 `control_action_audit`（点名该表）留下
+      `resource.secret_store.apply` / `legacy_client` 行
+- [ ] 场景 2：dry-run 不预留信封（审计表为空）
+- [ ] 场景 3：`enforced` + 无信封 apply 被拒，断言诊断串
+      `action audit context is required` 而非 gRPC code
+- [ ] 场景 4：12 个 kind 各记一行具名动作，`apply_action_naming` 四项全绿
+- [ ] 场景 5：`secret_rotate_tests` 两项全绿（信封在场 + 重试身份互异）
+- [ ] 三个负夹具各自实测目击红，且诊断互不相同（恢复旧析取项 / 塌回通用名 /
+      注释掉轮换信封——第三个同时验证 `grep -c` 仍返回 2）
+- [ ] `cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings`、
+      `cargo fmt --all -- --check` 三项退出码直取为 0
+- [ ] `test-expert-resources-governed-editing.sh` 与 `test-source-task-binding.sh`
+      重跑全绿（前者的审计断言已随具名动作改写）
+
 ## Known Limits
 
 - **A bundle carries no per-document kind list.** A multi-document apply records

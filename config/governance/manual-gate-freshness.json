@@ -10,8 +10,8 @@
     "scripts/qa/test-agent-driver-abstraction.sh": {
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "2ae4e8540ab79ee46a0a4efc201a3de225519678",
+        "date": "2026-08-11",
+        "revision": "7e3cf62e6f8553b45a2163f04c52b728ba4d4a79",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -55,8 +55,8 @@
     "scripts/qa/test-expert-resources-governed-editing.sh": {
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "04e5486dff97c7fdf60509f774c55b03a6f9eb61",
+        "date": "2026-08-11",
+        "revision": "7e3cf62e6f8553b45a2163f04c52b728ba4d4a79",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -230,8 +230,8 @@
     "scripts/qa/test-source-task-binding.sh": {
       "owner": "docs/qa/orchestrator/157-source-task-binding-badge-matching.md",
       "lastRun": {
-        "date": "2026-08-10",
-        "revision": "b432f443a6d7559ba109a237a77cb1ecff2d07c7",
+        "date": "2026-08-11",
+        "revision": "7e3cf62e6f8553b45a2163f04c52b728ba4d4a79",
         "exitStatus": 0,
         "worktreeDirty": false
       }

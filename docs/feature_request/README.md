@@ -6,7 +6,7 @@
 
 
 <!-- BEGIN GENERATED FR REGISTRY -->
-> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：148 个历史编号 / 153 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：149 个历史编号 / 154 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
 
 | ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
 |----|------|--------|------|-------------|
@@ -168,6 +168,7 @@
 | FR-161 | path-shadow 隔离对登录 shell 下的 provider 解析不成立 | P2 | Closed | git history |
 | FR-162 | 失败可见性契约 —— 步骤失败、任务状态与收件箱的三方矛盾 | P1 | Closed | git history |
 | FR-163 | 连接、路径与就绪的单源化 | P2 | Proposed | git history |
+| FR-164 | 审计动作具名化与无信封缺口 | P1 | Closed | git history |
 | FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | Proposed | git history |
 | FR-166 | 概念面收敛 —— 双词汇表、重叠 kind 与概念预算 | P2 | Proposed | git history |
 | FR-167 | Delete 路径的审计缺口——具名与信封双缺 | P1 | Proposed | git history |
