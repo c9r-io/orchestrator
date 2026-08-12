@@ -169,7 +169,7 @@
 | FR-162 | 失败可见性契约 —— 步骤失败、任务状态与收件箱的三方矛盾 | P1 | Closed | git history |
 | FR-163 | 连接、路径与就绪的单源化 | P2 | Closed | git history |
 | FR-164 | 审计动作具名化与无信封缺口 | P1 | Closed | git history |
-| FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | In Progress | git history |
+| FR-165 | 账本与契约的驱动化 —— 从"有记录"到"有排程" | P2 | Closed | git history |
 | FR-166 | 概念面收敛 —— 双词汇表、重叠 kind 与概念预算 | P2 | Proposed | git history |
 | FR-167 | Delete 路径的审计缺口——具名与信封双缺 | P1 | Proposed | git history |
 | FR-168 | Task 删除的引用处置策略 —— 级联清 1/8，其余七表无裁决 | P1 | Proposed | git history |
