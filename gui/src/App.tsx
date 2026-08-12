@@ -6,7 +6,7 @@ import { useConnectionState } from "./hooks/useConnectionState";
 import { useTheme } from "./hooks/useTheme";
 import { useTransparency } from "./hooks/useTransparency";
 import { featureEnabled, type ConsoleFeature } from "./lib/features";
-import { useConsoleRoute, type ConsoleRoute } from "./lib/routes";
+import { useConsoleRoute, pathForPage, type ConsoleRoute } from "./lib/routes";
 import { recordUiMetric } from "./lib/telemetry";
 import type { Role } from "./lib/types";
 import i18n from "./lib/i18n";
@@ -24,7 +24,7 @@ import WishDetail from "./pages/WishDetail";
 
 const nav: Array<{ page: ConsoleFeature; label: string; icon: string; shortcut: string }> = [
   { page: "attention", label: "Attention", icon: "!", shortcut: "1" },
-  { page: "processes", label: "Processes", icon: "◫", shortcut: "2" },
+  { page: "processes", label: "Tasks", icon: "◫", shortcut: "2" },
   { page: "sessions", label: "Sessions", icon: ">_", shortcut: "3" },
   { page: "sources", label: "Sources", icon: "↗", shortcut: "4" },
   { page: "system", label: "System", icon: "⚙", shortcut: "5" },
@@ -60,7 +60,9 @@ export default function App() {
     let unregister: (() => Promise<void>) | undefined;
     onAction((notification) => {
       const deepLink = notification.extra?.deep_link;
-      if (typeof deepLink === "string" && /^#\/(attention|processes)\//.test(deepLink)) {
+      // `processes` stays accepted: notifications emitted before FR-166, and any the
+      // daemon still mints with the old segment, must keep opening the right page.
+      if (typeof deepLink === "string" && /^#\/(attention|tasks|processes)\//.test(deepLink)) {
         window.location.hash = deepLink.slice(1);
       }
     }).then((listener) => {
@@ -134,11 +136,11 @@ export default function App() {
       <aside id="console-sidebar" className={`console-sidebar ${menuOpen ? "console-sidebar-open" : ""}`}>
         <div className="console-brand"><span className="brand-mark">AO</span><span><strong>Orchestrator</strong><small>Process Console</small></span></div>
         <nav className="console-nav" aria-label={i18n.nav.mainNav}>
-          {nav.filter((item) => featureEnabled(item.page)).map((item) => <a key={item.page} href={`#/${item.page}`} className={route.page === item.page ? "active" : ""} aria-current={route.page === item.page ? "page" : undefined} onClick={() => setMenuOpen(false)}>
+          {nav.filter((item) => featureEnabled(item.page)).map((item) => <a key={item.page} href={`#/${pathForPage(item.page)}`} className={route.page === item.page ? "active" : ""} aria-current={route.page === item.page ? "page" : undefined} onClick={() => setMenuOpen(false)}>
             <span className="nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span><kbd>⌘{item.shortcut}</kbd>
           </a>)}
         </nav>
-        <button className="btn btn-primary new-process" onClick={() => go({ page: "new-process" })}>＋ New process</button>
+        <button className="btn btn-primary new-process" onClick={() => go({ page: "new-process" })}>＋ New task</button>
         <div className="console-preferences">
           {role && <span className="badge badge-info">{role}</span>}
           <button className="btn btn-ghost" onClick={toggleTheme} aria-label={theme === "light" ? i18n.theme.toggleDark : i18n.theme.toggleLight}>{theme === "light" ? "◐" : "◑"} Theme</button>

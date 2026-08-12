@@ -237,7 +237,7 @@ test("keyboard selection is stable and read-only mutations are disabled", async 
 
 test("failed process uses reviewed resume and never routes the primary action to orphan repair", async ({ page }) => {
   await installTauriMock(page);
-  await page.goto("/#/processes/task-1");
+  await page.goto("/#/tasks/task-1");
   const panelResume = page.getByRole("button", { name: "Preview resume" });
   await panelResume.click();
   let dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
@@ -297,7 +297,7 @@ test("Attention one-click safe resume auto-opens and restores a stable process c
 
 test("successful resume refresh falls back safely when initiating controls disappear", async ({ page }) => {
   await installTauriMock(page);
-  await page.goto("/#/processes/task-1");
+  await page.goto("/#/tasks/task-1");
   await page.evaluate(() => (window as any).__PROCESS_TEST__.updateStatusOnResume());
   await page.getByRole("button", { name: "Review safe resume" }).click();
 
@@ -337,7 +337,7 @@ test("Attention and failed-process workspace have no serious axe violations", as
   await installTauriMock(page);
   await page.goto("/");
   expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
-  await page.goto("/#/processes/task-1");
+  await page.goto("/#/tasks/task-1");
   await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))).toEqual([]);
 });
@@ -591,7 +591,7 @@ test("read-only session inspector has no focusable mutation controls", async ({ 
 
 test("Processes prioritizes active and failed work while preserving keyboard reachability", async ({ page }) => {
   await installTauriMock(page);
-  await page.goto("/#/processes");
+  await page.goto("/#/tasks");
   await expect(page.getByRole("heading", { name: "进度观察" })).toBeVisible();
   const processCards = page.locator('[role="button"][aria-label^="任务:"]');
   await expect(processCards).toHaveCount(3);
@@ -603,6 +603,9 @@ test("Processes prioritizes active and failed work while preserving keyboard rea
   await expect(page).toHaveURL(/#\/processes\/task-1/);
 });
 
+// FR-166 renamed the canonical hash to #/tasks. This one case deliberately stays on
+// the pre-rename spelling so that the compatibility alias is exercised through a real
+// browser, not only through parseConsoleRoute in a unit test.
 test("non-code process uses task semantics in the console", async ({ page }) => {
   await installTauriMock(page);
   await page.goto("/#/processes/task-non-code");
@@ -752,7 +755,7 @@ test("global shortcuts, visible navigation, theme, and handoff remain integrated
   await page.getByRole("button", { name: "切换到深色模式" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
-  await page.goto("/#/processes/task-1");
+  await page.goto("/#/tasks/task-1");
   await page.getByRole("button", { name: "Generate handoff" }).click();
   await expect(page.getByText("Changed files:")).toBeVisible();
   await expect(page.getByText("tests/payment.rs")).toBeVisible();

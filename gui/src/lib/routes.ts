@@ -8,13 +8,34 @@ export type ConsoleRoute =
   | { page: "system"; section?: string }
   | { page: "new-process"; draftId?: string };
 
+// FR-166: the console shows Tasks, and the hash says so. The route discriminant stays
+// `processes`/`new-process` because it is an internal identifier, not a label, so the
+// page components are untouched; only the path a user sees or bookmarks changes.
+// `pathForPage` is the single place a page becomes a URL segment — App.tsx builds nav
+// hrefs directly rather than through formatConsoleRoute, so both call it.
+const PAGE_PATH: Record<ConsoleRoute["page"], string> = {
+  attention: "attention",
+  processes: "tasks",
+  sessions: "sessions",
+  sources: "sources",
+  system: "system",
+  "new-process": "new-task",
+};
+
+export function pathForPage(page: ConsoleRoute["page"]): string {
+  return PAGE_PATH[page];
+}
+
 const decode = (value: string | undefined) => value ? decodeURIComponent(value) : undefined;
 
 export function parseConsoleRoute(hash: string): ConsoleRoute {
   const normalized = hash.replace(/^#/, "").replace(/^\//, "");
   const [path, search = ""] = normalized.split("?", 2);
   const params = new URLSearchParams(search);
-  const [page = "attention", id, child, resourceId] = path.split("/");
+  const [rawPage = "attention", id, child, resourceId] = path.split("/");
+  // Hashes minted before FR-166 still resolve: a bookmark or a handoff note written
+  // against #/processes must keep landing on the same page.
+  const page = rawPage === "tasks" ? "processes" : rawPage === "new-task" ? "new-process" : rawPage;
   switch (page) {
     case "processes": {
       const taskId = decode(id);
@@ -42,8 +63,8 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
 export function formatConsoleRoute(route: ConsoleRoute): string {
   if (route.page === "sources" && route.section) {
     const base = route.section === "automations"
-      ? `#/sources/automations/${route.automationView ?? "templates"}`
-      : `#/sources/${route.section}`;
+      ? `#/${pathForPage("sources")}/automations/${route.automationView ?? "templates"}`
+      : `#/${pathForPage("sources")}/${route.section}`;
     return `${base}${route.resourceId ? `/${encodeURIComponent(route.resourceId)}` : ""}`;
   }
   const id = route.page === "attention" ? route.attentionId
@@ -52,7 +73,7 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
     : route.page === "sources" ? route.taskId
     : route.page === "system" ? route.section
     : route.draftId;
-  const path = `#/${route.page}${id ? `/${encodeURIComponent(id)}` : ""}`;
+  const path = `#/${pathForPage(route.page)}${id ? `/${encodeURIComponent(id)}` : ""}`;
   return route.page === "processes" && route.reviewResume ? `${path}?review=safe-resume` : path;
 }
 

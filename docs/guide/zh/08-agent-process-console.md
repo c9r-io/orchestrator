@@ -12,7 +12,7 @@ Console 最常见的工作流是：
 
 ```mermaid
 flowchart LR
-    A[Attention 出现异常] --> B[打开 Process]
+    A[Attention 出现异常] --> B[打开 Task]
     B --> C[阅读 Timeline 与 Evidence]
     C --> D[生成 Handoff]
     D --> E[预览安全恢复后果]
@@ -26,7 +26,7 @@ flowchart LR
 
 1. 在 **Attention** 中选中条目，先读清“需要你决定什么”。
 2. 必要时点击 **Claim**，让其他操作者知道你正在处理。
-3. 点击 **Open process**，查看语义时间线，而不是先翻原始日志。
+3. 点击 **Open task**，查看语义时间线，而不是先翻原始日志。
 4. 选中失败或测试条目，在右侧 **Evidence** 中核对证据。
 5. 点击 **Generate handoff**，保存当前状态的短交接摘要。
 6. 点击 **Review safe resume** 或 **Preview resume**，选择逻辑边界和恢复方式。
@@ -141,7 +141,7 @@ cargo run -p orchestrator-gui
 - 默认进入 **Attention**；
 - 左下角显示当前角色；
 - 顶部没有持续的断线错误；
-- **Processes** 和 **System** 能加载 daemon 中的真实数据。
+- **Tasks** 和 **System** 能加载 daemon 中的真实数据。
 
 如果连接失败，Console 会显示连接状态和重试入口。先运行：
 
@@ -157,19 +157,21 @@ Console 使用稳定的左侧导航和可复制的本地 hash deep link。
 | 页面 | Deep link | 用途 | 快捷键 |
 |---|---|---|---|
 | Attention | `#/attention` | 只看需要人处理的事项 | `Cmd/Ctrl+1` |
-| Processes | `#/processes` | 所有流程及单流程工作区 | `Cmd/Ctrl+2` |
+| Tasks | `#/tasks` | 所有任务及单任务工作区 | `Cmd/Ctrl+2` |
 | Sessions | `#/sessions` | 跨流程查找和接管 agent Session | `Cmd/Ctrl+3` |
 | Sources | `#/sources` | 外部事件、路由状态和流程来源 | `Cmd/Ctrl+4` |
 | System | `#/system` | Operations、Agent、资源、Trigger、Store 和运行时 | `Cmd/Ctrl+5` |
-| New process | `#/new-process` | 从一段目标描述创建新流程 | `Cmd/Ctrl+N` |
+| New task | `#/new-task` | 从一段目标描述创建新任务 | `Cmd/Ctrl+N` |
 
 单条资源也有本地 deep link，例如：
 
 - `#/attention/<attention-id>`
-- `#/processes/<task-id>`
+- `#/tasks/<task-id>`
 - `#/sessions/<session-id>`
 - `#/sources/<task-id>`
 - `#/system/operations`
+
+`#/processes` 与 `#/new-process` 是 FR-166 之前第二行和第六行的旧拼写，仍可解析，因此按旧拼写保存的书签和交接记录继续有效；Console 写回的是新拼写。
 
 这些链接用于同一台机器上的定位和交接，不是公开 Web URL，也不会包含 writer token、transcript 或操作权限。
 
@@ -212,7 +214,7 @@ Attention 桌面布局分为三栏：
 - **Claim**：声明由你处理；不会改变流程执行状态。
 - **Snooze 1h**：暂时移出活动队列，一小时后恢复可见。
 - **Resolve**：确认事项不再需要处理；审计历史仍保留。
-- **Open process**：进入对应 Process Workspace。
+- **Open task**：进入对应任务工作区。
 - 其他按钮：由 daemon 在该条目的 allowlisted actions 中提供；执行前会显示确认对话框。
 
 不要仅因为“看过了”就 Resolve 一个仍然失败的流程。优先让流程真正前进，由系统根据持久状态自动关闭 Attention。
@@ -228,7 +230,7 @@ Attention 桌面布局分为三栏：
 | `c` | Claim |
 | `s` | Snooze 1 小时 |
 | `r` | 打开 Resolve 确认 |
-| `Enter` | 打开关联 Process |
+| `Enter` | 打开关联 Task |
 
 实时更新不会随意移动当前选择；如果服务要求重置快照，Console 会尽量保留同一个 Attention ID。
 
@@ -242,13 +244,13 @@ Console 启动时会请求桌面通知权限。只有新打开或重新打开的
 - 页面会显示 in-app fallback；
 - 屏幕阅读器仍能通过 live region 获得提示。
 
-通知只包含受限标题、严重程度、Process ID 和 deep link，不包含 prompt、transcript、stdout/stderr、Source 正文或密钥。
+通知只包含受限标题、严重程度、Task ID 和 deep link，不包含 prompt、transcript、stdout/stderr、Source 正文或密钥。
 
-## 6. Processes：理解流程，而不是追踪百分比
+## 6. Tasks：理解任务，而不是追踪百分比
 
-### 6.1 Process 列表
+### 6.1 Task 列表
 
-Processes 列出 daemon 中的任务，并优先显示运行中、暂停和失败的流程。运行中的条目会实时更新状态与进度。
+Tasks 列出 daemon 中的任务，并优先显示运行中、暂停和失败的流程。运行中的条目会实时更新状态与进度。
 
 打开流程后，顶部概览显示：
 
@@ -258,7 +260,7 @@ Processes 列出 daemon 中的任务，并优先显示运行中、暂停和失�
 - 活跃 Session 数量；
 - Task item 的完成进度。
 
-这里的 **Process** 是面向用户的投影视图，持久化执行聚合仍然叫 `Task`。因此 UI 中的 Process ID 与 CLI 的 Task ID 是同一个标识。
+这里显示的标识就是 CLI 打印的 Task ID，`orchestrator task info <task-id>` 描述的是同一个对象。FR-166 之前 Console 把它叫作 Process，是 GUI 与其余所有界面对同一事物用了两个词；现在统一为 Task。
 
 ### 6.2 Timeline
 
@@ -373,7 +375,7 @@ orchestrator resume execute <plan-id> \
 
 ### 8.1 Session 列表
 
-**Sessions** 让你不必先记住 Process 就能找回 agent 会话。可按 Active、Detached、Closed 或 All 过滤。
+**Sessions** 让你不必先记住 Task 就能找回 agent 会话。可按 Active、Detached、Closed 或 All 过滤。
 
 每一行显示：
 
@@ -382,7 +384,7 @@ orchestrator resume execute <plan-id> \
 - Session 状态；
 - 当前 writer actor，或 `read-only`。
 
-进入 **Session inspector** 后，可读取 transcript，并跳回关联 Process。
+进入 **Session inspector** 后，可读取 transcript，并跳回关联 Task。
 
 ### 8.2 Reader 与 writer
 
@@ -442,7 +444,7 @@ orchestrator agent session detach <session-id> \
 
 ## 9. Sources：从 Slack 和外部事件进入流程
 
-Sources 展示 provider-neutral 的外部事件。Slack 是一个 adapter，不是 Process 的数据模型。
+Sources 展示 provider-neutral 的外部事件。Slack 是一个 adapter，不是 Task 的数据模型。
 
 ### 9.1 路由状态
 
@@ -450,12 +452,12 @@ Sources 展示 provider-neutral 的外部事件。Slack 是一个 adapter，不�
 |---|---|---|
 | received | 已持久化，等待路由 | 等待或检查 router |
 | routing | 正在关联或创建流程 | 短暂等待 |
-| routed | 已关联 Process | 点击 **Open process** |
+| routed | 已关联 Task | 点击 **Open task** |
 | needs_attention | 无法安全决定路由 | 去 Attention 做人工决策 |
 | failed | 路由失败 | Admin 查错后 Replay |
 | ignored | 按策略忽略 | 通常无需动作 |
 
-一个 Slack thread 的多次消息可以绑定到同一个 Process。新 thread、显式 branch 或歧义会按路由策略产生不同结果；系统不会在歧义时猜测目标流程。
+一个 Slack thread 的多次消息可以绑定到同一个 Task。新 thread、显式 branch 或歧义会按路由策略产生不同结果；系统不会在歧义时猜测目标流程。
 
 ### 9.2 Replay
 
@@ -464,7 +466,7 @@ Sources 展示 provider-neutral 的外部事件。Slack 是一个 adapter，不�
 Replay 前先确认：
 
 1. 签名、权限或路由策略问题已经修复；
-2. 事件没有被人工绑定到错误 Process；
+2. 事件没有被人工绑定到错误 Task；
 3. 上一次尝试是否已经产生外部副作用；
 4. 相关 Attention 和 audit 记录能解释本次操作。
 
@@ -477,9 +479,9 @@ orchestrator source bindings <task-id>
 orchestrator source replay <source-event-id>
 ```
 
-## 10. New process：从目标开始
+## 10. New task：从目标开始
 
-点击左下角 **New process** 或按 `Cmd/Ctrl+N`，输入希望系统完成的目标。当前界面最多接受 2000 个字符，并用现有 wish-pool drafting 流程生成草案。
+点击左下角 **New task** 或按 `Cmd/Ctrl+N`，输入希望系统完成的目标。当前界面最多接受 2000 个字符，并用现有草稿流程生成草案。
 
 建议目标包含：
 
@@ -492,7 +494,7 @@ orchestrator source replay <source-event-id>
 输入后点击提交，或在文本框中按 `Cmd/Ctrl+Enter`。草案完成后：
 
 - **Confirm development**：以草案目标创建正式执行任务；
-- **Modify wish**：返回列表继续调整；
+- **Modify**：返回列表继续调整；
 - **Cancel**：经确认后删除草案。
 
 如果需要精确选择 Project、Workflow、Step 或 pipeline 变量，优先使用 CLI：
@@ -511,7 +513,7 @@ System 保留平台管理和专家入口：
 
 | 分区 | 用途 |
 |---|---|
-| Operations | 查看项目级 Process 健康与 projector 状态 |
+| Operations | 查看项目级 Task 健康与 projector 状态 |
 | Agents | 查看和管理 agent |
 | Workflows & Resources | 管理声明式资源与工作流 |
 | Triggers | 管理定时和事件触发 |
@@ -559,7 +561,7 @@ orchestrator metrics process \
 ### 12.1 失败流程恢复
 
 1. Attention 中 Claim。
-2. Open process。
+2. Open task。
 3. 找到最后成功和首个失败 Timeline 条目。
 4. 检查 Evidence；必要时进入 Expert 看日志。
 5. Generate handoff。
@@ -578,12 +580,12 @@ orchestrator metrics process \
 
 ### 12.3 接管 Claude Code 或其他 agent Session
 
-1. 从 Process context rail 或 Sessions 打开目标 Session。
+1. 从任务 context rail 或 Sessions 打开目标 Session。
 2. 先以 reader 身份看 transcript。
 3. 确认当前没有其他 writer，或与当前 owner 协调。
 4. Request control。
 5. 发送一条短、可验证的指令。
-6. 观察 transcript 和 Process Timeline 是否推进。
+6. 观察 transcript 和 Task Timeline 是否推进。
 7. Release control；不要把 lease 长期闲置。
 
 ### 12.4 Source 路由失败
@@ -593,7 +595,7 @@ orchestrator metrics process \
 3. 查看对应 Attention 和 Audit。
 4. 修复签名、actor role、Trigger 或绑定策略。
 5. Admin 执行 Replay。
-6. 确认只生成一个目标 Process 或绑定，没有重复副作用。
+6. 确认只生成一个目标 Task 或绑定，没有重复副作用。
 
 ## 13. CLI 备用入口
 
@@ -608,7 +610,7 @@ orchestrator attention resolve <attention-id> \
   --expected-version <version> \
   --reason "Resolved after reviewed recovery"
 
-# Process / Timeline
+# Task / Timeline
 orchestrator task info <task-id> -o yaml
 orchestrator task timeline <task-id>
 orchestrator task timeline <task-id> --category failure --follow
@@ -652,9 +654,9 @@ orchestrator metrics --help
 - 当前过滤器是否为 Open queue；
 - 是否误选了 Mine、某个严重程度或 resolved history；
 - `attention_inbox_enabled` 是否启用；
-- 目标 Process 是否真的产生需要人处理的事件。
+- 目标 Task 是否真的产生需要人处理的事件。
 
-普通运行中 Process 不出现在 Attention 是设计行为。
+普通运行中 Task 不出现在 Attention 是设计行为。
 
 ### 按钮不可用或消失
 
@@ -672,7 +674,7 @@ orchestrator metrics --help
 
 说明你查看的数据已经被另一个操作者或流程更新：
 
-1. Refresh snapshot 或重新打开 Process；
+1. Refresh snapshot 或重新打开 Task；
 2. 重新读取当前 version/state version；
 3. 重新生成恢复 plan；
 4. 再次审阅后果后执行。
@@ -728,7 +730,7 @@ orchestrator audit get <request-id> --project <project>
 
 ## 16. 使用习惯建议
 
-- 每天从 Attention 开始，而不是从所有 Process 开始。
+- 每天从 Attention 开始，而不是从所有 Task 开始。
 - Claim 代表你正在负责，不代表问题已经解决。
 - 先看语义 Timeline 和 Evidence，最后才看原始日志。
 - 每次跨人、跨 Session 或跨恢复边界时生成 Handoff。
@@ -744,8 +746,7 @@ orchestrator audit get <request-id> --project <project>
 
 | 术语 | 含义 |
 |---|---|
-| Process | 面向操作者的执行投影；当前由持久化 Task 及其子资源支撑 |
-| Task | daemon 中的持久化执行聚合，也是 CLI 使用的名称 |
+| Task | daemon 中的持久化执行聚合。CLI、API、审计与 Console 现在都用这一个名字；FR-166 之前 Console 称其为 Process |
 | Attention item | 需要人判断或操作的持久化队列条目 |
 | Timeline | 从事件构建的稳定、分页、语义化只读投影 |
 | Evidence | 与 Timeline 条目关联的测试、命令、产物、日志等引用 |
@@ -756,7 +757,7 @@ orchestrator audit get <request-id> --project <project>
 | Writer lease | Session 的独占、可续租输入权限 |
 | Fencing token | 单调递增的 writer 代次；旧 token 不能影响新 owner |
 | Source event | 已认证、标准化并先持久化的外部事件 |
-| Source binding | 外部 conversation/thread 与 Process 的持久关联 |
+| Source binding | 外部 conversation/thread 与 Task 的持久关联 |
 | Request ID | 串联传输授权、领域动作、事件和审计证据的请求标识 |
 
 ## 18. 相关文档

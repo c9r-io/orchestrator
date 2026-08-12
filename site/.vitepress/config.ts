@@ -62,6 +62,10 @@ export default defineConfig({
               text: "Operations",
               items: [
                 {
+                  text: "Agent Process Console",
+                  link: "/en/guide/agent-process-console",
+                },
+                {
                   text: "Process Console Operations",
                   link: "/en/guide/agent-process-console-v1-operations",
                 },

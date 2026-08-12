@@ -9,7 +9,7 @@
       "sources": { "en": "docs/guide", "zh": "docs/guide/zh" },
       "stripNumericPrefix": true,
       "requireBilingual": false,
-      "requireBilingualReason": "EN/ZH guide parity is the guide-alignment skill's scope, not this gate's. An untranslated chapter is simply absent from that locale's site rather than served in the wrong language, which is why the guide collection declares no fallback. The visible consequence is that VitePress still renders a language-switcher link on the seven asymmetric chapters (six EN-only, one ZH-only) and that link 404s; closing it means translating them, not changing the publishing rule.",
+      "requireBilingualReason": "EN/ZH guide parity is the guide-alignment skill's scope, not this gate's. An untranslated chapter is simply absent from that locale's site rather than served in the wrong language, which is why the guide collection declares no fallback. The visible consequence is that VitePress still renders a language-switcher link on each asymmetric chapter and that link 404s; closing it means translating them, not changing the publishing rule. FR-166 measured the asymmetry and translated the one ZH-only chapter (08-agent-process-console), leaving six EN-only slugs; four of those six are Chinese text occupying the `en` source slot and are declared in translationGaps below, so this gate no longer relies on that count being restated in prose. `check_guide_language_parity` in scripts/qa/test-docs-reality-alignment.sh derives both halves -- the Chinese files by measuring them, the permitted ones from those declarations -- and fails when a Chinese document appears in the English source directory undeclared.",
       "fallback": null
     },
     {
@@ -21,6 +21,34 @@
     }
   ],
   "translationGaps": [
+    {
+      "collection": "guide",
+      "slug": "slack-reaction-skill-automation",
+      "absentSource": "zh",
+      "owedTranslation": "en",
+      "reason": "Chinese text occupying the `en` source slot, the same shape as showcases/full-qa-execution. FR-166 found it listed in the English table of contents with no indication of its language. The owed work is an English translation, after which the Chinese text moves to docs/guide/zh/ and this entry is deleted."
+    },
+    {
+      "collection": "guide",
+      "slug": "slack-managed-connections",
+      "absentSource": "zh",
+      "owedTranslation": "en",
+      "reason": "Chinese text occupying the `en` source slot. Deferred by FR-166 rather than translated: this is a Slack platform-operations runbook whose audience is the administrator who deploys the Gateway, and the concept-surface convergence FR-166 governs does not reach it. The owed work is an English translation."
+    },
+    {
+      "collection": "guide",
+      "slug": "slack-dedicated-app-provisioning",
+      "absentSource": "zh",
+      "owedTranslation": "en",
+      "reason": "Chinese text occupying the `en` source slot. Deferred by FR-166 for the same reason as slack-managed-connections: a per-workspace Slack App provisioning runbook, not part of the product concept surface. The owed work is an English translation."
+    },
+    {
+      "collection": "guide",
+      "slug": "slack-managed-sandbox-certification-runbook",
+      "absentSource": "zh",
+      "owedTranslation": "en",
+      "reason": "Chinese text occupying the `en` source slot. Deferred by FR-166: a live-certification runbook for controlled Slack sandboxes, executed by operators rather than read by users. The owed work is an English translation."
+    },
     {
       "collection": "showcases",
       "slug": "full-qa-execution",
