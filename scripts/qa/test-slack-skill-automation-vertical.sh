@@ -54,7 +54,44 @@ HOST_HOME="$HOME"
 HOST_CARGO_HOME="${CARGO_HOME:-$HOST_HOME/.cargo}"
 HOST_RUSTUP_HOME="${RUSTUP_HOME:-$HOST_HOME/.rustup}"
 DB="$QA_ROOT/runtime/agent_orchestrator.db"
+# A whole second cargo target tree, so the previous release builds without
+# invalidating the working tree's. It is a **cache, not scratch**: cleanup() must
+# never remove it, because rebuilding it costs the whole previous release.
+# Measured 2026-08-12: 7.9 GB for one ref, inside a 100 GB target/. It is
+# invisible to `git status` (.gitignore ignores target/), which is how a tree this
+# size went unremarked while a 41 MB $TMPDIR root was noticed.
+#
+# One tree per distinct PREVIOUS_REF, and nothing used to prune them: the count
+# grows by one per release the pin is advanced to, at ~8 GB each, forever. So keep
+# the tree this run needs and the newest other one — the newest is kept because
+# advancing the pin should not throw away the tree the previous pin built, which
+# is the one a bisect would come back to — and remove the rest.
 PREVIOUS_TARGET="$REPO_ROOT/target/fr113-previous-${PREVIOUS_REF:0:12}"
+prune_previous_targets() {
+  local keep_newest="" candidate
+  # -mindepth/-maxdepth 1 so this can only ever see the siblings it created.
+  # Newest is found with `[[ -nt ]]` rather than `stat`, whose format flag differs
+  # between BSD and GNU, and rather than parsing `ls -t`, whose output cannot be
+  # split safely when $REPO_ROOT contains a space.
+  while IFS= read -r candidate; do
+    if [[ -n "$candidate" && ( -z "$keep_newest" || "$candidate" -nt "$keep_newest" ) ]]; then
+      keep_newest="$candidate"
+    fi
+  done < <(find "$REPO_ROOT/target" -mindepth 1 -maxdepth 1 -type d \
+    -name 'fr113-previous-*' 2>/dev/null)
+  while IFS= read -r candidate; do
+    if [[ -n "$candidate" && "$candidate" != "$PREVIOUS_TARGET" && "$candidate" != "$keep_newest" ]]; then
+      echo "  pruning stale previous-release target tree: $candidate" >&2
+      rm -rf "$candidate"
+    fi
+  done < <(find "$REPO_ROOT/target" -mindepth 1 -maxdepth 1 -type d \
+    -name 'fr113-previous-*' 2>/dev/null)
+  # An `if` whose condition is false is the loop's last status, so without this
+  # the function returns 1 on a tree that needs no pruning and `set -e` takes the
+  # gate down before it has asserted anything.
+  return 0
+}
+prune_previous_targets
 
 cleanup() {
   gate_daemon_stop "$DAEMON_PID" || true
@@ -66,7 +103,11 @@ cleanup() {
   if [[ -n "$PREVIOUS_TREE" && -d "$PREVIOUS_TREE" ]]; then
     git -C "$REPO_ROOT" worktree remove --force "$PREVIOUS_TREE" >/dev/null 2>&1 || true
   fi
-  if [[ "${KEEP_QA:-0}" == "1" ]]; then
+  # gate_scratch_has_evidence: a retained root that holds nothing is
+  # indistinguishable from a gate that ran and produced no findings. Either root
+  # holding something retains both, because both are removed below.
+  if [[ "${KEEP_QA:-0}" == "1" ]] &&
+    { gate_scratch_has_evidence "$QA_ROOT" || gate_scratch_has_evidence "$QA_HOME"; }; then
     echo "FR-113 vertical logs retained at: $QA_ROOT" >&2
   else
     rm -rf "$QA_ROOT" "$QA_HOME"

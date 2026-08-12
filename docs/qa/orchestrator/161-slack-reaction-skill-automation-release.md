@@ -113,11 +113,15 @@ WHERE r.id = '{replayed_route_id}';
   qualified **by running this gate**, never by reading. A pin left behind fails
   as a 500 from the old daemon once the schema moves past its window — measured
   2026-08-10 against schema 37, rollback-disabled.code=500.
-- **When the pin advances, delete the predecessor's build cache**
-  (`target/fr113-previous-<old 12-hex>`): the gate keeps one per pin as a
-  deliberate cross-run cache (~3-4 GB each, ~20 min to rebuild), so the old
-  pin's directory becomes permanent dead weight the moment the default moves —
-  measured 3.8 GB after the 2026-08-11 advance, owned by no cleanup path.
+- **The predecessor's build cache is now pruned by the gate, not by hand.**
+  `target/fr113-previous-<12-hex>` is a deliberate cross-run cache, one tree per
+  pin (~20 min to rebuild, and it grows: 3.8 GB measured after the 2026-08-11 pin
+  advance, 7.9 GB on 2026-08-12). Nothing used to remove them, so each advance
+  left the old pin's tree as permanent dead weight — invisible to `git status`,
+  since `target/` is ignored. Since 2026-08-12 the gate prunes at start, keeping
+  the tree the run needs and the newest other one, so a pin advance costs at most
+  one extra tree rather than one per release. It is never removed by `cleanup()`:
+  that would reintroduce the full rebuild on every run.
 
 ### Goal
 

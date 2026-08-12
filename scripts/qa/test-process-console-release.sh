@@ -13,7 +13,9 @@ STARTED_AT="$(date +%s)"
 COMPLETED=()
 
 cleanup() {
-  if [[ "${KEEP_RELEASE_QA:-0}" == "1" ]]; then
+  # gate_scratch_has_evidence: retaining an empty $LOG_ROOT announces evidence
+  # that does not exist. The root is allocated above the command preamble.
+  if [[ "${KEEP_RELEASE_QA:-0}" == "1" ]] && gate_scratch_has_evidence "$LOG_ROOT"; then
     echo "Release QA logs retained at: $LOG_ROOT" >&2
   else
     rm -rf "$LOG_ROOT"

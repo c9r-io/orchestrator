@@ -28,6 +28,20 @@ Primary release entry point:
 ./scripts/qa/test-agent-driver-execution-migration.sh
 ```
 
+The run writes its execution inventory and the parity and strangler logs into an
+evidence bundle. By default that bundle is scratch: kept when the run fails with
+something in it, removed otherwise — a passing run used to leave it under
+`$TMPDIR` for nobody, and a run that died on its command preamble left an empty
+directory that could not be told apart from a run that found nothing. To keep the
+bundle from a passing run, name it:
+
+```bash
+FR126_EVIDENCE_DIR=/tmp/fr126-evidence ./scripts/qa/test-agent-driver-execution-migration.sh
+```
+
+An explicitly named directory is retained whatever the verdict. The gate prints
+`Evidence: <dir>` on stderr only when the bundle survived the run.
+
 `FR126_FAST=1` is for local iteration and is not release certification **on its own**: it skips the repository-wide gates (`cargo fmt`, strict Clippy, `cargo test --workspace`, the coordination strangler, coverage fixtures, and `qa-doc-lint.sh`) and the production parity harness (`test-agent-driver-production-parity.sh`) that this document's aggregate otherwise runs. The `governance` job in `.github/workflows/ci.yml` sets `FR126_FAST=1` deliberately, because every skipped repository-wide gate executes there as a sibling job and the parity harness as a sibling step of the same job; in CI the certifying aggregate is the workflow rather than this script. See [DD-139](../../design_doc/orchestrator/139-qa-gate-enforcement-surface.md).
 
 ---

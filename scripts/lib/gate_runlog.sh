@@ -168,3 +168,25 @@ gate_runlog_worktree_status() {
     git -C "${1:-${REPO_ROOT:-.}}" status --porcelain \
         -- ":(exclude)$GATE_RUNLOG_LEDGER_REL"
 }
+
+# True when a scratch root actually holds something.
+#
+# Every gate that can retain its scratch allocates it at the top of the file,
+# above the command preamble and above the clean-worktree check, and decides at
+# exit whether to keep it. So an exit at either precondition retains a directory
+# holding nothing — and the three FR-113/114/115 gates announce it, which makes
+# "the gate failed and here is the evidence" and "the gate never started"
+# produce the same line over the same empty directory. Measured 2026-08-12:
+# `cargo` off PATH makes test-slack-managed-shared-oauth.sh exit 1 printing
+# `FR-114 QA logs retained at: <dir>` for a directory with zero entries, and an
+# FR-165 sweep left four such roots at 0 B.
+#
+# Used as a conjunct on the retain branch rather than as a replacement for it:
+# the gate still decides *whether* it wants to keep evidence, this only answers
+# whether there is any. `ls -A` rather than a glob because a glob under
+# `set -u`/`nullglob`-less bash reports a literal `*` for an empty directory.
+gate_scratch_has_evidence() {
+    local dir="$1"
+    [[ -d "$dir" ]] || return 1
+    [[ -n "$(ls -A "$dir" 2>/dev/null)" ]]
+}

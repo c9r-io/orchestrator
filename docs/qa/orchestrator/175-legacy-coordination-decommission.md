@@ -33,6 +33,21 @@ FR125_ALLOW_DIRTY=1 ./scripts/qa/test-legacy-coordination-decommission.sh
 Omit `FR125_ALLOW_DIRTY=1` for clean-tree certification. Set `FR125_FULL=1` to
 include workspace tests and strict Clippy in the same run.
 
+The run writes its consumer inventory and strangler log into an evidence bundle.
+By default that bundle is scratch: kept when the run fails with something in it,
+removed otherwise — a passing run used to leave it under `$TMPDIR` for nobody,
+and a run that died on its command preamble left an empty directory that could
+not be told apart from a run that found nothing. To keep the bundle from a
+passing run, name it:
+
+```bash
+FR125_EVIDENCE_DIR=/tmp/fr125-evidence \
+  FR125_ALLOW_DIRTY=1 ./scripts/qa/test-legacy-coordination-decommission.sh
+```
+
+An explicitly named directory is retained whatever the verdict. The gate prints
+`Evidence: <dir>` on stderr only when the bundle survived the run.
+
 ---
 
 ## Scenario 1: Reproducible Consumer Inventory And Ratchet
