@@ -194,12 +194,18 @@ before any of this FR's requirement-2 changes:
   to the prose section below the generated block, which is where every other
   closure note lives.
 
-`ruby scripts/qa/ci-liveness.rb` remains red and **cannot be fixed locally**. It
-reports 12 stale job records because `config/governance/ci-job-liveness.json` was
-last refreshed on 2026-08-03 at `9f94a892` and `ci.yml` has changed since. Verified
-red with the identical 12 records at `bd0e2389`, `77cc351a` and `e131c069`, so this
-is pre-existing from requirement 1's own `ci.yml` edit and is not made worse here.
-Refreshing it requires a real CI run to record run IDs against the current sha.
+`ruby scripts/qa/ci-liveness.rb` was red and could not be fixed locally: it reported
+12 stale job records because `config/governance/ci-job-liveness.json` was last
+refreshed on 2026-08-03 at `9f94a892` and `ci.yml` had changed since. Verified red
+with the identical 12 records at `bd0e2389`, `77cc351a` and `e131c069`, so it was
+pre-existing from requirement 1's own `ci.yml` edit and was not made worse here.
+
+**Resolved 2026-08-12 at `db8953bc`** by pushing and refreshing from run
+`31565308833` (`0d9d09f6`) — the convergence pattern the FR-158 and FR-154 rounds
+used. That run also gave both gates in this document their first real CI
+verification: `rollback-contract=success` and `rollback-contract-fixtures=success`,
+with `liveness=failure` the run's only non-success. CI on `main` had been red for
+that single reason since 2026-08-11.
 
 All three are instances of the same mechanism, §4.6 condition 6: requirement 1's
 certification ran a hand-listed sweep, these gates were not on the list, and the

@@ -210,11 +210,24 @@ and it leaves the file looking complete.
 - [x] `ruby scripts/qa/rollback-contract-single-source.rb`,
       `doc-lifecycle.rb`, `qa-doc-lint.sh`, `test-governance-ledger-tooling.sh` — exit 0
 
+### The re-approved baseline, verified in CI
+
+DD-181 records one limit it could not close locally: the measurement was taken on
+this host and `boundary-coverage` runs on `macos-latest`, so whether the re-approved
+values reproduce there was unverified. **They do.** Run `31565308833` at `0d9d09f6`
+reports `Boundary coverage non-regression: success` — the first CI execution against
+the three re-approved entries and the declared 3.0-point band. `dependency-policy`
+and its fixtures are green in the same run with the `audit-ignore-is-live` ratchet
+armed.
+
 ### Carried forward from QA 218
 
-`ruby scripts/qa/ci-liveness.rb` is still red and still needs a real CI run to
-refresh run IDs against the current sha; it predates FR-165 requirement 1's `ci.yml`
-edit. `bash scripts/qa/test-markdown-link-integrity.sh` still aborts under bash 3.2
-in the primary working directory and passes at the same commit in a clean worktree
-(`docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md`). Neither is
-affected by requirements 3 or 4, which touched no workflow and no markdown link.
+`ruby scripts/qa/ci-liveness.rb` was red for a reason predating this FR and is now
+resolved: see QA 218's regression checklist for the convergence rounds.
+`bash scripts/qa/test-markdown-link-integrity.sh` still aborts under bash 3.2 in the
+primary working directory and passes at the same commit in a clean worktree
+(`docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md`). The abort is
+open; what was fixed is that its log can no longer be mistaken for a pass — the
+statistics used to print before either check ran, so a truncated run's tail was
+indistinguishable from a healthy one. Neither the abort nor the banner is affected by
+requirements 3 or 4, which touched no workflow and no markdown link.

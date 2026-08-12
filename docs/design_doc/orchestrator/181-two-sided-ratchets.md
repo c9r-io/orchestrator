@@ -199,12 +199,14 @@ rather than as its author caught it.
 
 ## Known limits
 
-- **The first CI run is the verification of the re-approved baseline.** The
-  measurement was taken on this host with the same pinned cargo-llvm-cov 0.8.5 and
-  the same invocation the script uses, and the baseline is declared
-  `macos-aarch64` against a `macos-latest` job, so it should reproduce. If it lands
-  marginally low, `percentageTolerance: 0.05` absorbs it; more than that is a real
-  difference and the baseline is what should move.
+- ~~**The first CI run is the verification of the re-approved baseline.**~~
+  **Verified.** Run `31565308833` at `0d9d09f6` reports
+  `Boundary coverage non-regression: success` — the three re-approved entries and
+  the 3.0-point band reproduce on `macos-latest`, so the measurement taken here
+  transferred without needing the 0.05 tolerance as cover. The prediction that it
+  would is recorded above rather than deleted, because the reason it was uncertain
+  (a figure measured on one host governing a job on another) is the reason
+  `coverage/README.md` now requires a pinned revision beside every number.
 - **Frontend and Playwright coverage were not measured here.** Node 26 breaks the
   GUI unit suite (`docs/ticket/20260812-node-version-unpinned-locally.md`) and this
   host has no Playwright browsers. The Rust side is what requirement 3 changed and
