@@ -409,7 +409,10 @@ fn guide_trigger_examples_deserialize_as_written() {
     for block in &specs {
         let wrapper: serde_yaml::Value = serde_yaml::from_str(block)
             .unwrap_or_else(|error| panic!("{path} event example is not YAML: {error}\n{block}"));
-        let spec = wrapper.get("spec").expect("filtered on a spec: fence").clone();
+        let spec = wrapper
+            .get("spec")
+            .expect("filtered on a spec: fence")
+            .clone();
         let parsed: TriggerSpec = serde_yaml::from_value(spec).unwrap_or_else(|error| {
             panic!("{path} documents a Trigger field the product rejects: {error}\n{block}")
         });
