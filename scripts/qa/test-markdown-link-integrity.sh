@@ -358,15 +358,28 @@ LINKS="$(git -C "$REPO_ROOT" ls-files '*.md' | while IFS= read -r f; do
   [[ -f "$REPO_ROOT/$f" ]] && extract_links "$REPO_ROOT/$f"
 done | wc -l | tr -d ' ')"
 
+EXEMPTIONS="$(jq -r '.exemptions | length' "$REPO_ROOT/$POLICY_REL")"
+
 echo "=== FR-131: markdown link integrity ==="
 echo ""
-echo "files:      $FILES tracked markdown files"
-echo "links:      $LINKS inline link targets outside code spans and fenced blocks"
-echo "exemptions: $(jq -r '.exemptions | length' "$REPO_ROOT/$POLICY_REL")"
-echo ""
 
+# The statistics used to print here, before either check ran. That made a run
+# which died mid-scan indistinguishable, in the log, from a healthy one: the banner
+# said "666 files, 542 links, 0 exemptions" and no FAIL line followed, which is
+# exactly what success looks like to anything reading the tail instead of the exit
+# status. The counts are computed above and printed below, with the verdict, so the
+# log carries them only once the checks have actually finished.
+#
+# This is §4.4 shape 5 arriving from the other direction: not a check that passes
+# having read nothing, but a check whose *output* reads as complete when the run was
+# truncated. Found while investigating a bash 3.2 abort in this gate
+# (docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md); the abort is
+# still open, and this makes it impossible to mistake for a pass.
 run_all_checks "$REPO_ROOT" || true
 
 echo ""
+echo "files:      $FILES tracked markdown files"
+echo "links:      $LINKS inline link targets outside code spans and fenced blocks"
+echo "exemptions: $EXEMPTIONS"
 echo "=== markdown link integrity: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]] || exit 1
