@@ -55,7 +55,7 @@ pub fn open_conn(db_path: &Path) -> Result<Connection> {
 /// Applies the layer's standard pragmas to an already-open connection.
 /// Applies the standard busy timeout and pragma configuration to a connection.
 pub fn configure_conn(conn: &Connection) -> Result<()> {
-    crate::db::configure_conn(conn)
+    crate::sqlite::configure_conn(conn)
 }
 
 /// The serialized writer connection behind an [`AsyncDatabase`].

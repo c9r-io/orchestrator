@@ -17,7 +17,6 @@ use anyhow::Result;
 use rusqlite::Connection;
 
 use crate::async_database::AsyncDatabase;
-use crate::db::configure_conn;
 use crate::migration::{
     Migration, current_version, registered_migrations as all_migrations, run_pending,
 };
@@ -25,6 +24,7 @@ use crate::migration_steps::HISTORICAL_AGENT_PLACEHOLDER;
 use crate::process_metrics_store::{
     AsyncProcessMetricsRepository, MetricObservation, SUPPORTED_BUCKET_SECONDS,
 };
+use crate::sqlite::configure_conn;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use tempfile::tempdir;
