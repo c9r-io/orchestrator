@@ -52,7 +52,7 @@ Stable hash routes are:
 - `#/sources/automations/bindings[/<name>]`;
 - `#/sources/automations/routes[/<route-id>]`.
 
-The legacy `#/sources/<task-id>` process deep link remains parseable. New process links use the canonical `#/processes/<task-id>` route. Route detail links to its bounded source event, current binding/template editor, matching Attention item, and Process Workspace. Attention items containing `source_route_id` link back to route detail.
+The legacy `#/sources/<task-id>` process deep link remains parseable. New task links use the canonical `#/tasks/<task-id>` route (`#/processes/<task-id>` until FR-166, still parseable). Route detail links to its bounded source event, current binding/template editor, matching Attention item, and Process Workspace. Attention items containing `source_route_id` link back to route detail.
 
 ## UI Interactions
 

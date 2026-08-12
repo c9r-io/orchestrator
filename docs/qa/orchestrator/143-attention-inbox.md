@@ -216,7 +216,7 @@ Verify users discover actionable work immediately and can complete the primary f
 
 ### Expected
 
-- The normal startup flow lands on Attention; Processes and New Process preserve the former progress/wish workflows.
+- The normal startup flow lands on Attention; Tasks and New task preserve the former progress/draft workflows.
 - Default ordering shows intervention first, then current actor, unassigned, SLA, and creation age.
 - Keyboard focus is visible and cards expose `role="option"`/`aria-selected` state.
 - Stream deltas reconcile by stable item ID.

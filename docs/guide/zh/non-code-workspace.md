@@ -140,7 +140,7 @@ orchestrator task create \
 
 task Workspace 不要传 `--target-file`。
 
-在 Process Console 中进入“Processes”并选择任务。概览会显示“Workspace type: Task”，Expert workflow 使用通用的“Task”标签。Timeline、证据、Attention、handoff 和 Session 接管能力与代码任务保持一致。
+在 Process Console 中进入“Tasks”并选择任务。概览会显示“Workspace type: Task”，Expert workflow 使用通用的“Task”标签。Timeline、证据、Attention、handoff 和 Session 接管能力与代码任务保持一致。
 
 ## Slack Badge 完整示例
 

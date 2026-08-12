@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 473,
-    "active": 460,
+    "documents": 475,
+    "active": 462,
     "superseded": 13,
-    "withRelatedFr": 320
+    "withRelatedFr": 322
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -521,6 +521,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-165"
+      ]
+    },
+    "docs/design_doc/orchestrator/182-concept-surface-convergence.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-166"
       ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
@@ -1908,6 +1914,12 @@
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
+    "docs/qa/orchestrator/220-concept-surface-convergence.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-166"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3037,6 +3049,10 @@
       "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md",
       "docs/qa/orchestrator/218-forward-only-rollback-contract.md",
       "docs/qa/orchestrator/219-two-sided-ratchets.md"
+    ],
+    "FR-166": [
+      "docs/design_doc/orchestrator/182-concept-surface-convergence.md",
+      "docs/qa/orchestrator/220-concept-surface-convergence.md"
     ]
   },
   "supersedes": {

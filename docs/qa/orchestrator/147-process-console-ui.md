@@ -44,7 +44,7 @@ Verify the new information architecture is the visible default while every legac
 ### Expected
 
 - Empty, unknown, and explicit Attention hashes resolve to `#/attention` semantics.
-- Attention, Processes, Sessions, Sources, and System have unique active states and copyable stable-ID routes.
+- Attention, Tasks, Sessions, Sources, and System have unique active states and copyable stable-ID routes.
 - Wish submission remains reachable as New Process; legacy Progress behavior is reachable as Processes.
 - Agents, resources, workflows, triggers, stores, secrets, connection/runtime, logs, and raw trace remain reachable under System or Process Expert.
 
@@ -97,7 +97,7 @@ Verify an operator can understand a failed process and reach recovery context wi
 
 ### Expected
 
-- The route changes to `#/processes/{task_id}` and preserves the process identity.
+- The route changes to `#/tasks/{task_id}` and preserves the process identity.
 - Goal, failed state, workflow, failure summary, and typed test evidence are readable in the normal workspace.
 - Raw logs and trace data are not the primary explanation and remain available under Expert.
 - The live timeline is deduplicated by stable ID and bounded to 500 entries.

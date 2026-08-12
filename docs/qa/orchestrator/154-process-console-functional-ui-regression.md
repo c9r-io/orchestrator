@@ -37,7 +37,7 @@ Verify every primary destination is discoverable and active work remains keyboar
 ### Steps
 
 1. Run `cd gui && npx playwright test -g "Processes prioritizes|global shortcuts"`.
-2. Verify visible links for "Attention", "Processes", "Sessions", "Sources", and "System".
+2. Verify visible links for "Attention", "Tasks", "Sessions", "Sources", and "System".
 3. Activate `Cmd/Ctrl+1..5`, toggle the theme, and open a process row with `Enter`.
 4. Inspect ordering for running, failed, and completed process fixtures.
 

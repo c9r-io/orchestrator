@@ -10,7 +10,7 @@ self_referential_safe: false
 **分类**: GUI / UX
 **优先级**: P2
 
-> **FR-100 navigation overlay (2026-07-14)**: Theme and reduced-transparency controls now live in the left console preferences area. New Process replaces the permanent wish tab, Processes replaces progress observation, and workflow/log diagnostics remain under Process Workspace → Expert. QA-147 owns current responsive and fallback assertions.
+> **FR-100 navigation overlay (2026-07-14)**: Theme and reduced-transparency controls now live in the left console preferences area. New task replaces the permanent wish tab, Tasks replaces progress observation (both labelled New Process / Processes until FR-166), and workflow/log diagnostics remain under Process Workspace → Expert. QA-147 owns current responsive and fallback assertions.
 
 ## Scenario 0: 入口可见性
 

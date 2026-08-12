@@ -173,7 +173,7 @@ Verify FR-103 preserves the rest of the Process Console and repository quality g
 1. Run `cargo test --workspace`.
 2. Run `cargo clippy --workspace --all-targets -- -D warnings`.
 3. Run `cd gui && npm run test:all`.
-4. Verify Attention, Processes, Sessions, Sources, System, and New Process through the shell/browser tests.
+4. Verify Attention, Tasks, Sessions, Sources, System, and New task through the shell/browser tests.
 5. Verify Process Expert still exposes raw logs, trace, and orphan repair.
 
 ### Expected
