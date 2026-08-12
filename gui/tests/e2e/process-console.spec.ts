@@ -219,7 +219,7 @@ test("Attention is the default and opens the semantic failed-process workspace",
   await expect(page.getByRole("heading", { name: "Approval required" })).toBeVisible();
   await expect(page.getByText("Autonomous background task")).toHaveCount(0);
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#\/processes\/task-1/);
+  await expect(page).toHaveURL(/#\/tasks\/task-1/);
   await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
   await expect(page.getByText("cargo test payment", { exact: true })).toBeVisible();
 });
@@ -266,7 +266,7 @@ test("Attention one-click safe resume auto-opens and restores a stable process c
   await page.goto("/");
   await page.getByRole("button", { name: "Review safe resume" }).click();
 
-  await expect(page).toHaveURL(/#\/processes\/task-1$/);
+  await expect(page).toHaveURL(/#\/tasks\/task-1$/);
   const dialog = page.getByRole("dialog", { name: "Resume consequence preview" });
   const close = dialog.getByRole("button", { name: "Close resume dialog" });
   const createPreview = dialog.getByRole("button", { name: "Create preview" });
@@ -576,7 +576,7 @@ test("session inspector commits offsets, controls one writer, and links to its p
     .toEqual(expect.arrayContaining(["agent_session_attach", "agent_session_send_input", "agent_session_detach"]));
 
   await page.getByRole("button", { name: "Open linked process" }).click();
-  await expect(page).toHaveURL(/#\/processes\/task-1/);
+  await expect(page).toHaveURL(/#\/tasks\/task-1/);
 });
 
 test("read-only session inspector has no focusable mutation controls", async ({ page }) => {
@@ -600,7 +600,7 @@ test("Processes prioritizes active and failed work while preserving keyboard rea
   await expect(processCards.nth(2)).toHaveAccessibleName("任务: Completed documentation");
   await processCards.nth(1).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/#\/processes\/task-1/);
+  await expect(page).toHaveURL(/#\/tasks\/task-1/);
 });
 
 // FR-166 renamed the canonical hash to #/tasks. This one case deliberately stays on
@@ -670,15 +670,15 @@ test("Sources supports routing filters, process correlation, and admin-only repl
   await expect(page.getByRole("listitem")).toHaveCount(1);
   await page.getByRole("button", { name: "重新路由" }).click();
   await expect.poll(() => page.evaluate(() => (window as any).__PROCESS_TEST__.calls.some((call: any) => call.command === "source_replay" && call.args.id === "source-1"))).toBe(true);
-  await page.getByRole("button", { name: "打开进程" }).click();
-  await expect(page).toHaveURL(/#\/processes\/task-1/);
+  await page.getByRole("button", { name: "打开任务" }).click();
+  await expect(page).toHaveURL(/#\/tasks\/task-1/);
   await expect(page.getByRole("heading", { name: "Fix payment failure" })).toBeVisible();
 });
 
 test("read-only Sources exposes correlation without replay controls", async ({ page }) => {
   await installTauriMock(page, "read_only");
   await page.goto("/#/sources/events");
-  await expect(page.getByRole("button", { name: "打开进程" })).toHaveCount(2);
+  await expect(page.getByRole("button", { name: "打开任务" })).toHaveCount(2);
   await expect(page.getByRole("button", { name: "重新路由" })).toHaveCount(0);
 });
 
