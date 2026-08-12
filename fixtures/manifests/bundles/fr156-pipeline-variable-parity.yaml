@@ -52,6 +52,11 @@ spec:
       - TERM
       - ORCHESTRATORD_DATA_DIR
       - ORCHESTRATOR_CONTROL_PLANE_CONFIG
+      # No ORCHESTRATOR_SOCKET here, unlike wp05-store-spawn.yaml. That fixture
+      # spawns a child `orchestrator` CLI that has to reach the daemon; these
+      # steps do not, so adding it would widen the step environment past what
+      # the scenario needs. Checked once and recorded in both files so the
+      # difference is not re-filed as fixture drift.
   resume:
     auto: false
 ---

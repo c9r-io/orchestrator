@@ -21,6 +21,13 @@ spec:
       - TERM
       - ORCHESTRATORD_DATA_DIR
       - ORCHESTRATOR_CONTROL_PLANE_CONFIG
+      # Deliberate, and deliberately not mirrored into
+      # fr156-pipeline-variable-parity.yaml. This fixture exercises the
+      # CLI-store pattern, where a step shells out to `orchestrator` and that
+      # child must find the daemon; DD-169's Known limits records the variable
+      # set as load-bearing for exactly that. fr156 tests the pipeline-variable
+      # path, whose steps never spawn a CLI, so the variable would be cargo
+      # there. The asymmetry is the decision, not drift.
       - ORCHESTRATOR_SOCKET
   resume:
     auto: false

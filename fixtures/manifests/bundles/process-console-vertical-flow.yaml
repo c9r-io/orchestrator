@@ -19,7 +19,7 @@ spec:
     executor: shell
     allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
     allowed_shell_args: ["-lc", "-c"]
-    env_allowlist: [PATH, HOME, USER, LANG]
+    env_allowlist: [PATH, HOME, USER, LANG, TERM]
     redaction_patterns: [token, password, secret, api_key]
   resume:
     auto: false

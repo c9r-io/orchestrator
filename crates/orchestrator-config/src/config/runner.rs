@@ -36,11 +36,17 @@ pub struct RunnerConfig {
     pub redaction_patterns: Vec<String>,
 }
 
-fn default_shell_arg() -> String {
+// These are the crate's single definition of the runner defaults. `RunnerSpec`
+// in cli_types.rs describes the same five fields for the manifest surface and
+// imports them from here rather than restating them: the two blocks used to be
+// byte-identical copies, which meant a change to one default silently missed
+// the other. Keeping one definition makes that class of drift unrepresentable.
+
+pub(crate) fn default_shell_arg() -> String {
     "-lc".to_string()
 }
 
-fn default_allowed_shells() -> Vec<String> {
+pub(crate) fn default_allowed_shells() -> Vec<String> {
     vec![
         "/bin/bash".to_string(),
         "/bin/zsh".to_string(),
@@ -48,11 +54,11 @@ fn default_allowed_shells() -> Vec<String> {
     ]
 }
 
-fn default_allowed_shell_args() -> Vec<String> {
+pub(crate) fn default_allowed_shell_args() -> Vec<String> {
     vec!["-lc".to_string(), "-c".to_string()]
 }
 
-fn default_env_allowlist() -> Vec<String> {
+pub(crate) fn default_env_allowlist() -> Vec<String> {
     vec![
         "PATH".to_string(),
         "HOME".to_string(),
@@ -62,7 +68,7 @@ fn default_env_allowlist() -> Vec<String> {
     ]
 }
 
-fn default_redaction_patterns() -> Vec<String> {
+pub(crate) fn default_redaction_patterns() -> Vec<String> {
     vec![
         "token".to_string(),
         "password".to_string(),
