@@ -83,11 +83,61 @@ candidate is an intermediate process that reaps the signalled child and exits 1
 itself — but that has not been confirmed, and confirming it means reading the spawn
 path rather than inferring from one field.
 
+## The spawn path, read 2026-08-13 (narrows item 1, does not close it)
+
+Item 1 says the answer is "between `wait.rs`/`util.rs` and the process the daemon
+actually spawns". That process is now identified, so the next pass can start from
+a named chain instead of a search.
+
+On macOS the daemon's immediate child is built by
+`build_sandbox_command` at
+`crates/orchestrator-runner/src/runner/sandbox.rs:376-384`:
+
+```
+/usr/bin/sandbox-exec -p <profile> <runner.shell> <runner.shell_arg> <command>
+```
+
+with `runner.shell_arg` defaulting to `-lc` — a **login** shell, which is what
+puts `/etc/profile` in the processes-limit evidence above.
+
+`RLIMIT_CPU` is applied in a `pre_exec` hook on that immediate child
+(`runner/resource_limits.rs:13-28`, and `:36-37` for the CPU resource
+specifically), so the limit is set on `sandbox-exec`, survives its `execv` into
+the shell, and is inherited by whatever the shell forks.
+
+That gives a concrete chain and a concrete question:
+
+```
+daemon ──waits on──> sandbox-exec ──execs──> bash -lc  ──forks──> cpu_burn_probe
+                     (RLIMIT_CPU set here)   (same PID)           (killed by SIGXCPU)
+```
+
+The daemon waits on the shell, not on the probe. A shell that reaps a
+signal-killed child normally exits `128+signal` = 152, which `wait.rs:108` would
+decompose correctly — but the observed record is `exit_code: 1` with no signal,
+so the shell is exiting 1 on its own rather than propagating. **Why it exits 1
+is the open question**, and it is the last link in the chain rather than a search
+across the codebase.
+
+Two things this does *not* establish, and both matter before repairing:
+
+- Whether the shell could be made to propagate (e.g. the command string ending in
+  an `exec`, which would collapse the fork and let the daemon's own child take
+  the SIGXCPU) — that is a change to how every sandboxed step is launched, not
+  just this one, so it needs its own justification.
+- Whether the right fix is propagation at all, versus classifying on the
+  `duration_ms` ≈ `max_cpu_seconds` coincidence, which would be a spelling.
+
+Confirming any of it still needs item 1's live reproduction — an isolated daemon
+over a temporary data directory and a real `step_finished` payload. This ticket
+therefore stays open and `test-fr001-sandbox-matrix.sh` keeps its named exemption.
+
 ## Suggested work
 
 1. Find where the signal is lost. `wait.rs` and `util.rs` are both correct as
    written, so the answer is between them and the process the daemon actually
-   spawns for a sandboxed step. Reproducer:
+   spawns for a sandboxed step — see the section above, which narrows this to the
+   login shell's own exit status. Reproducer:
    `bash /Users/chenhan/.claude/jobs/…/matrix-survey.sh` in spirit — start an
    isolated daemon over a temporary data directory, apply
    `fixtures/manifests/bundles/sandbox-execution-profiles.yaml`, run the

@@ -104,6 +104,33 @@ installed** on this host. `awk` is `/usr/bin/awk`, BSD `awk version 20200816`.
 Item 2 below reads as though it were one command away and it is not; it needs
 `brew install gawk` first.
 
+### Third pass, 2026-08-13 — triaged in a ticket-fix sweep and deliberately not repaired
+
+Re-checked the host preconditions rather than the abort, because the abort has
+been characterised three times and the blockers have not:
+
+- `gawk` is still **not installed**. Item 2 remains unrunnable without
+  `brew install gawk`.
+- `bash` is **3.2.57(1)-release** and it is the *only* bash on this machine —
+  `/opt/homebrew/bin/bash` does not exist, so `which -a bash` returns one entry.
+  The three bash-side hypotheses already bisected away were tested under 3.2 by
+  necessity, not by choice, and none of them can be re-tested under bash 5 here.
+  CI runs `ubuntu-latest` (bash 5) and has been green throughout, so the
+  bash-version axis and the awk-implementation axis are still **confounded** on
+  this host: no local run can separate them until one of the two is installed.
+
+That is the whole reason this ticket is not being closed in the same pass as its
+six siblings. Item 5's repair — collapsing the 671 per-file `awk` forks into one
+`FILENAME`/`FNR` pass — is very likely correct and is a real simplification, but
+it is a behaviour change to a `ci-required` gate whose 13 negative fixtures
+encode the current extraction, and the machine that would measure the before and
+after cannot currently run the discriminating experiment. Landing it here would
+mean changing a release gate on a hypothesis this host cannot test.
+
+**Unblocking it needs one of:** `brew install gawk` (separates BSD awk from
+everything else in one run), or `brew install bash` (separates bash 3.2 from
+everything else). Either turns item 2 from a plan into a measurement.
+
 ## Why this matters beyond the one gate
 
 `qa-gate-surface.json` classifies this as `ci-required`, and the fr-governance
