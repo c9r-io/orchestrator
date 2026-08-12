@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "test": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622",
-          "knownFailing": {
-            "reference": "docs/qa/orchestrator/218-forward-only-rollback-contract.md",
-            "reason": "Run 31565308833 (0d9d09f6) failed exclusively on the liveness gate's own staleness rule: FR-165 edited ci.yml (the governance job gained the rollback-contract and rollback-contract-fixtures steps), which invalidated every record taken at 9f94a892 — the ledger had been stale, and CI on main red for that single reason, since 2026-08-11. Every other aggregated gate in the same run was green, including both new steps (rollback-contract=success, rollback-contract-fixtures=success) and the coverage baseline this FR re-approved (boundary-coverage=success), which was the one outcome DD-181 could not verify locally. This annotation retires automatically at the first refresh after a green governance run on this ledger."
-          }
+          "conclusion": "success",
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "31565308833",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174454",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         }
       }
     },
@@ -89,13 +85,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "31565308879",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174504",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "31565308879",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31567174504",
+          "headSha": "db8953bce75cd32cdbaf9f66eae2a67cacc2ced7"
         }
       }
     },
