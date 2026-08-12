@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 471,
-    "active": 458,
+    "documents": 473,
+    "active": 460,
     "superseded": 13,
-    "withRelatedFr": 318
+    "withRelatedFr": 320
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -512,6 +512,12 @@
       "lifecycle": "active"
     },
     "docs/design_doc/orchestrator/180-forward-only-rollback-contract.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
+      ]
+    },
+    "docs/design_doc/orchestrator/181-two-sided-ratchets.md": {
       "lifecycle": "active",
       "relatedFr": [
         "FR-165"
@@ -1893,6 +1899,12 @@
         "FR-165"
       ]
     },
+    "docs/qa/orchestrator/219-two-sided-ratchets.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-165"
+      ]
+    },
     "docs/qa/orchestrator/22-performance-io-queue-optimizations.md": {
       "lifecycle": "active"
     },
@@ -3021,8 +3033,10 @@
     "FR-165": [
       "docs/design_doc/orchestrator/179-ledger-driven-manual-gate-freshness.md",
       "docs/design_doc/orchestrator/180-forward-only-rollback-contract.md",
+      "docs/design_doc/orchestrator/181-two-sided-ratchets.md",
       "docs/qa/orchestrator/217-manual-gate-freshness-enforcement.md",
-      "docs/qa/orchestrator/218-forward-only-rollback-contract.md"
+      "docs/qa/orchestrator/218-forward-only-rollback-contract.md",
+      "docs/qa/orchestrator/219-two-sided-ratchets.md"
     ]
   },
   "supersedes": {

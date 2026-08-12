@@ -9,6 +9,30 @@
 #
 # `--deny unsound --deny unmaintained` is passed on the command line, which is
 # what makes every entry below an acceptance rather than a line nobody reads.
+#
+# Every entry carries a machine-readable retirement condition on the line above
+# it, and `scripts/qa/dependency-policy.rb` enforces it against Cargo.lock:
+#
+#   # retire-when: crate=<name> absent            the acceptance dies with the crate
+#   # retire-when: crate=<name> patched>=<version> the acceptance dies with the fix
+#
+# FR-165 requirement 4 added this because the prose conditions below were written
+# for a human and read by nobody. `check_audit` asserted only that each ignore had
+# *a* comment above it, so an acceptance whose crate had left the tree stayed
+# forever: it accepted nothing, and it reserved the advisory ID against the day
+# something else brought that crate back. That is the same gap
+# `--deny unmatched-skip` covers on the deny.toml side, and cargo-audit has no
+# equivalent flag.
+#
+# The two forms are not interchangeable and the distinction is the advisory kind,
+# not a style choice. An *unmaintained* advisory has no patched release — the crate
+# is archived, that is the whole advisory — so `absent` is the only condition it can
+# ever have. An *unsound* or vulnerability advisory does have one, and checking
+# only presence would miss the half where the crate is still in the tree at a fixed
+# version: glib reaching 0.20 retires RUSTSEC-2024-0429 while glib stays in the
+# lock. Presence-only would never notice. The gate prints which form each entry
+# used, so a `patched>=` that quietly became `absent` is visible in the log rather
+# than being a weakening nobody sees.
 # FR-133 declined to deny unmaintained, reasoning that an 18-entry ignore file
 # *is* the policy; FR-153 chose exactly that, for the ratchet it buys: the
 # eighteenth unmaintained advisory now fails CI until someone books it here
@@ -45,6 +69,7 @@ ignore = [
   # Accepted 2026-07-28. Retire this entry when `cargo tree -i glib` reports
   # 0.20 or later — at which point cargo audit stops reporting it and this
   # comment is the only thing left to delete.
+  # retire-when: crate=glib patched>=0.20.0
   "RUSTSEC-2024-0429",
 
   # ── gtk-rs 0.18 generation, archived upstream. 11 entries. ─────────────────
@@ -59,27 +84,38 @@ ignore = [
   # off gtk-rs 0.18 (a future Tauri/webview upgrade) — the condition is
   # `cargo tree -i gtk` reporting nothing.
   # atk — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=atk absent
   "RUSTSEC-2024-0413",
   # atk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=atk-sys absent
   "RUSTSEC-2024-0416",
   # gdk — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gdk absent
   "RUSTSEC-2024-0412",
   # gdk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gdk-sys absent
   "RUSTSEC-2024-0418",
   # gdkwayland-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gdkwayland-sys absent
   "RUSTSEC-2024-0411",
   # gdkx11 — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gdkx11 absent
   "RUSTSEC-2024-0417",
   # gdkx11-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gdkx11-sys absent
   "RUSTSEC-2024-0414",
   # gtk — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gtk absent
   "RUSTSEC-2024-0415",
   # gtk-sys — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gtk-sys absent
   "RUSTSEC-2024-0420",
   # gtk3-macros — gtk-rs 0.18 archival; retires with the block condition above.
+  # retire-when: crate=gtk3-macros absent
   "RUSTSEC-2024-0419",
   # proc-macro-error — archived; reached via glib-macros 0.18, same generation,
   # same retirement condition as the gtk entries above.
+  # retire-when: crate=proc-macro-error absent
   "RUSTSEC-2024-0370",
 
   # ── unic UCD crates, archived upstream. 5 entries. ─────────────────────────
@@ -93,14 +129,19 @@ ignore = [
   # unic (upstream has an open issue tracking an ICU4X port) — the condition
   # is `cargo tree -i unic-common` reporting nothing.
   # unic-char-property — unic archival; retires with the block condition above.
+  # retire-when: crate=unic-char-property absent
   "RUSTSEC-2025-0081",
   # unic-char-range — unic archival; retires with the block condition above.
+  # retire-when: crate=unic-char-range absent
   "RUSTSEC-2025-0075",
   # unic-common — unic archival; retires with the block condition above.
+  # retire-when: crate=unic-common absent
   "RUSTSEC-2025-0080",
   # unic-ucd-ident — unic archival; retires with the block condition above.
+  # retire-when: crate=unic-ucd-ident absent
   "RUSTSEC-2025-0100",
   # unic-ucd-version — unic archival; retires with the block condition above.
+  # retire-when: crate=unic-ucd-version absent
   "RUSTSEC-2025-0098",
 
   # ── paste, archived by its author. 1 entry. ────────────────────────────────
@@ -114,5 +155,6 @@ ignore = [
   # Accepted 2026-08-01 (FR-153). Retire when cel-interpreter drops paste or
   # a maintained fork replaces it — the condition is `cargo tree -i paste`
   # reporting nothing.
+  # retire-when: crate=paste absent
   "RUSTSEC-2024-0436",
 ]

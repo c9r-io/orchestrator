@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "approvedAt": "2026-08-02",
+  "approvedAt": "2026-08-12",
   "platform": "macos-aarch64",
   "tooling": {
     "cargoLlvmCov": "0.8.5",
@@ -8,8 +8,11 @@
   },
   "policy": {
     "percentageTolerance": 0.05,
-    "strategy": "approved-baseline-non-regression",
-    "reapproval": "Re-approved 2026-08-02 for FR-157, which raised daemon/source_connection from 12.21% to 85.51% by driving the OAuth, dedicated-provisioning, upgrade, deletion, disconnect and transfer state machines against an in-process Gateway stub. Three entries move and only three: daemon/source_connection, daemon/action_audit (the new boundary assertions exercise it, and its denominator grew by the FR-157 audit constant), and the daemon adapter component that contains both. The module's denominator fell 2482 -> 2443 because its 75 inline test lines moved into a tests/ directory the normalizer excludes; at the old denominator the same numerator is still 84.2%, so the rise is executed production code, not a shrunken denominator. core/domain, CLI, cli/commands, Tauri Rust, daemon/attention, daemon/handoff, daemon/session and tauri/commands are deliberately left at their 2026-07-27 values: CLI has drifted upward since (35.49% -> 52.86% on a denominator that grew 6038 -> 7373) but that movement belongs to the FRs that caused it, and this run is not their evidence. The one-sided rule means those entries keep passing while under-ratcheted, which is the same gap the 2026-07-27 note records."
+    "strategy": "approved-baseline, two-sided: non-regression below, bounded improvement above",
+    "reapproval": "Re-approved 2026-08-12 for FR-165 requirement 3, which made the comparison two-sided. Three entries move: CLI (lines 35.49 -> 53.02, functions 30.82 -> 54.94), cli/commands (33.78 -> 44.78, 27.8 -> 38.68) and daemon/session (15.52 -> 20.69, 32.81 -> 37.68). Every other entry is left alone because its drift is inside the 3.0-point slack: core/domain +0.98/+0.95, daemon adapter +1.09/+1.25, and twelve pairs at exactly 0.00. Measured at 15f54289 with the revision and the tracked-Rust digest recorded before and after the run, both unchanged. \n\nThis reverses the reasoning of the 2026-08-02 note, deliberately and with the reason stated. That note saw CLI at 52.86% against an approved 35.49% and declined to move it: 'that movement belongs to the FRs that caused it, and this run is not their evidence.' The 2026-07-27 note had recorded the same gap. The principle is sound and the consequence was not: attribution is a reason to credit the movement to another FR in the record, not a reason to leave the ruler wrong, and leaving it wrong cost the ability to detect a regression. With approved at 35.49 and actual at 53.02, CLI coverage could have fallen seventeen points and the gate would have stayed green -- a one-sided ratchet does not merely fail to reward improvement, it discards the regression detection it exists for. Two notes a week apart observing the same gap and changing nothing is what made this a requirement rather than an annotation. \n\nThe 52.86% those notes recorded does not reproduce: the second derivation is 53.02% at this revision, on a denominator that grew 7373 -> 7456. Neither number was wrong -- the earlier one was measured before commits that added CLI code -- which is the argument for pinning a revision to every coverage figure, since the same entry legitimately reads differently a week apart. \n\nTauri Rust (9.42%) and tauri/commands (5.45%) are unchanged, at exactly 0.00 drift, and are deliberately not exempted: see 'tauriLift' below.",
+    "improvementSlack": 3,
+    "improvementSlackRationale": "3.0 points, and the number comes from the shape of the measured distribution rather than from what would make today green. Measured at 15f54289 (macos-aarch64, cargo-llvm-cov 0.8.5, 22 metric pairs): twelve pairs drifted exactly 0.00, four between +0.95 and +1.25, two between +4.87 and +5.17, and four between +10.88 and +24.12. The interval (1.25, 4.87) is empty, so a band inside it is stable against small perturbations in either direction — moving it a point changes which entries fail only if the distribution itself changes. 3.0 sits in that gap, nearer the incidental side so the check errs toward asking rather than tolerating: it is about 2.4x the largest drift that came from unrelated work and about 1.6x below the smallest deliberate gap. A band of 5.0 was rejected because it splits daemon/session across its own two metrics (lines +5.17 fails, functions +4.87 passes), and a rule that treats one module's two measurements differently is a rule fitted to a number rather than to a property.",
+    "tauriLift": "Tauri Rust sits at 9.42% lines / 7.73% functions and tauri/commands at 5.45% / 3.47%, the lowest measurable surfaces in the workspace, and FR-165 requirement 3 asked for either a lift plan or a named exemption. Neither is written here as a number, because both would be a guess: no work in FR-165 touched this code, and a target chosen without having tried to test it is the kind of figure the governance-expansion boundary in DD-172 exists to refuse. What is recorded instead is the measurement and the reason it is low: crates/gui is a Tauri command layer whose functions are #[tauri::command] entry points reached through the Tauri runtime, and the workspace has no in-process harness that can invoke them -- the same shape as daemon/source_connection before FR-157, which went 12.21% -> 85.51% once a fixture could reach it, and which was low for the same reason: not hard to test, never entered. The two-sided ratchet now applies to these entries like any other, so the first real lift is caught and re-approved rather than accumulating silently. Deciding the target belongs to whoever builds that harness."
   },
   "rust": {
     "components": {
@@ -51,14 +54,14 @@
       },
       "CLI": {
         "lines": {
-          "count": 6038,
-          "covered": 2143,
-          "percent": 35.49
+          "count": 7456,
+          "covered": 3953,
+          "percent": 53.02
         },
         "functions": {
-          "count": 305,
-          "covered": 94,
-          "percent": 30.82
+          "count": 415,
+          "covered": 228,
+          "percent": 54.94
         },
         "branches": {
           "status": "unsupported",
@@ -125,14 +128,14 @@
       },
       "daemon/session": {
         "lines": {
-          "count": 1031,
-          "covered": 160,
-          "percent": 15.52
+          "count": 1102,
+          "covered": 228,
+          "percent": 20.69
         },
         "functions": {
-          "count": 64,
-          "covered": 21,
-          "percent": 32.81
+          "count": 69,
+          "covered": 26,
+          "percent": 37.68
         },
         "branches": {
           "status": "unsupported",
@@ -179,14 +182,14 @@
       },
       "cli/commands": {
         "lines": {
-          "count": 5113,
-          "covered": 1727,
-          "percent": 33.78
+          "count": 5712,
+          "covered": 2558,
+          "percent": 44.78
         },
         "functions": {
-          "count": 223,
-          "covered": 62,
-          "percent": 27.8
+          "count": 243,
+          "covered": 94,
+          "percent": 38.68
         },
         "branches": {
           "status": "unsupported",

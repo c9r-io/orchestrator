@@ -448,6 +448,97 @@ if sub "21b" "$WORKFLOW" \
 fi
 echo ""
 
+# FR-165 requirement 4. cargo-audit has no `--deny unmatched-ignore`, so until
+# now an acceptance whose crate had left the tree stayed forever: it accepted
+# nothing and held the advisory ID reserved. `check_audit` asked only whether an
+# ignore had *a* comment above it, which is the §4.4 shape 1 proxy — the
+# retirement conditions were prose, for a human, and nobody read them.
+echo "-- 22. every acceptance is still accepting something --"
+reset_case
+if fixture_mutate "22" "$CASE/$AUDIT" \
+    ruby -e 'path = ARGV[0]
+             text = File.read(path)
+             File.write(path, text.sub("  # retire-when: crate=atk absent\n", ""))' \
+    "$CASE/$AUDIT"; then
+  fires "22. an acceptance with no retirement declaration is a finding" "audit-ignore-is-live"
+fi
+
+# The crate is renamed rather than deleted from the lock: an upstream rename is
+# how this actually happens, and it leaves the advisory ID pointing at nothing
+# while the file still looks complete.
+reset_case
+if sub "22b" "$AUDIT" \
+    "# retire-when: crate=paste absent" \
+    "# retire-when: crate=paste-renamed-upstream absent"; then
+  run_gate
+  if [[ "$GATE_STATUS" -ne 0 ]] && grep -q 'not in Cargo.lock at all' <<<"$GATE_OUT"; then
+    pass "22b. an acceptance whose crate left the lock is named"
+  else
+    fail "22b. expected the not-in-lock diagnostic: $(grep -oE '\[[a-z-]+\]' <<<"$GATE_OUT" | sort -u | tr '\n' ' ')"
+  fi
+fi
+
+# The reverse instance, and the reason this check is not just a port of
+# skip-is-live. deny.toml's `--deny unmatched-skip` is satisfied by a crate that
+# is merely present; the audit analogue of "present but no longer duplicated" is
+# "present but already fixed", which a presence check cannot see. FR-133 recorded
+# that gap on the deny side as case 15b and it should not repeat here.
+reset_case
+if sub "22c" "$AUDIT" \
+    "# retire-when: crate=glib patched>=0.20.0" \
+    "# retire-when: crate=glib patched>=0.18.0"; then
+  run_gate
+  if [[ "$GATE_STATUS" -ne 0 ]] && grep -q 'the advisory is fixed' <<<"$GATE_OUT"; then
+    pass "22c. a crate still in the tree at a patched version is named"
+  else
+    fail "22c. expected the advisory-is-fixed diagnostic: $(grep -oE '\[[a-z-]+\]' <<<"$GATE_OUT" | sort -u | tr '\n' ' ')"
+  fi
+fi
+
+# Version comparison is numeric, and this is the direction a string compare gets
+# wrong: paste is locked at 1.0.15, and `"1.0.15" >= "0.9.0"` is false as text
+# because "1" sorts before "9". A lexical implementation would go on accepting a
+# fixed advisory here and say nothing. The companion direction is the committed
+# state itself — glib 0.18.5 against a 0.20.0 bound, where a text compare of the
+# minor component ("18" < "20") happens to agree, which is why this case is the
+# one that has to exist.
+reset_case
+if sub "22d" "$AUDIT" \
+    "# retire-when: crate=paste absent" \
+    "# retire-when: crate=paste patched>=0.9.0"; then
+  run_gate
+  if [[ "$GATE_STATUS" -ne 0 ]] && grep -q 'the advisory is fixed' <<<"$GATE_OUT"; then
+    pass "22d. 1.0.15 counts as past 0.9.0; the comparison is numeric, not lexical"
+  else
+    fail "22d. a lexical version compare would have missed this: $(grep -oE '\[[a-z-]+\]' <<<"$GATE_OUT" | sort -u | tr '\n' ' ')"
+  fi
+fi
+
+# The mirror of 22c: a bound one patch above the locked version must stay
+# accepted. Without this the check could satisfy every case above by reporting
+# "fixed" unconditionally.
+reset_case
+if sub "22e" "$AUDIT" \
+    "# retire-when: crate=gtk absent" \
+    "# retire-when: crate=gtk patched>=0.18.3"; then
+  silent "22e. gtk 0.18.2 against a 0.18.3 bound is still accepted"
+fi
+
+# An empty lock makes every acceptance vacuously live, so it must fail closed.
+# skip-is-live emits `empty-scan` for the same lock, so the rule tag alone cannot
+# say whether *this* check observed anything — the detail is asserted instead.
+reset_case
+if fixture_mutate "22f" "$CASE/$LOCK" \
+    ruby -e 'File.write(ARGV[0], "")' "$CASE/$LOCK"; then
+  run_gate
+  if [[ "$GATE_STATUS" -ne 0 ]] && grep -q 'audit-ignore-is-live examined nothing' <<<"$GATE_OUT"; then
+    pass "22f. an empty lock fails closed for the acceptances too, not only the skips"
+  else
+    fail "22f. expected the audit-ignore-is-live empty-scan detail: $(head -2 <<<"$GATE_OUT" | tr '\n' ' ')"
+  fi
+fi
+echo ""
+
 echo "-- 13. the gate passes on this repository --"
 if ruby "$REPO_ROOT/$GATE" >/dev/null 2>&1; then
   pass "13. dependency-policy.rb passes against the working tree"

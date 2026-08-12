@@ -624,6 +624,134 @@ module DependencyPolicy
         fix: "an advisory accepted without a reason and a retirement condition is one nobody will ever remove"
       )
     end
+
+    check_audit_retirement(root, doc, lines, ignored, starts, findings)
+  end
+
+  # Every accepted advisory must still be accepting something.
+  #
+  # `check_audit` above asks only whether an ignore has *a* comment, which is a
+  # §4.4 shape 1 proxy for the thing that matters: the comments state retirement
+  # conditions in prose, for a human, and nobody read them. An acceptance whose
+  # crate left the tree therefore stayed forever — accepting nothing, and holding
+  # the advisory ID reserved against the day something else brings that crate
+  # back. cargo-audit has no `--deny unmatched-ignore`; `cargo deny --deny
+  # unmatched-skip` is the nearest thing and lives on the other file.
+  #
+  # The condition is declared per entry rather than inferred from the prose, and
+  # the difference matters. The gtk block states `cargo tree -i gtk` once above
+  # eleven entries, each of which then says "retires with the block condition
+  # above" — so walking up from an entry reaches its own one-line comment and
+  # never the group's command. Parsing that indirection would be reading a
+  # paragraph's structure as data. A `# retire-when:` line above each entry is a
+  # declaration instead, in one shape, and an entry without one fails: that is
+  # the ratchet, since a new acceptance cannot be added without saying what would
+  # end it.
+  #
+  # Two forms, and which one applies is the advisory's kind rather than a
+  # preference. `absent` is the only condition an *unmaintained* advisory can
+  # have — the crate is archived, that is the advisory. `patched>=` exists for the
+  # kinds that have a fix, and it is the direction presence-checking cannot see:
+  # glib reaching 0.20 retires RUSTSEC-2024-0429 while glib stays in the lock, so
+  # a gate that only asked "is the crate here" would go on accepting a fixed
+  # advisory indefinitely. That is the same half `--deny unmatched-skip` misses on
+  # the deny side, recorded at FR-133 as case 15b, and requirement 4 exists partly
+  # so it does not repeat here.
+  def check_audit_retirement(root, doc, lines, ignored, starts, findings)
+    lock, error = read_toml(root, LOCK)
+    if lock.nil?
+      findings << Finding.new(file: LOCK, rule: "audit-ignore-is-live", detail: error,
+                              fix: "without the lock there is nothing to check the acceptances against")
+      return
+    end
+
+    packages = lock.arrays["package"] || []
+    if packages.empty?
+      findings << Finding.new(
+        file: LOCK, rule: "empty-scan",
+        detail: "the lock yielded no packages, so audit-ignore-is-live examined nothing",
+        fix: "every acceptance is vacuously live against an empty lock"
+      )
+      return
+    end
+
+    versions = packages.group_by { |p| p["name"] }.transform_values { |ps| ps.map { |p| p["version"] } }
+
+    ignored.each_with_index do |id, index|
+      line = starts[index]
+      next if line.nil?
+
+      condition = retirement_condition(lines, line)
+      if condition.nil?
+        findings << Finding.new(
+          file: AUDIT, rule: "audit-ignore-is-live",
+          detail: "#{id} has no `# retire-when:` line above it",
+          fix: "add `# retire-when: crate=<name> absent` (unmaintained) or " \
+               "`# retire-when: crate=<name> patched>=<version>`; an acceptance whose end " \
+               "condition is only prose is one nothing can ever retire"
+        )
+        next
+      end
+
+      crate, bound = condition
+      known = versions[crate]
+
+      if known.nil?
+        findings << Finding.new(
+          file: AUDIT, rule: "audit-ignore-is-live",
+          detail: "#{id} accepts an advisory against #{crate}, which is not in #{LOCK} at all",
+          fix: "delete the entry; it accepts nothing, and it reserves the advisory against " \
+               "whatever brings #{crate} back"
+        )
+        next
+      end
+
+      next if bound.nil?
+
+      unpatched = known.reject { |version| version_at_least?(version, bound) }
+      next unless unpatched.empty?
+
+      findings << Finding.new(
+        file: AUDIT, rule: "audit-ignore-is-live",
+        detail: "#{id} is accepted until #{crate} reaches #{bound}, and the lock has " \
+                "#{known.sort.join(', ')} — the advisory is fixed",
+        fix: "delete the entry; the crate is still in the tree, which is exactly the half " \
+             "a presence check cannot see"
+      )
+    end
+  end
+
+  # `# retire-when: crate=<name> absent` or `... patched>=<version>`, taken from
+  # the comment block immediately above `line`. Returns [crate, bound_or_nil].
+  def retirement_condition(lines, line)
+    index = line - 2
+    while index >= 0
+      text = lines[index].to_s.strip
+      if (match = text.match(/\A#\s*retire-when:\s*crate=(\S+)\s+(absent|patched>=(\S+))\s*\z/))
+        return [match[1], match[3]]
+      end
+      break unless text.start_with?("#") || text.empty?
+
+      index -= 1
+    end
+    nil
+  end
+
+  # Numeric, component-wise. `"0.18.5" >= "0.20.0"` is false here and true under
+  # string comparison, which is the whole reason this is not a `>=` on strings:
+  # "18" sorts after "20" lexically, so the naive form would report every glib
+  # 0.18.x as patched and delete the acceptance that is doing its job.
+  def version_at_least?(version, bound)
+    actual = version.split(/[.+-]/).map(&:to_i)
+    target = bound.split(/[.+-]/).map(&:to_i)
+    depth = [actual.length, target.length].max
+    (0...depth).each do |i|
+      a = actual[i] || 0
+      b = target[i] || 0
+      return true if a > b
+      return false if a < b
+    end
+    true
   end
 
   # deny.toml states counts about itself — 48 crates / 71 copies from its own

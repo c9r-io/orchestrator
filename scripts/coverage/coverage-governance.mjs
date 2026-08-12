@@ -287,7 +287,25 @@ export function summarizePlaywright(raw) {
   };
 }
 
-function metricRegression(current, approved, tolerance) {
+// The comparison is two-sided, and the second side is why (FR-165 requirement 3).
+//
+// Until now this returned only on regression, so an entry could sit indefinitely
+// far *above* its approved value and keep passing. That is not a hypothetical:
+// the baseline's own 2026-08-02 reapproval note recorded CLI at 52.86% against an
+// approved 35.49% and wrote that the entries "keep passing while
+// under-ratcheted, which is the same gap the 2026-07-27 note records" — the same
+// observation, twice, a week apart, with nothing to make it stop. A one-sided
+// ratchet does not merely fail to reward improvement; it silently loses the
+// ability to detect a *later* regression, because everything down to the stale
+// approved value is permitted. CLI could have fallen 17 points and stayed green.
+//
+// Improvement is not made to fail outright, which would turn every
+// coverage-raising change red until someone edited a JSON file, and that reflex —
+// answer the gate rather than the question — is what the FR-158 freshness work
+// warns about. Instead `improvementSlack` declares how far above approved an
+// entry may drift before it must be re-approved, so ordinary movement from
+// unrelated work costs nothing and an accumulated gap has to be looked at.
+function metricDrift(current, approved, tolerance, slack) {
   if (approved?.status === "unsupported") {
     return null;
   }
@@ -300,12 +318,28 @@ function metricRegression(current, approved, tolerance) {
   if (current.percent + tolerance < approved.percent) {
     return `${current.percent}% < ${approved.percent}%`;
   }
+  // `slack === null` disables the over-ratchet side entirely, which is different
+  // from `0` (every improvement must be re-approved immediately) and different
+  // from a huge number. Distinguishing them matters because a baseline written
+  // before this rule existed has no `improvementSlack` at all, and defaulting a
+  // missing field to `0` would fail every entry in it on the first run — an
+  // upgrade that breaks on arrival gets reverted rather than adopted.
+  if (slack !== null && current.percent - approved.percent > slack) {
+    return (
+      `${current.percent}% exceeds the approved ${approved.percent}% by ` +
+      `${(current.percent - approved.percent).toFixed(2)} points, over the ${slack}-point ` +
+      `improvement slack; re-approve the baseline (see coverage/README.md "Baseline Updates")`
+    );
+  }
   return null;
 }
 
 export function compareSummary(summary, baseline) {
   const failures = [];
   const tolerance = Number(baseline?.policy?.percentageTolerance ?? 0);
+  // Absent means "not declared", not "zero". See metricDrift.
+  const declaredSlack = baseline?.policy?.improvementSlack;
+  const slack = typeof declaredSlack === "number" ? declaredSlack : null;
   for (const [name, approvedCoverage] of Object.entries(baseline?.rust?.components ?? {})) {
     const currentCoverage = summary?.rust?.components?.[name];
     if (!currentCoverage) {
@@ -313,10 +347,11 @@ export function compareSummary(summary, baseline) {
       continue;
     }
     for (const metric of METRICS) {
-      const regression = metricRegression(
+      const regression = metricDrift(
         currentCoverage[metric],
         approvedCoverage[metric],
         tolerance,
+        slack,
       );
       if (regression) {
         failures.push(`Rust ${name} ${metric}: ${regression}`);
@@ -330,10 +365,11 @@ export function compareSummary(summary, baseline) {
       continue;
     }
     for (const metric of METRICS) {
-      const regression = metricRegression(
+      const regression = metricDrift(
         currentCoverage[metric],
         approvedCoverage[metric],
         tolerance,
+        slack,
       );
       if (regression) {
         failures.push(`Rust ${name} ${metric}: ${regression}`);
@@ -341,10 +377,11 @@ export function compareSummary(summary, baseline) {
     }
   }
   for (const metric of METRICS) {
-    const regression = metricRegression(
+    const regression = metricDrift(
       summary?.frontend?.[metric],
       baseline?.frontend?.[metric],
       tolerance,
+      slack,
     );
     if (regression) {
       failures.push(`React ${metric}: ${regression}`);

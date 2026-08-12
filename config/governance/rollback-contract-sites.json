@@ -44,12 +44,6 @@
       "reason": "The frozen previous-release schema. Its header explains which clause it serves and how to refresh it, and it is the artifact the clause-2 guard reads."
     },
     {
-      "path": "docs/feature_request/FR-165-ledger-driven-contracts.md",
-      "class": "meta",
-      "reason": "The feature request that produced this ledger. Its whole requirement 2 is about the classification, so it names the word many times.",
-      "ephemeral": true
-    },
-    {
       "path": "docs/ticket/20260812-wait-ready-breaks-previous-release-gates.md",
       "class": "meta",
       "reason": "The ticket for the --wait-ready defect that killed clause 2's behavioural half. Describes the contract's failure, does not state the contract.",
@@ -297,9 +291,9 @@
     },
     {
       "path": "docs/feature_request/README.md",
-      "digest": "f3728586237c",
+      "digest": "36729a3a5b3f",
       "class": "meta",
-      "note": "FR-165's progress note in the prose section below the generated registry block. Second site in this file and a different class from the first (FR-106's closure note, class index) — another instance of why this ledger is keyed per statement."
+      "note": "FR-165's closure note in the prose section below the generated registry block. Second site in this file and a different class from the first (FR-106's closure note, class index) — another instance of why this ledger is keyed per statement. Its digest moved once already, when the note went from in-progress to closure, and the mirror condition is what reported it."
     }
   ]
 }
