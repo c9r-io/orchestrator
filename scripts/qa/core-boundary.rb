@@ -31,8 +31,11 @@ CORE_ROOT = "core/src/".freeze
 # is deliberately not matched: it is not crate-external surface.
 PUBLIC_ITEM = /^\s*pub (?:async )?(?:fn|struct|enum|trait|type|const) /
 SCOPE = "non-test Rust source under core/src, excluding inline cfg(test) modules, " \
-  "files under a tests directory, and files named test*.rs, counted on the " \
-  "lexically masked source so that comments and string literals are not code".freeze
+  "files under a tests directory, and files whose basename contains test that " \
+  "are also confirmed test-only — their mod declaration is gated on cfg(test) " \
+  "or a test-only feature, or nothing but comments survives stripping their " \
+  "cfg(test) modules — counted on the lexically masked source so that comments " \
+  "and string literals are not code".freeze
 
 options = {
   ledger: "config/governance/core-boundary-ledger.json",

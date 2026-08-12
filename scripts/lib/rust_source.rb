@@ -25,9 +25,10 @@ module RustSource
   end
 
   # Non-test Rust source under core/src and crates/*/src, plus the member
-  # Cargo.toml manifests. Files under a `tests` directory and files whose
-  # basename matches `test*.rs` are excluded wholesale; inline test modules are
-  # handled by strip_test_modules, which callers apply per file.
+  # Cargo.toml manifests. Files under a `tests` directory are excluded
+  # wholesale; a file whose basename contains `test` is excluded only when
+  # test_only_file? can confirm it — see there. Inline test modules are handled
+  # by strip_test_modules, which callers apply per file.
   def rust_source_files(repo_root)
     roots = [repo_root.join("core/src")]
     roots.concat(Dir[repo_root.join("crates/*/src").to_s].map { |path| Pathname.new(path) })
@@ -61,10 +62,115 @@ module RustSource
         next unless candidate.extname == ".rs"
         relative = candidate.relative_path_from(repo_root).to_s
         next if relative.split("/").include?("tests")
-        next if candidate.basename.to_s.match?(/test.*\.rs\z/)
+        next if test_only_file?(candidate)
         collected << candidate
       end
     end
+  end
+
+  # Features whose code never reaches a production build, so a `mod`
+  # declaration gated on one is as test-only as `cfg(test)`. `test-support` is
+  # already declared this way in
+  # config/governance/persistence-api-boundary-ledger.json; `test-harness` gates
+  # core/src/test_utils.rs identically and had never been written down.
+  TEST_ONLY_FEATURES = %w[test-support test-harness].freeze
+
+  # Whether a file contributes nothing to a production build.
+  #
+  # The basename match is a prefilter, not the answer. It used to be the whole
+  # rule, and it was a spelling rather than a property: `self_test.rs` in the
+  # scheduler's safety module is declared `mod self_test;` with no cfg and
+  # exports execute_self_test_step into production, yet every ledger built on
+  # this function skipped it because of how it is named. DD-147 and DD-163 both
+  # recorded the defect and both deferred it.
+  #
+  # The spelling is also wider than the prose it implements: three ledgers
+  # describe the rule as "files named test*.rs", but /test.*\.rs\z/ is
+  # unanchored, so it has always matched *test*.rs — migration_chain_tests.rs,
+  # resource_audit_tests.rs and the rest. The prose has been corrected to match
+  # rather than the regex narrowed, because the wider set is the one wanted.
+  #
+  # A basename match now has to be confirmed, and the confirmation is a closure
+  # property rather than a second spelling: the file is test-only if the `mod`
+  # declaration that pulls it in is gated on cfg(test) or a test-only feature,
+  # or if nothing survives stripping its inline cfg(test) modules. The second
+  # clause is what keeps files like phase_runner/tests.rs and resource/tests.rs
+  # out — both are declared `mod tests;` with no cfg, but their whole body sits
+  # inside an inner `#[cfg(test)] mod cases`, so they compile to nothing. A
+  # basename-matching file that is unconditionally declared *and* has
+  # production content is scanned.
+  #
+  # Cost: the strip runs only for basename-matching files whose declaration is
+  # ungated, which is three files in this tree, so masking is not paid at scale.
+  def test_only_file?(candidate)
+    return false unless candidate.basename.to_s.match?(/test.*\.rs\z/)
+    return true if test_gated_declaration?(candidate)
+
+    # Blank lines and comments left between two stripped cfg(test) modules are
+    # not production code — the ledgers already count on lexically masked
+    # source for exactly that reason — so they do not make a file production.
+    strip_test_modules(candidate.read).lines.none? do |line|
+      stripped = line.strip
+      !stripped.empty? && !stripped.start_with?("//")
+    end
+  end
+
+  # Whether the `mod` declaration that pulls `candidate` into the tree carries a
+  # test-only gate.
+  #
+  # For `dir/name.rs` the declaration lives in whichever file owns the module
+  # above it: `dir/mod.rs`, the crate root sitting beside it, or the
+  # 2018-edition sibling `dir.rs` (which is how core/src/config_load/validate.rs
+  # declares core/src/config_load/validate/tests.rs). A declaration this cannot
+  # find is reported as ungated, so the unknown case is scanned rather than
+  # silently dropped — the direction the old rule got wrong.
+  def test_gated_declaration?(candidate)
+    name = candidate.basename(".rs").to_s
+    dir = candidate.dirname
+    owners = [
+      dir.join("mod.rs"),
+      dir.join("lib.rs"),
+      dir.join("main.rs"),
+      Pathname.new("#{dir}.rs")
+    ]
+    owners.each do |owner|
+      next unless owner.file?
+      next if owner.cleanpath == candidate.cleanpath
+
+      lines = owner.read.lines
+      index = lines.index do |line|
+        line.match?(/^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+#{Regexp.escape(name)}\s*;/)
+      end
+      next if index.nil?
+
+      # Walk back over the contiguous attribute and comment lines above the
+      # declaration; anything else ends the attribute block.
+      cursor = index - 1
+      while cursor >= 0 && lines[cursor].match?(%r{^\s*(?:\#\[|//)})
+        return true if test_gate?(lines[cursor])
+
+        cursor -= 1
+      end
+      return false
+    end
+    false
+  end
+
+  # Whether one attribute line is a test-only cfg.
+  #
+  # String literals are blanked before looking for a bare `test` token so that
+  # `cfg(feature = "test-support")` is not read as `cfg(test)` — the feature
+  # names are matched explicitly instead, against TEST_ONLY_FEATURES. A feature
+  # merely having "test" in its name proves nothing about when it is enabled.
+  def test_gate?(line)
+    return false unless line.match?(/^\s*\#\[\s*cfg\b/)
+    return true if TEST_ONLY_FEATURES.any? { |feature| line.include?(%(feature = "#{feature}")) }
+
+    without_strings = line.gsub(/"[^"]*"/, '""')
+    # cfg(not(test)) gates code *into* production builds only.
+    return false if without_strings.match?(/\bnot\s*\(\s*test\s*\)/)
+
+    without_strings.match?(/\btest\s*[,)]/)
   end
 
   # Both ledgers' scope prose excludes inline cfg(test) modules. Matching a

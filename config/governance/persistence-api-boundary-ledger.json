@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "scope": "every workspace member listed in the root Cargo.toml and its non-test Rust source — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs; public API is resolved through the module tree and its re-exports, and driver types through each file's own use statements",
+  "scope": "every workspace member listed in the root Cargo.toml and its non-test Rust source — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files whose basename contains test that are also confirmed test-only — their mod declaration is gated on cfg(test) or a test-only feature, or nothing but comments survives stripping their cfg(test) modules; public API is resolved through the module tree and its re-exports, and driver types through each file's own use statements",
   "decision": {
     "form": "capability-boundary",
     "summary": "DD-147 froze who may declare the driver and who may write SQL. Neither observes the capability underneath both: a crate that is handed a connection runs arbitrary SQL with no rusqlite token in its source, so condition 1 reports it clean and condition 2 counts only what it did once it had one. This ledger freezes the capability itself — who can obtain a connection, and which public API hands one out or requires the caller to already hold one.",
