@@ -78,10 +78,16 @@ bash scripts/coverage-governance.sh --fixture-test
 | 0.01 above, `slack: 0` | fail — zero is not absent |
 | 20 **below** approved, slack 3 | fail with `40% < 60%` — declaring a band must not switch off regression detection |
 | unsupported branches on both sides, slack 3 | pass — a `null` percent is not an infinite improvement |
-| the committed baseline | must declare `policy.improvementSlack` as a number and carry a rationale over 200 characters |
+| the committed baseline | must declare `policy.improvementSlack` as a number, carry a rationale over 200 characters, and be **≤ 5.0** |
 
-The last case is the one that keeps the rest honest: every assertion above is about
-a rule the repository does not apply unless the committed baseline declares it.
+The last case is the one that keeps the rest honest, and its third clause was added
+by the closure self-check. Every case above declares its own slack, so they prove
+the mechanism and say nothing about the committed number — a baseline shipping
+`improvementSlack: 100` satisfied every other assertion here while restoring the
+unbounded interval the requirement exists to close. 5.0 is the ceiling because the
+drifts being caught began at +4.87. Verified by mutation: setting the committed
+value to 100 fails with `improvementSlack is 100; at 5 or above the band admits the
+gaps it was introduced to catch`.
 
 The `branches` key must be present and explicitly unsupported in each fixture.
 Omitting it makes every case report an extra "missing percentage", which is how the
@@ -128,8 +134,22 @@ grep -c '^\s*"RUSTSEC' .cargo/audit.toml
 
 ### Expected
 
-Exit 0 with `Dependency policy: PASS`, and both counts **18** — one declaration per
-acceptance, checked rather than assumed to correspond.
+Exit 0, and both counts **18** — one declaration per acceptance, checked rather
+than assumed to correspond. The gate reports the split before its verdict:
+
+```
+Advisory acceptances: 18 total — 17 absent, 1 patched>=
+Dependency policy: PASS (71 accepted duplicate(s), 0 finding(s))
+```
+
+That line exists because the closure self-check found `.cargo/audit.toml`'s header
+claiming it. `absent` is strictly weaker than `patched>=` — it retires only when the
+crate leaves the tree, so an advisory that does have a fixed release and is booked
+`absent` goes on being accepted after the fix lands, and the check cannot tell
+because it does not read the advisory database. A falling `patched>=` count is the
+signal, and it has to be printed or the weakening produces no line anywhere. The
+count also makes the header's own "17 unmaintained acceptances" checkable against
+one line of output instead of by hand.
 
 Re-derive the subjects independently against the lock; all 18 crates must be
 present, and glib must be below 0.20.0 or RUSTSEC-2024-0429 is stale:

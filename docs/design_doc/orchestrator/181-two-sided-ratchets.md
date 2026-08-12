@@ -164,6 +164,39 @@ are asserted, along with a mirror case (`gtk` 0.18.2 against a 0.18.3 bound stay
 accepted) so the check cannot satisfy every case by reporting "fixed"
 unconditionally.
 
+## What the closure self-check found
+
+Two defects in this FR's own work, both from asking §5's question — what state
+satisfies every acceptance criterion while the goal is unmet.
+
+**The fixtures proved the mechanism and said nothing about the committed band.**
+Every band case declares its own `slack`, so a baseline shipping
+`improvementSlack: 100` passed all of them while restoring exactly the unbounded
+interval requirement 3 exists to close. The criterion ("the baseline is updated and
+the two-sided rule is written down, with a behavioural assertion that the next
+improvement is capped") was fully satisfied by that state. The repair asserts the
+committed value is ≤ 5.0, because the drifts this requirement was filed to catch
+began at +4.87: a band at or above 5 admits them, which is the same as not having
+one. Raising the ceiling now has to happen in a diff rather than by editing a data
+file, which is the reviewable act the rule wants. Verified by setting the committed
+slack to 100 and watching the assertion name it.
+
+**`.cargo/audit.toml`'s header described behaviour that did not exist.** It said
+"the gate prints which form each entry used, so a `patched>=` that quietly became
+`absent` is visible in the log" — and the gate printed no such thing. The claim was
+written while designing the check and never implemented, so the file documented a
+safeguard the repository did not have, which is worse than documenting no
+safeguard. `dependency-policy.rb` now prints `Advisory acceptances: 18 total — 17
+absent, 1 patched>=` on every run, derived from the markers rather than restated,
+which also makes the header's "17 unmaintained acceptances" checkable by reading
+one line of output.
+
+The second is the one worth generalising: this FR spent its whole length on gates
+that certify claims, and it still shipped a prose claim about its own gate's
+behaviour that nothing checked. The header text and the implementation were written
+in the same sitting, in different files, and only re-reading the file as a reader
+rather than as its author caught it.
+
 ## Known limits
 
 - **The first CI run is the verification of the re-approved baseline.** The

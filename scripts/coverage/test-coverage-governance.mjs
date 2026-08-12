@@ -206,6 +206,23 @@ assert.ok(
   String(committed.policy.improvementSlackRationale ?? "").length > 200,
   "the band needs its derivation written down; a bare number is the thing DD-172 refuses",
 );
+// The hole every case above leaves open, found by asking what state satisfies all
+// of them while the requirement's goal is unmet. Each case declares its own slack,
+// so they prove the mechanism and say nothing about the committed number — a
+// baseline shipping `improvementSlack: 100` passes all of them while restoring
+// exactly the unbounded interval FR-165 requirement 3 was filed to close.
+//
+// 5.0 is the ceiling because the drifts this requirement exists to catch began at
+// +4.87 in the measurement that set the band (see improvementSlackRationale). A
+// band at or above 5 admits them, which is the same as not having one. Raising
+// this ceiling is a deliberate act that has to happen here, in a diff, rather than
+// by editing a number in a data file.
+assert.ok(
+  committed.policy.improvementSlack <= 5,
+  `improvementSlack is ${committed.policy.improvementSlack}; at 5 or above the band admits ` +
+    "the gaps it was introduced to catch (the smallest was +4.87), so the ratchet is " +
+    "one-sided again in everything but name",
+);
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "fr122-coverage-"));
 fs.writeFileSync(path.join(temporary, "pass"), "fixture tests reached filesystem cleanup\n");

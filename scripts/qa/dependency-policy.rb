@@ -900,6 +900,26 @@ module DependencyPolicy
     trees.sort
   end
 
+  # Which retirement form each acceptance declared, counted. Read straight from
+  # the file rather than threaded out of the check, so the reporting cannot drift
+  # from what was enforced by someone editing one and not the other.
+  def acceptance_forms(root)
+    doc, = read_toml(root, AUDIT)
+    return {} if doc.nil?
+
+    lines = root.join(AUDIT).readlines
+    starts = doc.element_lines["advisories.ignore"] || []
+    counts = Hash.new(0)
+    (doc.tables.dig("advisories", "ignore") || []).each_with_index do |_, index|
+      line = starts[index]
+      next if line.nil?
+
+      condition = retirement_condition(lines, line)
+      counts[condition.nil? ? "undeclared" : (condition[1] ? "patched>=" : "absent")] += 1
+    end
+    counts
+  end
+
   def run(root)
     findings = []
     check_workflow(root, findings)
@@ -928,6 +948,19 @@ if $PROGRAM_NAME == __FILE__
   end
 
   accepted = (doc&.tables&.dig("bans", "skip") || []).length
+
+  # The acceptance forms, printed on every run. `absent` is strictly weaker than
+  # `patched>=`: it retires only when the crate leaves the tree, so an advisory
+  # that does have a fixed release and is booked `absent` goes on being accepted
+  # after the fix lands, and nothing in the check can tell — the advisory database
+  # is not read here. Printing the split is what makes that visible, since the
+  # alternative is a weakening that produces no line anywhere. A drop in the
+  # `patched>=` count is the thing to look at.
+  forms = DependencyPolicy.acceptance_forms(repo_root)
+  unless forms.empty?
+    puts "Advisory acceptances: #{forms.values.sum} total — " +
+         forms.sort.map { |form, count| "#{count} #{form}" }.join(", ")
+  end
 
   if findings.empty?
     puts "Dependency policy: PASS (#{accepted} accepted duplicate(s), 0 finding(s))"
