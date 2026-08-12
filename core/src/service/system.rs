@@ -162,10 +162,13 @@ pub fn db_status(state: &InnerState) -> Result<orchestrator_proto::DbStatusRespo
     let status = crate::persistence::schema::PersistenceBootstrap::status(&state.db_path)
         .map_err(|err| classify_system_error("system.db_status", err))?;
     let is_current = status.is_current();
+    let archive_dir = state
+        .daemon_runtime
+        .resolved_event_archive_dir(&state.data_dir);
     let size_info = crate::db_maintenance::database_size_info(
         &state.db_path,
         &state.logs_dir,
-        None, // TODO: archive dir from config
+        Some(&archive_dir),
     )
     .unwrap_or(crate::db_maintenance::SizeInfo {
         db_size: 0,

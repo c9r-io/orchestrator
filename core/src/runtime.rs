@@ -86,6 +86,14 @@ pub struct DaemonRuntimeState {
     maintenance_mode: AtomicBool,
     /// Binary path for a deferred restart (when other tasks are still running).
     deferred_restart_binary: std::sync::Mutex<Option<PathBuf>>,
+    /// `--event-archive-dir` as given on the daemon command line, if it was.
+    ///
+    /// The flag is parsed after `InnerState` has been built, which is why this
+    /// lives behind a lock here rather than as a plain field on the state: the
+    /// same reason `configured_workers` is set post-construction. Read it
+    /// through [`Self::resolved_event_archive_dir`] rather than directly, so
+    /// every caller applies the same default.
+    event_archive_dir: std::sync::Mutex<Option<PathBuf>>,
 }
 
 impl Default for DaemonRuntimeState {
@@ -110,7 +118,31 @@ impl DaemonRuntimeState {
             incarnation: AtomicU64::new(0),
             maintenance_mode: AtomicBool::new(false),
             deferred_restart_binary: std::sync::Mutex::new(None),
+            event_archive_dir: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Records the daemon's `--event-archive-dir` override.
+    pub fn set_event_archive_dir(&self, dir: Option<PathBuf>) {
+        if let Ok(mut slot) = self.event_archive_dir.lock() {
+            *slot = dir;
+        }
+    }
+
+    /// The directory event archival writes to: the `--event-archive-dir`
+    /// override if one was given, otherwise `{data_dir}/archive/events`.
+    ///
+    /// This is the single resolution point for that question. It exists because
+    /// three call sites used to answer it separately — the background cleanup
+    /// sweep honoured the flag while the EventCleanup RPC and `db status` both
+    /// hardcoded the default, so a daemon started with an override archived to
+    /// one directory and reported on another.
+    pub fn resolved_event_archive_dir(&self, data_dir: &std::path::Path) -> PathBuf {
+        self.event_archive_dir
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone())
+            .unwrap_or_else(|| data_dir.join("archive/events"))
     }
 
     /// Produces a point-in-time snapshot of daemon counters.

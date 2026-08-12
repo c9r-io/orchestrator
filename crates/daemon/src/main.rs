@@ -277,6 +277,12 @@ fn main() -> Result<()> {
         .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
         inner.daemon_runtime.set_configured_workers(args.workers);
+        // Both the cleanup sweep below and the EventCleanup RPC and `db status`
+        // read this back through resolved_event_archive_dir, so the flag is
+        // honoured everywhere the archive directory is named.
+        inner
+            .daemon_runtime
+            .set_event_archive_dir(args.event_archive_dir.clone());
         let slack_gateway = match (
             args.slack_gateway_url.as_deref(),
             args.slack_gateway_enrollment_key.clone(),
@@ -637,10 +643,9 @@ fn main() -> Result<()> {
             let mut cleanup_shutdown = shutdown_rx.clone();
             let retention_days = args.event_retention_days;
             let archive_enabled = args.event_archive_enabled;
-            let archive_dir = args
-                .event_archive_dir
-                .clone()
-                .unwrap_or_else(|| inner.data_dir.join("archive/events"));
+            let archive_dir = inner
+                .daemon_runtime
+                .resolved_event_archive_dir(&inner.data_dir);
             let interval_secs = args.event_cleanup_interval_secs;
             info!(
                 retention_days,
