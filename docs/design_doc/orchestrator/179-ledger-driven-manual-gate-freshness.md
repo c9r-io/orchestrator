@@ -150,8 +150,15 @@ The six failures have **two** root causes:
   precisely so it can test backward compatibility. Three parent gates wrap it;
   every other sub-gate in all three passes. This is the behavioural half of the
   forward-only rollback contract — the same contract FR-165's requirement 2
-  found stated in 14 documents and no code — and it had been dead since
-  2026-08-11. `docs/ticket/20260812-wait-ready-breaks-previous-release-gates.md`
+  found stated in 15 documents and no code — and it had been dead since
+  2026-08-11.
+
+  **Fixed at `77cc351a`**, which makes readiness degrade for binaries that predate
+  the `Health` RPC. All four gates then passed on a clean tree at `e131c069` (exit
+  0, `worktreeDirty: false`, recorded in the ledger), so the prediction that they
+  were one defect rather than four held exactly. The ticket that carried this is
+  deleted, its evidence having moved here — which is where a closed ticket's
+  findings are supposed to end up.
 - **`npm audit`, two gates.** Dev-only advisories (jsdom → undici);
   `--omit=dev` reports zero, so nothing vulnerable ships.
 

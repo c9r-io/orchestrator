@@ -224,10 +224,12 @@ armed.
 
 `ruby scripts/qa/ci-liveness.rb` was red for a reason predating this FR and is now
 resolved: see QA 218's regression checklist for the convergence rounds.
-`bash scripts/qa/test-markdown-link-integrity.sh` still aborts under bash 3.2 in the
-primary working directory and passes at the same commit in a clean worktree
-(`docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md`). The abort is
-open; what was fixed is that its log can no longer be mistaken for a pass — the
+`bash scripts/qa/test-markdown-link-integrity.sh` still exits 134 in the primary
+working directory and passed at the same commit in a clean worktree
+(`docs/ticket/20260811-markdown-link-gate-aborts-on-macos.md` — a pre-existing
+ticket; this session filed a duplicate for it, now deleted and folded in). The abort
+is open; what was fixed is that its log can no longer be mistaken for a pass — the
 statistics used to print before either check ran, so a truncated run's tail was
-indistinguishable from a healthy one. Neither the abort nor the banner is affected by
-requirements 3 or 4, which touched no workflow and no markdown link.
+indistinguishable from a healthy one, which is item 4 of that ticket's own repair
+list. Neither the abort nor the banner is affected by requirements 3 or 4, which
+touched no workflow and no markdown link.

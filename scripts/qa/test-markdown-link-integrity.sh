@@ -372,9 +372,9 @@ echo ""
 #
 # This is §4.4 shape 5 arriving from the other direction: not a check that passes
 # having read nothing, but a check whose *output* reads as complete when the run was
-# truncated. Found while investigating a bash 3.2 abort in this gate
-# (docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md); the abort is
-# still open, and this makes it impossible to mistake for a pass.
+# truncated. Found while investigating the SIGABRT this gate hits on macOS
+# (docs/ticket/20260811-markdown-link-gate-aborts-on-macos.md, item 4); the abort
+# is still open, and this makes it impossible to mistake for a pass.
 run_all_checks "$REPO_ROOT" || true
 
 echo ""

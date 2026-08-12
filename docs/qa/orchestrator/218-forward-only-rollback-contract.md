@@ -213,11 +213,21 @@ log was all green while saying nothing about what it did not run.
 
 ### One local-only failure, ticketed
 
-`bash scripts/qa/test-markdown-link-integrity.sh` exits 134 (`Abort trap: 6`, a
-bash 3.2 malloc abort) in the primary working directory, and passes at the same
-commit in a fresh `git worktree` and in a tracked-files-only copy. The trigger is
-ignored build output in that directory rather than anything in the tree; macOS
-bash 3.2 only, and CI runs ubuntu bash 5. Recorded in
-`docs/ticket/20260812-markdown-link-gate-aborts-under-bash32.md` rather than left
-as a green claim, because the gate never printed a verdict and a run that aborted
-before its summary is not evidence either way.
+`bash scripts/qa/test-markdown-link-integrity.sh` exits 134 (`Abort trap: 6`) in
+the primary working directory, and passed at the same commit in a fresh
+`git worktree` and in a tracked-files-only copy. Recorded in
+`docs/ticket/20260811-markdown-link-gate-aborts-on-macos.md` rather than left as a
+green claim, because the gate printed no verdict and a run that aborted before its
+summary is not evidence either way. CI on `ubuntu-latest` is green.
+
+Two corrections were made to this paragraph afterwards, and both are the kind a
+certification should carry rather than quietly drop. It originally attributed the
+abort to a bash 3.2 malloc failure and concluded "the trigger is ignored build
+output in that directory rather than anything in the tree" — **that conclusion is
+withdrawn**: no mechanism connecting the directory's 100 GB `target/` to the abort
+was demonstrated, and a pre-existing ticket from 2026-08-11 reports the same abort
+reproducing *in* a clean detached worktree at an earlier revision, which the clean
+runs here cannot be squared with by assertion. And this was filed as a new ticket
+when one already existed for it; the duplicate is deleted and its evidence folded
+into the older one, whose leading hypothesis — BSD awk invoked once per file — the
+bash-side bisection here never tested.
