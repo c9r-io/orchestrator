@@ -221,9 +221,41 @@ repository, inside one of the never-run gates. Both are in
   release**: `test-fr001-sandbox-matrix.sh`, `test-health-policy-check.sh`,
   `test-self-bootstrap-cycle2-regression.sh`.
 
-  Those three still need a decision that is not FR-165's to make: either they
-  learn to start their own daemon like the other 33, or they are the wrong shape
-  for a release precondition and should say so in a `releaseBlockingReason`.
+  **Resolved for the second row, 2026-08-12 at `87da8c1a`.** The decision came out
+  two of each kind rather than uniform:
+
+  - `test-health-policy-check.sh` and `test-fr001-sandbox-matrix.sh` now start
+    their own daemon over a temporary data directory, like the other 33. For the
+    sandbox matrix that mattered beyond the freshness — it ran `orchestrator
+    delete project/qa-fr001-sandbox --force` against whichever daemon answered,
+    read `data/agent_orchestrator.db` relative to the repository, and let
+    sandboxed tasks write into the working tree's own `docs/`.
+  - `test-self-bootstrap-cycle2-regression.sh` is exempt, on the strength of its
+    own owner document declaring `self_referential_safe: false`. Converting it was
+    considered and declined: the self-bootstrap suite's subject is the survival of
+    the deployed binary across cycles, which a fresh directory cannot rehearse.
+
+  So **every release-blocking manual gate is now fresh**, and
+  `manual-gate-freshness.rb --strict` — the check `release.yml` runs — exits 0 for
+  the first time since this document shipped. Four gates remain not fresh and all
+  four carry a written exemption. The green was checked against a mutation rather
+  than trusted: voiding one record's `exitStatus` makes `--strict` exit 1 naming
+  that gate.
+
+  Two findings came out of making the sandbox matrix runnable, and both argue for
+  the conversion over the exemption. Its first real execution found that a sandbox
+  **CPU** limit is enforced and unobservable — the process dies at ~1s under
+  `max_cpu_seconds: 1` while the daemon records `exit_code: 1`,
+  `sandbox_denied: false` and no event, because CPU exhaustion is the one limit
+  that kills the process instead of making a call fail, so the probe cannot
+  self-report it the way `open_files`, `memory` and `processes` do. The `SIGXCPU`
+  fallback written for exactly that case had never once executed
+  (`docs/ticket/20260812-cpu-limit-exhaustion-is-enforced-but-unobservable.md`).
+  And the first conversion armed `gate_runlog` *before* installing the gate's own
+  `trap cleanup EXIT`, which silently discarded the recorder: the gate ran green
+  and the ledger still read `never recorded`. The header comment above every
+  `gate_runlog_arm` says the *sourcing* must come first and says nothing about the
+  arming, which is how that was easy to get wrong.
 
   Worth recording about the row above rather than only correcting it: this
   document asserted a number that was *designed* to move, and the sentence went
