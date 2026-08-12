@@ -248,5 +248,16 @@ if strict && !blocking_stale.empty?
   exit 1
 end
 
-puts "freshness report only; staleness does not fail this check"
+if strict
+  # Reaching here under --strict means blocking_stale was empty, which is the
+  # thing worth saying. The old line said "staleness does not fail this check"
+  # unconditionally, which is exactly false when --strict is what release.yml
+  # passes: a reader checking whether the release gate is armed would have been
+  # told it is not.
+  puts "--strict: every release-blocking gate is fresh " \
+       "(#{release_exempt.length} exempt, each with a reason above)"
+else
+  puts "freshness report only; staleness does not fail this check " \
+       "(release.yml runs this with --strict, which does)"
+end
 exit 0

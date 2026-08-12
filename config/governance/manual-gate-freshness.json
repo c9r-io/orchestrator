@@ -83,7 +83,12 @@
     },
     "scripts/qa/test-fr001-sandbox-matrix.sh": {
       "owner": "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-12",
+        "revision": "0d1807d428e36a23181369f34b3b8faaff567487",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-fr013-control-plane-protection.sh": {
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md",
@@ -107,9 +112,9 @@
       "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md",
       "lastRun": {
         "date": "2026-08-12",
-        "revision": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622",
+        "revision": "0d1807d428e36a23181369f34b3b8faaff567487",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-non-code-workspace.sh": {
