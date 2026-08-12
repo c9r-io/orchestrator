@@ -64,6 +64,11 @@ If you don't specify `builtin` or `required_capability`, the engine infers from 
 
 - Known builtin IDs (`init_once`, `loop_guard`, `ticket_scan`, `self_test`, `self_restart`, `item_select`) → auto-builtin
 - Known agent IDs (`plan`, `implement`, `qa`, `fix`, etc.) → auto-capability
+- **Anything else → `required_capability = <the step id verbatim>`**
+
+That third rule is the one to know about. The convention registry (`crates/orchestrator-config/src/config/step_conventions.rs`) accepts *any* step ID; an ID it does not recognize is not an error, it becomes a capability requirement named after itself. So a typo in `id:` does not fail validation — `loop_gaurd` silently stops being the loop guard builtin and starts demanding an agent with a `loop_gaurd` capability, which is a different failure, later, in a different place.
+
+FR-166 evaluated making `type:` mandatory and decided against it: every existing workflow relies on inference, and the flag day would be larger than the defect. The mitigation is to write the rule down where authors read it, and to say plainly what it costs. **If a step's behaviour matters, state `builtin` or `required_capability` explicitly rather than relying on its ID** — inference is a convenience for the well-known IDs above, not a contract for the rest.
 
 Chain runtime contract:
 

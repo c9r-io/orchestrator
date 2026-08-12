@@ -173,6 +173,41 @@ maturity, and a `Released` document can be superseded.
 **Commit the regenerated index in the same commit as the document change.** `--write` refuses to
 run under `CI`. See [DD-144](docs/design_doc/orchestrator/144-doc-lifecycle-governance.md).
 
+## Adding A Resource Kind Or A Top-Level Command
+
+A new `ResourceKind` or a new top-level command group has to justify itself against the concepts
+that already exist. State in the PR description **why this is not a field, a parameter, or a
+subcommand of something we already have.**
+
+The cost is not the code. There are twelve built-in kinds, 127 leaf commands, roughly nineteen
+pipeline variables and a runtime vocabulary on top of that, and every addition is paid by every
+person who later has to hold the whole surface in their head. Two costs in particular do not show
+up in a diff:
+
+- **An audit action name is permanent.** A new kind mints `resource.<snake_kind>.apply` and
+  `.delete` into `control_action_audit`, and recorded action names are never renamed — FR-164 kept
+  `source.template.apply` for exactly this reason. Merging or renaming the concept later does not
+  merge or rename its history.
+- **A concept that overlaps an existing one is worse than a parameter.** EnvStore and SecretStore
+  have identical specs and differ in three behaviours; a reader cannot tell which to use from the
+  manifest, and the guide had to grow a comparison table to say so.
+
+Reviewer checklist for such a PR:
+
+- [ ] The PR says why this is not a field, parameter or subcommand of an existing concept.
+- [ ] If it overlaps an existing kind or command, the difference is stated **behaviourally** — what
+      the system does differently — not as intent ("this one is for sensitive values").
+- [ ] The user-facing name matches what the CLI, the API, the audit trail and the docs will call
+      it. One object, one noun.
+- [ ] The guide chapter that lists the surface is updated in the same PR.
+
+This rule is deliberately not enforced by a gate. Whether a concept is a parameter in disguise is a
+judgement, and a gate could only check that *some* justification text exists — a text-presence
+proxy certifying a review it cannot observe, which is worse than no gate. The same rule is in
+`.claude/skills/orchestrator-guide/SKILL.md`, because agents write manifests and CLI surfaces here
+too. See [DD-172](docs/design_doc/orchestrator/172-governance-expansion-boundary.md) for the
+governance-side counterpart, which *is* gated, and why that one can be.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

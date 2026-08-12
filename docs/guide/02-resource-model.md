@@ -278,6 +278,8 @@ spec:
 
 An EnvStore holds reusable environment variable sets that agents can reference via `env.fromRef`.
 
+> **Four things in this system are called a "Store", and they are unrelated.** `EnvStore` and `SecretStore` are built-in kinds holding key/value data an agent reads as environment (below). `WorkflowStore` is **not** a built-in kind — it is a CRD providing cross-task persistent memory, described in [05 - Advanced Features](05-advanced-features.md#persistent-store-wp01). `StoreBackendProvider` is the pluggable backend a `WorkflowStore` names, and is not a store at all. An EnvStore is not a smaller WorkflowStore: nothing an agent writes at runtime lands in either EnvStore or SecretStore.
+
 ```yaml
 apiVersion: orchestrator.dev/v2
 kind: EnvStore
@@ -291,7 +293,15 @@ spec:
 
 ## 9. SecretStore
 
-A SecretStore has the same structure as EnvStore but is intended for sensitive values. The `kind` field distinguishes them at the resource level.
+A SecretStore has the same spec structure as EnvStore. The two are not interchangeable, and the `kind` is not a label — it is the switch three behaviours read:
+
+| | EnvStore | SecretStore |
+|---|---|---|
+| Spec at rest | Stored as plaintext JSON | AEAD-encrypted, bound to the project and resource name |
+| Export and overview | Values shown | Values replaced with a placeholder before leaving the daemon |
+| Key operations | None | `orchestrator secret key status\|list\|rotate\|revoke\|history\|bootstrap` |
+
+Choosing the wrong kind therefore has consequences you cannot see in the manifest: a secret written into an EnvStore is stored in the clear and is printed by export. Moving it later is not a rename — you must delete the EnvStore and apply a SecretStore, because the audit trail records `resource.env_store.apply` and `resource.secret_store.apply` as distinct actions and those action names are permanent.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -307,7 +317,18 @@ Agents reference stores via `env` entries (see Agent spec above).
 
 ## 10. Trigger
 
-A Trigger enables automatic task creation on a cron schedule or in response to task lifecycle events (e.g., task_completed). It follows the Kubernetes CronJob mental model.
+A Trigger enables automatic task creation. For the cron case it follows the Kubernetes CronJob mental model.
+
+**A Trigger carries four distinct jobs**, and it is worth knowing all four before you decide this kind is simple. `spec.cron` is one; the other three are all `spec.event`, distinguished by `event.source`:
+
+| Job | Declared by | What it does |
+|---|---|---|
+| Schedule | `spec.cron` | Fires on a 5-field cron schedule in a named timezone |
+| Task lifecycle | `spec.event.source: task_completed` / `task_failed` | Fires when a matching task ends |
+| Webhook endpoint and credential holder | `spec.event.source: webhook` + `spec.event.webhook` | Owns installation identity, the signing secret, the outbound provider credential and the external-actor-to-role mapping |
+| Filesystem watcher | `spec.event.source: filesystem` + `spec.event.filesystem` | Watches workspace-relative paths for create/modify/delete, with a debounce window |
+
+The webhook job is the one that surprises people: a Trigger is where Slack credentials and actor roles live, which is why a [SourceTaskBinding](#12-sourcetaskbinding) references a Trigger through `triggerRef` rather than holding credentials itself. FR-166 evaluated splitting the credential-holding job into its own kind and decided against it: the identity a binding needs and the endpoint the webhook needs are the same installation, and separating them would put a mandatory join between a delivery and its own actor roles. The decision is permanent in one respect worth stating — `resource.trigger.apply` is already written into `control_action_audit`, and recorded audit action names are never renamed.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -360,6 +381,47 @@ spec:
     workflow: deploy
     workspace: prod
 ```
+
+### Webhook Trigger
+
+`source: webhook` makes the Trigger an authenticated external endpoint. This is where installation identity, the signature secret, the outbound provider credential and the actor-to-role mapping live:
+
+```yaml
+spec:
+  event:
+    source: webhook
+    webhook:
+      provider: slack
+      installationId: T012345
+      actorRoles: {U012345: operator}    # external actor -> role; requests cannot supply their own
+      reactionRouting: bindings          # default: disabled
+      secret: {fromRef: slack-signing}   # SecretStore holding the signing secret
+      outboundCredential: {fromRef: slack-api, key: BOT_TOKEN}
+  action:
+    workflow: analyze
+    workspace: main-workspace
+```
+
+`secret` and `outboundCredential` are separate same-project SecretStore references. Use `connectionRef` instead of both when a managed SourceConnection owns the credentials. See [SourceTaskBinding](#12-sourcetaskbinding) for how a reaction is routed to a template.
+
+### Filesystem Trigger
+
+`source: filesystem` watches paths relative to the Workspace `root_path`:
+
+```yaml
+spec:
+  event:
+    source: filesystem
+    filesystem:
+      paths: [docs/ticket]
+      events: [create, modify]           # create | modify | delete; empty means all three
+      debounce_ms: 500                   # default 500; snake_case here, unlike the webhook fields
+  action:
+    workflow: ticket-fix
+    workspace: main-workspace
+```
+
+Debouncing coalesces a burst of writes into one firing. A tool that writes a file in several passes would otherwise create several tasks.
 
 ### Trigger Lifecycle
 

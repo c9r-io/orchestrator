@@ -93,14 +93,35 @@ All resources use `apiVersion: orchestrator.dev/v2` with `metadata.name` and `sp
 | ExecutionProfile | project | Sandbox/isolation policy: fs_mode, network_mode, resource limits |
 | SecretStore | project | Encrypted key-value pairs for sensitive data (API keys, tokens) |
 | EnvStore | project | Plain key-value pairs for environment variables |
-| WorkflowStore | project | Cross-task persistent key-value store (WP01) |
-| Trigger | project | Cron-scheduled or event-driven automatic task creation |
+| WorkflowStore | project | *CRD, not a built-in kind.* Cross-task persistent key-value store (WP01) |
+| Trigger | project | Automatic task creation, in four jobs: `spec.cron`; `spec.event.source: task_completed`/`task_failed`; `source: webhook` (also the holder of installation identity, signing secret, outbound credential and actor roles); `source: filesystem` (watched paths, `debounce_ms`) |
 | SourceTaskTemplate | project | Trusted Skill + task action + allowlisted source-goal renderer and preview |
 | SourceTaskBinding | project | Exact authenticated reaction/channel/role policy selecting one SourceTaskTemplate; enabled Slack routing resolves a permalink and creates one canonical task |
 | RuntimePolicy | singleton | Runner shell config, resume behavior, observability, redaction patterns |
 | Project | cluster | Namespace for organizing resources |
 | CustomResourceDefinition | cluster | Extensible resource types with JSON Schema + CEL validation |
-| StoreBackendProvider | cluster | Custom workflow store backends |
+| StoreBackendProvider | cluster | *CRD, not a built-in kind.* Custom workflow store backends |
+
+The twelve built-in kinds are the `ResourceKind` enum in
+`crates/orchestrator-config/src/cli_types.rs`; the three rows marked *CRD* above are not among
+them. `check_resource_kind_catalog` in `scripts/qa/test-docs-reality-alignment.sh` keeps the
+guide's list tied to that enum.
+
+**Four unrelated things here are called a "Store"**: `EnvStore` and `SecretStore` (built-in kinds
+holding key/value data an agent reads as environment), `WorkflowStore` (a CRD for cross-task
+memory an agent writes at runtime), and `StoreBackendProvider` (the backend a WorkflowStore names,
+which is not a store). Nothing an agent writes at runtime lands in an EnvStore or SecretStore.
+
+### Before proposing a new kind or top-level command
+
+Say why it is not a field, a parameter, or a subcommand of an existing concept. Two costs are
+invisible in the diff: a new kind mints `resource.<snake_kind>.apply`/`.delete` into
+`control_action_audit`, and **recorded audit action names are never renamed**, so a later merge or
+rename does not reach the history; and a concept that overlaps an existing one leaves readers
+unable to choose between them from the manifest alone. If it overlaps, state the difference
+behaviourally — what the system does differently — never as intent. One object gets one noun across
+the CLI, the API, the audit trail, the GUI and the docs. Full rule and reviewer checklist in
+`CONTRIBUTING.md`.
 
 ## Minimal Manifest Example
 
