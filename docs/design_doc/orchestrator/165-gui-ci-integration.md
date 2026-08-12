@@ -107,12 +107,19 @@ widening past its job's capabilities without a declared reason still fails.
 
 ## Known limits
 
-- **Package-scoped clippy of the GUI crate fails today**: `cargo clippy -p
+- ~~**Package-scoped clippy of the GUI crate fails today**: `cargo clippy -p
   orchestrator-gui --all-targets -- -D warnings` dies on
   `orchestrator-persistence`'s `configure_conn` becoming dead code under
   narrowed feature unification (observed at `9e2c54f6`). Out of this FR's
   scope — the CI shape is workspace-wide — but anyone adding a `-p`-shaped
-  GUI job inherits it. The symbol belongs to persistence governance.
+  GUI job inherits it. The symbol belongs to persistence governance.~~
+  **Fixed at `c1748df3`**, where persistence governance took it as predicted:
+  `db::configure_conn` was a pass-through to `sqlite::configure_conn` reachable
+  only from the `test-support` feature and a cfg(test) module, so both callers
+  now name the target directly and the pass-through is gone. The package-scoped
+  invocation exits 0. The observation above about *why* the two invocations can
+  disagree stands and is the reason the jobs stay workspace-wide; what is no
+  longer true is that this particular symbol is waiting for anyone.
 - **The GUI is still absent from the cross-compile matrix**, so a
   GUI-only breakage of a foreign target (e.g. aarch64-linux) is invisible
   until requirement 2 builds real bundles per platform.
