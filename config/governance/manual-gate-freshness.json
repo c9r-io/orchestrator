@@ -105,7 +105,12 @@
     },
     "scripts/qa/test-health-policy-check.sh": {
       "owner": "docs/qa/orchestrator/110b-agent-health-policy-advanced.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-12",
+        "revision": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-non-code-workspace.sh": {
       "owner": "docs/qa/orchestrator/165-non-code-workspace-and-global-file-sharing.md",
@@ -172,7 +177,9 @@
     },
     "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md",
-      "lastRun": null
+      "lastRun": null,
+      "releaseBlocking": false,
+      "releaseBlockingReason": "Self-referential by declaration, not by accident: its owner document docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md carries self_referential_safe: false, which is the repository saying this scenario is not safe to run against the orchestrator's own state. The gate matches that — it builds a release CLI (`cd core && cargo build --release`), runs `orchestrator init` against a repository-relative data/agent_orchestrator.db when one is missing, and drives real workflow steps in the self-bootstrap project. FR-165 considered converting it to an ephemeral daemon over a temporary data directory, the way test-health-policy-check.sh and test-fr001-sandbox-matrix.sh were converted in the same pass, and declined: the self-bootstrap suite's subject is the survival of the *deployed* binary and the state it accumulates across cycles, which a fresh directory cannot rehearse. Its sibling scripts/watchdog.sh is exempt for the neighbouring reason. This is the third of the three never-run gates DD-179 left for a shape decision; the other two are now release-blocking and fresh."
     },
     "scripts/qa/test-session-process-reclamation.sh": {
       "owner": "docs/qa/orchestrator/209-interactive-session-process-reclamation.md",

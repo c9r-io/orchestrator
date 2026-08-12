@@ -1,33 +1,66 @@
 #!/usr/bin/env bash
 # QA-110b S2: Verify orchestrator check displays custom health_policy correctly.
-# Requires a running orchestratord instance.
+#
+# Starts its own daemon. It used to require an ambient one, which is why it was
+# one of three gates that had never run since the freshness ledger was built:
+# "requires a running orchestratord instance" is a precondition nobody satisfies
+# by accident, and a release precondition that cannot be executed is not a
+# precondition. FR-165 closed that by giving it the same shape as the other 33 —
+# an ephemeral daemon over a temporary data directory, so nothing it does can
+# reach the operator's own database. The three projects it used to delete by name
+# on exit no longer exist anywhere but in that directory.
 set -euo pipefail
 
 # FR-158: record this run in config/governance/manual-gate-freshness.json.
 # Sourced before the gate's own trap so gate_runlog_arm can compose with it.
 . "$(git rev-parse --show-toplevel)/scripts/lib/gate_runlog.sh"
+. "$(git rev-parse --show-toplevel)/scripts/lib/gate_daemon.sh"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-ORCH="${ORCH:-orchestrator}"
+ORCHD="${ORCHD:-$REPO_ROOT/target/debug/orchestratord}"
+ORCH="${ORCH:-$REPO_ROOT/target/debug/orchestrator}"
+BIND_ADDR="${BIND_ADDR:-127.0.0.1:19231}"
 PASS=0
 FAIL=0
+DAEMON_PID=""
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+if [[ ! -x "$ORCHD" || ! -x "$ORCH" ]]; then
+  echo "debug binaries not found; run: cargo build -p orchestratord -p orchestrator-cli" >&2
+  exit 1
+fi
+
+QA_ROOT="$(mktemp -d)"
+QA_HOME="$(mktemp -d)"
 cleanup() {
-  echo ""
-  echo "Cleaning up test projects..."
-  for proj in qa-hp-s2 qa-hp-s3 qa-hp-s1; do
-    $ORCH delete agent --project "$proj" --force 2>/dev/null || true
-    $ORCH delete workflow --project "$proj" --force 2>/dev/null || true
-    $ORCH delete workspace --project "$proj" --force 2>/dev/null || true
-  done
+  gate_daemon_stop "$DAEMON_PID" || true
+  DAEMON_PID=""
+  rm -rf "$QA_ROOT" "$QA_HOME"
 }
 trap cleanup EXIT
 gate_runlog_arm "scripts/qa/test-health-policy-check.sh"
+
+export HOME="$QA_HOME"
+export ORCHESTRATORD_DATA_DIR="$QA_ROOT/data"
+unset ORCHESTRATOR_SOCKET
+export ORCHESTRATOR_CONTROL_PLANE_CONFIG="$QA_HOME/.orchestrator/control-plane/config.yaml"
+
+(
+  cd "$QA_ROOT"
+  "$ORCHD" --foreground --bind "$BIND_ADDR" --workers 1 > daemon.log 2>&1 &
+  echo $! > daemon.pid
+)
+DAEMON_PID="$(gate_daemon_pid_from_file "$QA_ROOT/daemon.pid")"
+
+if ! gate_daemon_wait_ready "$ORCH"; then
+  echo "isolated daemon failed to start" >&2
+  cat "$QA_ROOT/daemon.log" >&2
+  exit 1
+fi
 
 # ─── Scenario 1: Custom thresholds ────────────────────────────────────
 echo ""
