@@ -140,9 +140,11 @@ is the bypass, reproduced.
 
 ### How The Set Is Derived
 
-`apply_action` and `apply_target_type` are exhaustive matches with **no `_`
+`apply_action` and `resource_target_type` are exhaustive matches with **no `_`
 arm**, so a thirteenth `ResourceKind` variant fails to compile rather than
-silently inheriting `resource.apply`. That compile-time obligation is the
+silently inheriting `resource.apply`. (The target-type function was named
+`apply_target_type` until FR-167, which shares it with the delete path — it names
+the object, not the verb.) That compile-time obligation is the
 derivation from the enum; `covers_every_variant` then fails until the new
 variant is added to the test's list too, so the list cannot fall behind the enum
 it claims to enumerate. Neither the array nor a count is load-bearing on its own.
@@ -229,7 +231,9 @@ assertion is on the request actually constructed.
   return the full sequence for a gate that also exercises invalid input. List
   without `--action` in that case; `test-expert-resources-governed-editing.sh`
   does exactly this.
-- **`kind_as_str_covers_all_resource_kinds`** in `core/tests/integration_test.rs`
+- ~~**`kind_as_str_covers_all_resource_kinds`** in `core/tests/integration_test.rs`
   asserts only three of the twelve kinds despite its name. It is adjacent to this
   work and was left as found; the naming coverage this FR needed is asserted by
-  `apply_action_naming` instead.
+  `apply_action_naming` instead.~~ **Closed by FR-167** — it now iterates
+  `ALL_RESOURCE_KINDS` and asserts each printed CLI name resolves back to its
+  kind, so the test covers what its name claims.

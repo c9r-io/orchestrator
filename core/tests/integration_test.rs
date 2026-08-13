@@ -412,8 +412,44 @@ fn delete_rejects_unknown_resource_type() {
     assert!(result.is_err());
 }
 
+/// The name says twelve; until FR-167 it asserted three.
+///
+/// DD-177 recorded that as a known limit and left it, because FR-164 had no
+/// derived set to check against. FR-167 added one, so the test now iterates
+/// `ALL_RESOURCE_KINDS` — which `all_resource_kinds_covers_every_variant` keeps
+/// equal to the enum through a wildcard-free match — and the three literals stay
+/// as spot pins on spellings other code reads.
+///
+/// Round-tripping is the property, not the spelling: `kind_as_str` is what the
+/// CLI prints and `resource_kind_from_alias` is what the delete path resolves, so
+/// a kind whose printed name does not resolve back is one a user cannot delete by
+/// copying what they were shown.
 #[test]
 fn kind_as_str_covers_all_resource_kinds() {
+    use agent_orchestrator::resource::{ALL_RESOURCE_KINDS, resource_kind_from_alias};
+
+    let mut seen: Vec<&'static str> = Vec::new();
+    for kind in ALL_RESOURCE_KINDS {
+        let printed = kind_as_str(kind);
+        assert!(!printed.is_empty(), "{kind:?} prints an empty CLI name");
+        assert_eq!(
+            printed.to_lowercase(),
+            printed,
+            "{kind:?} CLI name {printed} is not lowercase"
+        );
+        assert_eq!(
+            resource_kind_from_alias(printed),
+            Some(kind),
+            "{kind:?} prints {printed}, which does not resolve back to it"
+        );
+        assert!(
+            !seen.contains(&printed),
+            "two kinds print the same CLI name {printed}"
+        );
+        seen.push(printed);
+    }
+    assert_eq!(seen.len(), ALL_RESOURCE_KINDS.len());
+
     assert_eq!(kind_as_str(ResourceKind::Workspace), "workspace");
     assert_eq!(kind_as_str(ResourceKind::Agent), "agent");
     assert_eq!(kind_as_str(ResourceKind::Workflow), "workflow");

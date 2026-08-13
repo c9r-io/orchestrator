@@ -246,11 +246,16 @@ claim and the one a reader actually wants.
   retirement target" shape found inside the file it was written about. Recorded
   rather than removed: deleting it is a separate change with its own test
   fallout.
-- **`kind_as_str_covers_all_resource_kinds`** in `core/tests/integration_test.rs`
-  still asserts only three of the twelve kinds despite its name — inherited from
-  DD-177's known limits and left as found. The coverage this FR needed is
-  asserted by `every_alias_round_trips_and_is_unique` and
-  `kind_canonical_name_matches_debug`, both derived from `ALL_RESOURCE_KINDS`.
+- **`kind_as_str_covers_all_resource_kinds` was fixed rather than inherited.**
+  DD-177 recorded it as asserting three of twelve despite its name and left it,
+  correctly: FR-164 had no derived set to check against. FR-167 built one, so the
+  reason for leaving it expired. It now iterates `ALL_RESOURCE_KINDS` and asserts
+  each printed CLI name resolves back through `resource_kind_from_alias` — the
+  property that matters, since a kind whose printed name does not resolve is one
+  a user cannot delete by copying what they were shown. Verified by mutation:
+  printing `secretstores` for `SecretStore` fails naming the kind. The general
+  point is not about this test — **a known limit is a claim about a moment, and
+  the FR that changes the moment is the one that has to re-read it.**
 - **The GUI's `resource_delete` command has no frontend caller** and sends
   `force: false`, which the service layer refuses. It was given an envelope for
   symmetry with `resource_apply`; whether the command should exist at all is a
