@@ -222,3 +222,68 @@ captured the true exit code. Piped into `tail`, this would have read as a pass.
    fixtures encode the current extraction, so it wants its own before/after
    measurement on both macOS and Linux rather than being folded into a
    record-keeping change.
+
+## Fourth pass, 2026-08-13 at `c3f5bffd` (667 files) — the corpus is not the trigger
+
+Found again during FR-168 certification. Re-investigated rather than absorbed
+into the standing label, because §4.4 shape 12 says a gate that fails twice
+keeps its first diagnosis and this one has a very comfortable label to be
+absorbed into. Investigating produced one **decisive** result the three passes
+above did not have.
+
+### The markdown corpus is eliminated as the trigger
+
+Three trees, one instrument, same host, same hour:
+
+| Tree | `git ls-files '*.md'` | Result |
+|---|---|---|
+| `HEAD~1` (`181cb36f`), clean worktree | 666 | **exit 0**, 5 runs |
+| `HEAD~1` + one filler `.md` with no links | 667 | **exit 0** |
+| `HEAD~1` + *only* FR-168's markdown, committed | 667, 574 links | **exit 0**, 3 runs |
+| `HEAD` (`c3f5bffd`), clean worktree | 667, 574 links | **crashes**, 4 runs |
+
+Row 3 and row 4 have **byte-identical markdown** — same file set, same content,
+same link count. Row 3 is that markdown committed on top of `181cb36f` with no
+other change; row 4 is the same markdown alongside FR-168's Rust and JSON. The
+gate reads neither Rust nor JSON.
+
+So the trigger is **not** the content the gate reads, not the file count, and
+not any particular file. Every content hypothesis in the passes above — a long
+line, an unusual link shape, a specific file — is eliminated by row 3.
+
+### Two further observations
+
+- **The signal differs by tree.** The primary working directory aborts with
+  **134** (SIGABRT); a clean `git worktree` at the same commit exits **138**
+  (SIGBUS). Two different fatal signals for identical input is memory
+  corruption, not a resource ceiling — a fixed-size table overflowing would be
+  expected to fail the same way each time.
+- **It vanishes under `bash -x`.** `bash -x scripts/qa/test-markdown-link-integrity.sh`
+  exits **0** at `HEAD`, in the same worktree that crashes without it, and the
+  two traces are identical in length (72892 lines). Tracing changes allocation
+  and timing, which is consistent with corruption and inconsistent with a
+  deterministic limit. It also means the `bash -x` reading in the first pass was
+  taken from a run that did not crash the way the untraced one does, which is a
+  second reason to prefer the stderr-counter instrument.
+
+### What this does to the open hypotheses
+
+- The **BSD awk** hypothesis survives and is now the only one standing: it is
+  the sole component that sees the corpus, and every bash-side construct was
+  already bisected away in the second pass.
+- The **subprocess-accumulation** hypothesis is weakened but not dead: row 3 and
+  row 4 fork awk the same number of times (667) with the same inputs, and only
+  one crashes, so the count alone cannot be it.
+- **"Clean worktree does not reproduce"** (second pass, `af672d21`) is
+  contradicted here: a clean worktree at `HEAD` crashes 4/4. Both readings stand
+  as observations; what separates them is not established.
+- The **suggested repair (item 5, single `awk` pass using `FILENAME`/`FNR`)** is
+  now better motivated: it removes the only component still under suspicion.
+
+### Verified independently, so the gate's subject is not in doubt
+
+The gate's two checks were re-implemented faithfully and run over `HEAD`'s real
+tree to completion: **zero broken link targets, zero stale exemptions**. Row 3
+above reports the same through the real gate (`2 passed, 0 failed`). The link
+integrity of the tree at `c3f5bffd` is therefore established; what is missing is
+the gate's own local verdict, not the fact it asserts.

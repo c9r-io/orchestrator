@@ -111,6 +111,30 @@ QA 211：库先行并单独验证；每门禁前后残留清点（净增长即�
   `~/.orchestratord`（ticket `20260811-webhook-gates-write-real-data-dir`）；
   QA 211 的"残留为零"声明限定在其扫描面内，这个面不含用户家目录——又一次
   范围谓词是关于扫描的事实、不是关于世界的事实。
+- **门禁之外启动的守护进程无人回收，本 FR 按构造够不着它们。** 2026-08-13 的
+  FR-168 认证期间清点到两个 `orchestratord`（PID 37254/37273，`--foreground
+  --workers 1 --webhook-bind none`，其一带 `--event-archive-dir
+  $TMPDIR/t1-archive.sM2A1X/custom-archive`），已存活 22h34m，PPID 均为 1，
+  PGID 37132 的组长早已不存在，且其数据目录 `$TMPDIR/t1-archive.sM2A1X/{a,b}/`
+  **已从磁盘消失**——它们攥着已被 unlink 的 inode。二者都未持有
+  `~/.orchestratord/agent_orchestrator.db`。
+
+  这不是本 FR 的漏洞，且证据是**正向**的而非仅仅缺席：`t1-archive` 与
+  `custom-archive` 在树中与 `git log --all -S` 的全部历史里都不存在，`sM2A1X`
+  是 `mktemp -d` 模板展开，故 spawn 点根本不是任何受治理的门禁，而是一次
+  ad-hoc 探针（人或 agent 直接敲的命令）。同一 session 内一次派生自
+  `qa-gate-surface.json` 的 71 次调用全量扫掠（含每一个启动守护进程的门禁）
+  跑完，前中后的守护进程census 始终只有这两个、再无其他；check 16 及其
+  `--fixture-test` 双绿。范围也已复核完整：`crates/integration-tests` 中无任何
+  `Command::new` 触及 `orchestratord`，故"启动守护进程是 `scripts/` 的事"这一
+  作用域前提成立，而不是另一种语言在门禁背后另开了一扇门（那会是 §4.4 shape 2）。
+
+  残余因此可以精确陈述：**本 FR 治理的是门禁启动的守护进程；ad-hoc 命令启动的
+  没有任何东西回收它。** `test-agent-session-control-plane.sh` 的
+  `reclaim_previous_run_residue` 回收的是 session 而非游离 daemon，且那是单个门禁
+  的领域知识，不是 harness 的性质。代价实测为"22 小时、攥着已删除 inode、
+  只因有人去看才被发现"。
+
 - **`scripts/**` 之外仍有旧形状**，具名而非吸收：`docs/qa/script/test-worker-throughput.sh`
   （文档树里的性能辅助脚本）与 QA 58 散文步骤里的八处 kill+wait 片段。两者都在
   本 FR 的派生集合（`git ls-files 'scripts/**/*.sh'`）与 check 16 的扫描范围之外；
