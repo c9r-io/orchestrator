@@ -131,6 +131,64 @@ mean changing a release gate on a hypothesis this host cannot test.
 everything else in one run), or `brew install bash` (separates bash 3.2 from
 everything else). Either turns item 2 from a plan into a measurement.
 
+## Third investigation, 2026-08-13 at `479bb9c1` (666 files) — the variable is the working directory, not the revision or the content
+
+Found again during FR-167 certification, where it was the only unexplained
+non-zero in a 69-invocation derived sweep. The reason it is worth another
+section: the two readings below **falsify the two hypotheses a reader would
+reach for first**, and both were reached for here before the experiment was run.
+
+### It is not the revision
+
+Run in a fresh detached worktree at `d7ef4faf` — the pre-FR-167 HEAD — the gate
+**passes**: `2 passed, 0 failed`, 665 files / 562 links. That looks like FR-167
+caused it, and the obvious next step is to find the offending document.
+
+### It is not the content either
+
+Reverting **every** markdown file FR-167 touched (all ten, including the two new
+documents and the three long index rows) in the main working directory and
+re-running: still **134**. So no document introduced by the change is the input
+that aborts it.
+
+### It is the directory
+
+The decisive run: the **same commit** `479bb9c1`, checked out into a fresh
+detached worktree, **passes** — `2 passed, 0 failed`, 666 files / 564 links —
+while the main working directory at that identical commit aborts with 134. The
+gate's input is byte-identical in both: `git ls-files '*.md'` returns 666 in
+each.
+
+Two directories, one revision, opposite outcomes. That rules out revision and
+content together, and it means every earlier attempt to attribute the abort to a
+particular file was looking in the wrong place — including the withdrawn
+"iteration 251 / `agent-drain-enabled.md`" reading, which now looks like a
+symptom of where the loop happened to be rather than of what it was reading.
+
+The only structural difference between the two directories is that the main one
+carries `target/` and `.orchestrator/`, neither of which is tracked and neither
+of which contributes a markdown file (`find target .orchestrator -name '*.md'`
+returns 0). So the mechanism is not "the gate reads an extra file". It is
+something about the directory's state that the gate's own input does not
+describe — which is consistent with the fixed-size-buffer hypothesis in the
+second investigation, since a resource limit is exactly the kind of thing that
+differs between a working directory with a multi-gigabyte build tree in it and a
+clean checkout, while the file list stays identical.
+
+### What this changes for ticket-fix
+
+- **Do not bisect the documents again.** Three investigations have now looked
+  for an offending file; the third shows there is not one.
+- **The reproducer must name the directory, not the commit.** "Run it on macOS"
+  is not sufficient — it passes on macOS, at the same commit, one directory over.
+  A fix cannot be verified without pinning which working directory it was
+  verified in.
+- **A local sweep can certify this gate today**, by running it in a fresh
+  worktree at the revision under certification. That is a workaround for the
+  sweep, not a fix for the gate, and it should not be allowed to close this
+  ticket: CI runs the gate in the job's checkout, and nothing here explains what
+  makes a directory poisonous.
+
 ## Why this matters beyond the one gate
 
 `qa-gate-surface.json` classifies this as `ci-required`, and the fr-governance
