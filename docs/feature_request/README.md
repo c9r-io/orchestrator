@@ -174,6 +174,7 @@
 | FR-167 | Delete 路径的审计缺口——具名与信封双缺 | P1 | Closed | git history |
 | FR-168 | Task 删除的引用处置策略 —— 级联清 1/8，其余七表无裁决 | P1 | Closed | git history |
 | FR-169 | 数据目录消失后守护进程不自证死亡 —— 22 小时、零日志、服务零客户端 | P1 | Closed | git history |
+| FR-170 | 单例守卫把证据存在它必须幸存的那个目录里 | P2 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明

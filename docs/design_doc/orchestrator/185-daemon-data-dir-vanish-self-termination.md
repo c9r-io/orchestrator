@@ -127,9 +127,13 @@ Found by running the probe, not by reading the diff.
 - **The split-brain window is bounded, not closed.** Between the recreate and the
   old daemon's exit (~15s) a second daemon can start, and for that window both are
   alive. Closing it requires fixing the singleton guard, which is deliberately a
-  separate FR: `detect_running_daemon` keeps its evidence inside the directory
-  whose loss it must survive, and the alternatives (an flock, the socket, state
-  outside `data_dir`) each have consequences this FR did not fund.
+  separate FR — **now filed as FR-170**: `detect_running_daemon` keeps its evidence
+  inside the directory whose loss it must survive, and the alternatives (an flock,
+  the socket, state outside `data_dir`) each have consequences this FR did not
+  fund. Note the chain is three links, not one: the socket cannot stand in for the
+  pidfile either, because `main.rs` unconditionally removes any existing socket
+  before binding — the socket is guarded by the pidfile, the pidfile by the data
+  directory, and the data directory by nothing.
 - **Only whole-directory loss is detected.** The socket file deleted on its own,
   the database file deleted on its own, or the database truncated, are each a
   distinct "I can no longer serve" signal, and none is measured or handled. The FR
