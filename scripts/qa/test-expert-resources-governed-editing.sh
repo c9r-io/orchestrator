@@ -197,6 +197,61 @@ else
   fail "resource apply action audit sequence is incomplete"
 fi
 
+# FR-167: the delete half of the same surface, through the real CLI.
+#
+# The unit tests in the daemon crate construct their own `DeleteRequest`, so they
+# cannot see whether the *CLI* sends an envelope — and the CLI's envelope is the
+# one the daemon discarded before FR-167. This is the only place both halves run
+# together, so it asserts what a unit test structurally cannot: the reason code
+# stored is the operator's, not the `legacy_client` fallback.
+#
+# A SecretStore is the subject deliberately. Until FR-167 `delete_resource_from_project`
+# looked for SecretStores in `env_stores`, so this delete would have failed with
+# "not found" on a store that exists — the delete path's own defect, and one no
+# count of audit rows would have caught.
+DELETE_STORE="$QA_ROOT/delete-secret-store.yaml"
+cat > "$DELETE_STORE" <<'EOF'
+apiVersion: orchestrator.dev/v2
+kind: SecretStore
+metadata:
+  name: fr167-delete-store
+spec:
+  data:
+    token: fr167-qa-value
+EOF
+if "$ORCH" apply --project "$PROJECT" -f "$DELETE_STORE" > "$QA_ROOT/delete-seed.log" 2>&1 &&
+  "$ORCH" delete secretstore/fr167-delete-store --project "$PROJECT" --force \
+    > "$QA_ROOT/delete.log" 2>&1; then
+  pass "a SecretStore applied through the CLI can be deleted through the CLI"
+else
+  fail "CLI SecretStore delete failed"
+fi
+
+"$ORCH" audit list --project "$PROJECT" --action resource.secret_store.delete -o json \
+  > "$QA_ROOT/delete-audit.json"
+if jq -e '
+  length == 1 and
+  (.[0].target_type == "secret_store") and
+  (.[0].target_id == "secretstore/fr167-delete-store") and
+  (.[0].status == "succeeded") and
+  (.[0].reason_code == "operator_resource_delete") and
+  (.[0].request_id | length > 0)
+' "$QA_ROOT/delete-audit.json" >/dev/null; then
+  pass "CLI delete records its named action carrying the operator reason code, not the legacy fallback"
+else
+  fail "CLI delete audit evidence is missing or carries the wrong reason code"
+fi
+
+# The store is gone, and the delete row is the reason we know a mutation happened
+# rather than a no-op that logged. Asserted separately because an implementation
+# that recorded the envelope and skipped the removal would satisfy the check above.
+if ! "$ORCH" get secretstore/fr167-delete-store --project "$PROJECT" \
+    > "$QA_ROOT/delete-verify.log" 2>&1; then
+  pass "the deleted SecretStore is actually gone"
+else
+  fail "the SecretStore survived a delete that reported success"
+fi
+
 DB="$QA_ROOT/runtime/agent_orchestrator.db"
 if ! rg -n 'qa-resource-sensitive-marker' \
     "$QA_ROOT/audit.json" "$QA_ROOT/daemon.log" "$QA_ROOT/tauri-bridge.log" >/dev/null &&
