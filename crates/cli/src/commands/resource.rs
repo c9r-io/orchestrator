@@ -147,17 +147,32 @@ pub(crate) async fn dispatch(
                     dry_run,
                     project,
                     force_references,
+                    // The envelope's three fields were all written for the
+                    // `--force-references` case, because until FR-167 that was
+                    // the only case the daemon read them in — an ordinary delete
+                    // had its envelope discarded, so the operator reason it
+                    // carried was never stored and never wrong. Now that every
+                    // delete is recorded, a plain `delete secretstore/x` would
+                    // have persisted "atomically delete SourceTaskTemplate
+                    // binding references" as the operator's stated reason. The
+                    // reason and the retry identity are therefore scoped to the
+                    // operation that actually justifies them.
                     audit: Some(orchestrator_proto::ActionAuditContext {
                         reason_code: if force_references {
                             "operator_force_reference_cleanup".to_string()
                         } else {
                             "operator_resource_delete".to_string()
                         },
-                        operator_reason: Some(
-                            "atomically delete SourceTaskTemplate binding references".to_string(),
-                        ),
+                        operator_reason: force_references.then(|| {
+                            "atomically delete SourceTaskTemplate binding references".to_string()
+                        }),
                         idempotency_key: Some(format!(
-                            "cli-resource-delete-references-{}",
+                            "{}-{}",
+                            if force_references {
+                                "cli-resource-delete-references"
+                            } else {
+                                "cli-resource-delete"
+                            },
                             std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .map(|duration| duration.as_nanos())

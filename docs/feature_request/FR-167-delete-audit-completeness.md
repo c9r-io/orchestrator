@@ -34,6 +34,12 @@ let attempt = if force_references || is_source_task_binding {
    因此**即便客户端正确携带了信封，普通删除仍不记录任何行**。信封被接收、
    被忽略、被丢弃。
 
+   **治理时重建（at `d7ef4faf`）：本条比原文更严重。** 被丢弃的不是某个假想的
+   规矩客户端的信封，而是 CLI 每一次删除都发送的那一个——
+   `crates/cli/src/commands/resource.rs:150-166` 无条件填充
+   `audit: Some(ActionAuditContext { reason_code: "operator_resource_delete", .. })`。
+   默认路径就是被丢弃的那条。
+
 3. 与 apply 同理，`begin` 是 `resolve_context` 的唯一调用者，故
    `action_audit_mode: enforced` 对普通删除同样不可达——enforced 模式既不
    审计也不拒绝删除。DD-111 §21 称信封是"每一次 process-console mutation 的
@@ -41,8 +47,16 @@ let attempt = if force_references || is_source_task_binding {
 
 唯一残留痕迹与 apply 相同且更弱：`delete_resource` 写入一条墓碑
 `resource_versions` 行（`version = -1`、`spec_json = '"deleted"'`，
-`core/src/persistence/repository/config.rs:417-419`），`author` 同为硬编码
-字面量 `"daemon-apply"`——不可归因，且不含被删除资源的原始 spec。
+`crates/orchestrator-persistence/src/config_store.rs:403-422`），`author` 为硬编码
+字面量——不可归因，且不含被删除资源的原始 spec。
+
+> **治理时更正（at `d7ef4faf`）**：原文写作 `core/src/persistence/repository/config.rs:417-419`
+> 与 `author = "daemon-apply"`，两处均不准确。该行号指向 `load_config`，不是墓碑写入；
+> 墓碑由 `ConfigStore::delete_resource` 写出，author 由调用方传入，delete 路径传的是
+> `"daemon-delete"`（project 删除传 `"project-delete"`，
+> `core/src/service/resource/delete.rs:184,200,243,277`）。`"daemon-apply"` 是 apply 路径的
+> 字面量（`core/src/service/resource/mod.rs:293`）。**结论不变**：仍是硬编码、不可归因的
+> author。
 
 ## 需求
 
@@ -60,6 +74,23 @@ match 给出——第 13 个 `ResourceKind` 变体须无法编译。既有
 理由：已入既有审计行）；`delete_references` 作为跨资源清理动作单独保留，
 不并入按 kind 的命名面。
 
+**治理时裁决（at `d7ef4faf`）三项，均为永久决定：**
+
+- **SourceTaskTemplate 的删除名取 `source.template.delete`**，而非字面规则给出的
+  `resource.source_task_template.delete`。取"一 kind 一族"而非"一规则贯穿"：apply
+  已是 `source.template.apply`，分裂前缀会让"查这个模板的一切"需要两个前缀。
+  即本 FR 有两个具名例外，而非一个。
+- **`RuntimePolicy` 事实上不可删除**，故"12 kind 各有具名删除动作"不可能是 12 次成功。
+  `canonical_project_kind`（`core/src/service/resource/delete.rs:402-423`）没有
+  RuntimePolicy 分支，删除以 `unknown resource type for project delete: runtimepolicy`
+  失败。审计行在执行前预留，故该动作名仍成立，只是断言的是一条 `status = failed` 行。
+  记录这条不对称，而不是掩盖它。
+- **删除面比 12 个 kind 更大。** `crd` / `customresourcedefinition` 与每一个 CRD 定义的
+  自定义 kind 今天同样可删且同样零审计行（`core/src/service/resource/delete.rs:176-203`），
+  原文未提及。对齐 apply 的既有做法：解析不到单一 builtin kind 时记通用
+  `resource.delete` / `resource_manifest`（apply 侧对应 `resource.apply` /
+  `resource_manifest`），一次关闭整个面。
+
 ### 3. dry-run 与 apply 对齐
 
 dry-run delete 不审计，与 FR-164 的 `!dry_run` 语义一致，并单独断言，避免
@@ -74,11 +105,19 @@ dry-run delete 不审计，与 FR-164 的 `!dry_run` 语义一致，并单独断
       这是与 FR-164 不同的一条：apply 旧条件尚能审计带信封的调用方，delete 不能
 - [ ] `enforced` 模式 + 无信封 delete → 被拒绝，断言诊断字符串而非退出码
 - [ ] 12 kind 各有具名删除动作的行为断言，集合由穷尽 match 保证
+      （11 个断言 `status=succeeded`；RuntimePolicy 断言 `status=failed` 且诊断点名它）
+- [ ] 无法解析为 builtin kind 的删除（CRD、自定义资源）记通用 `resource.delete` /
+      `resource_manifest`
 - [ ] dry-run delete 不产生审计行
 - [ ] 既有 `source.binding.delete` 与 `delete_references` 断言不回归
       （`scripts/qa/test-source-task-binding.sh` 断言前者）
 
 ## 治理顺序（与 FR-166 的依赖，2026-08-11 裁决）
+
+> **依赖已解除（2026-08-13 治理时核验）。** FR-166 已闭环且 `ResourceKind` 未变——
+> DD-182 决定 2（EnvStore 与 SecretStore 不合并）与决定 3（Trigger 不拆分）。本节
+> 末尾的"反向要求"亦已兑现：两条决定都显式写出"审计动作名是其下游消费者，已记录的
+> 动作名永不重命名"，正是它们成为永久决定的理由。故需求 1/2/3 一并治理。
 
 **需求 1 与需求 3 可立即治理；需求 2 应排在 FR-166 之后。**
 
@@ -108,9 +147,16 @@ FR-166 需求 3 把 **EnvStore 与 SecretStore 的合并**与 **Trigger 三职�
 
 ## 未核验项（明确标注）
 
-- 其余 RPC 是否存在同类"审计层入口条件包含了该层本应裁决的条件"实例，未做
-  全面清点。`begin` 的全部调用点值得逐一核对其守卫条件——这是 FR-164 与本 FR
-  共同的形状，两次出现说明它不是孤例。
+- ~~其余 RPC 是否存在同类"审计层入口条件包含了该层本应裁决的条件"实例，未做
+  全面清点。~~ **治理时已清点（at `d7ef4faf`）**：daemon 内 `action_audit::begin`
+  的全部生产调用点（session/source/source_connection/attention/handoff/trigger/resource）
+  中，`crates/daemon/src/server/resource.rs:504` 是**最后一处**条件守卫，其余均为无条件
+  调用。本 FR 关闭后该形状在 daemon 内清零。
 - `crates/integration-tests` 的 `TestOrchestratorServer` 以重实现镜像多个 RPC
-  （`apply` 已确认），故该 harness 对本类缺口结构性不可见；应清点它还重实现了
+  （`apply` 已确认；**治理时确认 `delete` 同样如此**——
+  `crates/integration-tests/src/lib.rs:1365-1389` 直接调用 `delete_resource`，
+  从不进入审计路径），故该 harness 对本类缺口结构性不可见；应清点它还重实现了
   哪些 RPC，此清点独立于本 FR 的价值。
+- **`core/src/resource/parse.rs:71 delete_resource_by_kind` 无任何生产调用方**（仅其自身
+  测试调用），却携带一张含 RuntimePolicy 与 CRD 的 13 分支别名表——未来作者最可能在此
+  添加别名，而添加不会有任何效果。本 FR 记录不删除（删除是另一件事）。
