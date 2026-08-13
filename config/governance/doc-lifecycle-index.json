@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 475,
-    "active": 462,
+    "documents": 477,
+    "active": 464,
     "superseded": 13,
-    "withRelatedFr": 322
+    "withRelatedFr": 324
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -527,6 +527,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-166"
+      ]
+    },
+    "docs/design_doc/orchestrator/183-delete-audit-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-167"
       ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
@@ -1920,6 +1926,12 @@
         "FR-166"
       ]
     },
+    "docs/qa/orchestrator/221-delete-audit-completeness.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-167"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3053,6 +3065,10 @@
     "FR-166": [
       "docs/design_doc/orchestrator/182-concept-surface-convergence.md",
       "docs/qa/orchestrator/220-concept-surface-convergence.md"
+    ],
+    "FR-167": [
+      "docs/design_doc/orchestrator/183-delete-audit-completeness.md",
+      "docs/qa/orchestrator/221-delete-audit-completeness.md"
     ]
   },
   "supersedes": {

@@ -301,7 +301,7 @@ A SecretStore has the same spec structure as EnvStore. The two are not interchan
 | Export and overview | Values shown | Values replaced with a placeholder before leaving the daemon |
 | Key operations | None | `orchestrator secret key status\|list\|rotate\|revoke\|history\|bootstrap` |
 
-Choosing the wrong kind therefore has consequences you cannot see in the manifest: a secret written into an EnvStore is stored in the clear and is printed by export. Moving it later is not a rename — you must delete the EnvStore and apply a SecretStore, because the audit trail records `resource.env_store.apply` and `resource.secret_store.apply` as distinct actions and those action names are permanent.
+Choosing the wrong kind therefore has consequences you cannot see in the manifest: a secret written into an EnvStore is stored in the clear and is printed by export. Moving it later is not a rename — you must delete the EnvStore and apply a SecretStore, because the audit trail records `resource.env_store.apply` and `resource.secret_store.apply` as distinct actions and those action names are permanent. Since FR-167 the delete half is recorded the same way, as `resource.env_store.delete` and `resource.secret_store.delete`, so the move leaves a complete two-row trail rather than a create with no matching removal.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
