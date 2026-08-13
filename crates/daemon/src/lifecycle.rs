@@ -175,6 +175,61 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
     let _ = std::fs::remove_file(pid_path);
 }
 
+/// Identity of the data directory: `(st_dev, st_ino)`.
+///
+/// `None` when the path cannot be stat'd at all, which includes the case that
+/// matters most — it was removed.
+///
+/// The identity rather than the path is the subject, because the two failures
+/// this exists to catch are not the same shape. A directory that was **deleted**
+/// fails a path check. A directory that was deleted and **recreated** passes
+/// one: the path is there, and the daemon is writing an orphaned inode while a
+/// new daemon owns the name. Measured before this was written — delete plus
+/// `mkdir` of the same path left the old daemon alive holding seven open file
+/// descriptors on an unlinked database, while a second daemon started on the
+/// same path and became ready. A path check sees one of those two and reports
+/// the other as healthy.
+#[cfg(unix)]
+pub fn data_dir_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+}
+
+/// Whether the data directory the daemon started with is gone.
+///
+/// True when it cannot be stat'd, and true when something else now occupies the
+/// path. Both mean the same thing to the daemon: the directory it opened is no
+/// longer the directory at that path, so it cannot serve anyone from it.
+#[cfg(unix)]
+pub fn data_dir_vanished(expected: (u64, u64), current: Option<(u64, u64)>) -> bool {
+    current != Some(expected)
+}
+
+/// Folds one observation into the confirmation counter, returning whether the
+/// daemon should now shut down.
+///
+/// Separated from the watcher loop so the hysteresis can be asserted without
+/// waiting on wall-clock time: a test that proves the reset works by sleeping is
+/// a test that will one day be flaky and be deleted. The counter resets on any
+/// match, which is the whole of the hysteresis — without the reset, a daemon that
+/// saw one failed `stat` per hour would eventually accumulate three of them and
+/// exit for no reason.
+#[cfg(unix)]
+pub fn observe_data_dir(
+    expected: (u64, u64),
+    current: Option<(u64, u64)>,
+    confirmations: &mut u32,
+    required: u32,
+) -> bool {
+    if data_dir_vanished(expected, current) {
+        *confirmations += 1;
+        *confirmations >= required
+    } else {
+        *confirmations = 0;
+        false
+    }
+}
+
 /// Wait for SIGTERM or SIGINT, then initiate graceful shutdown.
 ///
 /// SIGHUP is continuously ignored so the daemon survives terminal closure.
@@ -269,5 +324,115 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let pid_path = dir.path().join("daemon.pid");
         assert!(detect_running_daemon(&pid_path).is_none());
+    }
+
+    #[test]
+    fn data_dir_identity_is_stable_while_the_directory_is_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = data_dir_identity(dir.path()).expect("stat a live directory");
+        // Writing inside it must not change the directory's own identity, or the
+        // watcher would fire on ordinary use.
+        std::fs::write(dir.path().join("some.db"), b"x").unwrap();
+        let second = data_dir_identity(dir.path()).expect("stat it again");
+        assert_eq!(first, second);
+        assert!(!data_dir_vanished(first, Some(second)));
+    }
+
+    #[test]
+    fn data_dir_identity_is_none_once_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+        let before = data_dir_identity(&path).expect("stat before");
+        std::fs::remove_dir_all(&path).unwrap();
+        assert_eq!(data_dir_identity(&path), None);
+        assert!(data_dir_vanished(before, None));
+    }
+
+    /// The case a path-existence check cannot see.
+    ///
+    /// After delete-and-recreate the path is present, so `[ -d ]` and
+    /// `Path::exists()` both report healthy, while the daemon holds an orphaned
+    /// inode and a new daemon can take the name. Identity is what separates them.
+    #[test]
+    fn data_dir_identity_changes_when_the_path_is_recreated() {
+        let parent = tempfile::tempdir().unwrap();
+        let path = parent.path().join("d");
+        std::fs::create_dir(&path).unwrap();
+        let before = data_dir_identity(&path).expect("stat before");
+
+        std::fs::remove_dir_all(&path).unwrap();
+        std::fs::create_dir(&path).unwrap();
+
+        assert!(path.exists(), "the fixture must leave the path present");
+        let after = data_dir_identity(&path).expect("stat after");
+        assert_ne!(
+            before, after,
+            "delete-and-recreate produced the same identity, so the watcher would \
+             not notice the daemon is writing an orphaned inode"
+        );
+        assert!(data_dir_vanished(before, Some(after)));
+    }
+
+    /// A healthy directory never accumulates confirmations, so the watcher
+    /// cannot become a random killer.
+    #[test]
+    fn an_untouched_data_dir_never_reaches_the_threshold() {
+        let dir = tempfile::tempdir().unwrap();
+        let expected = data_dir_identity(dir.path()).expect("stat");
+        let mut confirmations = 0u32;
+        for _ in 0..100 {
+            let now = data_dir_identity(dir.path());
+            assert!(!observe_data_dir(expected, now, &mut confirmations, 3));
+        }
+        assert_eq!(confirmations, 0);
+    }
+
+    #[test]
+    fn three_consecutive_vanishes_trip_it() {
+        let expected = (1, 2);
+        let mut c = 0u32;
+        assert!(!observe_data_dir(expected, None, &mut c, 3));
+        assert!(!observe_data_dir(expected, None, &mut c, 3));
+        assert!(
+            observe_data_dir(expected, None, &mut c, 3),
+            "third should trip"
+        );
+    }
+
+    /// The reset is load-bearing, not decorative.
+    ///
+    /// Two failures, a recovery, two more failures: five observations of which
+    /// four saw a vanished directory, and it must NOT trip — because they were
+    /// never consecutive. Without the reset this reaches three and ends a healthy
+    /// daemon. That is the mutation this fixture is aimed at: deleting the
+    /// `*confirmations = 0` line, which no other test in this file would catch.
+    #[test]
+    fn a_recovery_between_failures_prevents_the_trip() {
+        let expected = (1, 2);
+        let mut c = 0u32;
+        assert!(!observe_data_dir(expected, None, &mut c, 3));
+        assert!(!observe_data_dir(expected, None, &mut c, 3));
+        assert_eq!(c, 2);
+
+        // One good observation.
+        assert!(!observe_data_dir(expected, Some(expected), &mut c, 3));
+        assert_eq!(c, 0, "a successful stat did not reset the counter");
+
+        assert!(!observe_data_dir(expected, None, &mut c, 3));
+        assert!(
+            !observe_data_dir(expected, None, &mut c, 3),
+            "four vanished observations across a recovery tripped a threshold of three"
+        );
+    }
+
+    /// A different directory at the same path trips it exactly like removal.
+    #[test]
+    fn a_replaced_directory_trips_it_like_a_removed_one() {
+        let expected = (1, 2);
+        let mut c = 0u32;
+        for _ in 0..2 {
+            assert!(!observe_data_dir(expected, Some((1, 99)), &mut c, 3));
+        }
+        assert!(observe_data_dir(expected, Some((1, 99)), &mut c, 3));
     }
 }

@@ -23,12 +23,40 @@ mod webhook;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use futures::FutureExt;
 use tonic::transport::Server;
 use tracing::{error, info};
+
+/// How often the data directory's identity is re-checked (FR-169).
+///
+/// A constant rather than a flag, deliberately. The only argument for making it
+/// configurable is that some filesystem might need a different value, which is a
+/// guess until a real case appears; a parameter is permanent surface, while a
+/// constant can become one at any time. Concept budget: zero.
+const DATA_DIR_CHECK_PERIOD: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Consecutive confirmations before the daemon acts on a vanished data directory.
+///
+/// Three tolerates two transient failures. With the period above, detection lands
+/// within ~15s: far below any human or supervisor reaction time, and long enough
+/// that a paused VM or one slow network round-trip does not end a healthy daemon.
+/// Chosen by argument, not by measurement — there is no population to sample here,
+/// since `stat` on a live local directory does not fail transiently, and demanding
+/// a distribution would have manufactured one.
+const DATA_DIR_CHECK_CONFIRMATIONS: u32 = 3;
+
+/// Set when the vanish watcher initiated shutdown, so `shutdown_reason` can name
+/// the cause instead of reporting the generic one.
+static DATA_DIR_VANISHED: AtomicBool = AtomicBool::new(false);
+
+/// Records that the data directory vanished, for `shutdown_reason`.
+fn set_data_dir_vanished() {
+    DATA_DIR_VANISHED.store(true, Ordering::SeqCst);
+}
 
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::service::system::{clear_worker_stop_signal, worker_stop_signal_path};
@@ -872,6 +900,76 @@ fn main() -> Result<()> {
         // Phase 3a: warn if data_dir has overly permissive permissions.
         check_data_dir_permissions(&inner.data_dir);
 
+        // FR-169: stop being a process that cannot serve anyone.
+        //
+        // A daemon whose data directory is removed underneath it keeps running
+        // indefinitely: its socket went with the directory, so no client can
+        // reach it, and it holds the database open on an unlinked inode. Measured
+        // before this existed — 22h34m in the field, and in an isolated repro it
+        // stayed alive at t+2/5/10/20/30s while writing zero bytes of log.
+        //
+        // The check is on identity rather than path presence because
+        // delete-and-recreate is the worse half: the path reads healthy while the
+        // old daemon writes an orphaned inode and a second daemon takes the name.
+        // See lifecycle::data_dir_identity.
+        //
+        // This does not add an exit path. It triggers `shutdown_notify`, the same
+        // handle the RPC shutdown uses, so there is one shutdown sequence and not
+        // a second one that has to be kept in agreement with it.
+        if let Some(expected_identity) = lifecycle::data_dir_identity(&inner.data_dir) {
+            let watcher_notify = shutdown_notify.clone();
+            let watcher_state = inner.clone();
+            let mut watcher_shutdown = shutdown_rx.clone();
+            let data_dir = inner.data_dir.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(DATA_DIR_CHECK_PERIOD);
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                // Consecutive confirmations. Reset on any match, so a single
+                // transient stat failure cannot end the daemon.
+                let mut confirmations = 0u32;
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            let current = lifecycle::data_dir_identity(&data_dir);
+                            if !lifecycle::observe_data_dir(
+                                expected_identity,
+                                current,
+                                &mut confirmations,
+                                DATA_DIR_CHECK_CONFIRMATIONS,
+                            ) {
+                                continue;
+                            }
+                            // The one line that makes this answerable afterwards.
+                            // Before FR-169 this event produced no output at all.
+                            tracing::error!(
+                                data_dir = %data_dir.display(),
+                                expected_dev = expected_identity.0,
+                                expected_ino = expected_identity.1,
+                                observed = ?current,
+                                confirmations,
+                                "data directory is gone; this daemon can no longer serve \
+                                 anyone and is shutting down"
+                            );
+                            watcher_state.daemon_runtime.request_shutdown();
+                            set_data_dir_vanished();
+                            watcher_notify.notify_waiters();
+                            return;
+                        }
+                        _ = watcher_shutdown.changed() => return,
+                    }
+                }
+            });
+        } else {
+            // Startup already requires the directory; if it cannot be stat'd here
+            // something is wrong enough to say so rather than silently skip the
+            // watcher for the rest of the process's life.
+            tracing::warn!(
+                data_dir = %inner.data_dir.display(),
+                "cannot read the data directory's identity; the vanish watcher is not armed"
+            );
+        }
+
         let uds_policy = uds_security::load_uds_policy(
             &inner.data_dir,
             args.control_plane_dir.as_deref(),
@@ -1115,6 +1213,19 @@ fn main() -> Result<()> {
                     .await;
                 }
                 Ok(_) => {}
+                Err(error) if DATA_DIR_VANISHED.load(Ordering::SeqCst) => {
+                    // The database went with the data directory, so this query
+                    // cannot succeed and its failure carries no new information —
+                    // the watcher already said what happened, at error level. Left
+                    // at warn rather than silenced: "the drain did not run" is
+                    // still a fact about this shutdown. Raising it to error here
+                    // would train readers to skip an error line that is expected
+                    // on the one path where it is guaranteed.
+                    tracing::warn!(
+                        %error,
+                        "skipping the interactive-session drain: the data directory is gone"
+                    );
+                }
                 Err(error) => {
                     error!(%error, "failed to enumerate interactive sessions for shutdown drain");
                 }
@@ -1679,7 +1790,13 @@ fn shutdown_reason(
     state: &InnerState,
     restart_binary: Option<&std::path::PathBuf>,
 ) -> &'static str {
-    if restart_binary.is_some() {
+    if DATA_DIR_VANISHED.load(Ordering::SeqCst) {
+        // Ahead of the other arms on purpose: once the data directory is gone,
+        // `worker_stop_signal_path(state).exists()` is false because the path it
+        // reads is inside that directory, and `shutdown_requested` is true because
+        // the watcher set it. Both of those would name the wrong cause.
+        "data_dir_vanished"
+    } else if restart_binary.is_some() {
         "restart"
     } else if worker_stop_signal_path(state).exists() {
         "external_stop_signal"
