@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 477,
-    "active": 464,
+    "documents": 479,
+    "active": 466,
     "superseded": 13,
-    "withRelatedFr": 324
+    "withRelatedFr": 326
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -533,6 +533,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-167"
+      ]
+    },
+    "docs/design_doc/orchestrator/184-task-delete-reference-disposition.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-168"
       ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
@@ -1932,6 +1938,12 @@
         "FR-167"
       ]
     },
+    "docs/qa/orchestrator/222-task-delete-reference-disposition.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-168"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3069,6 +3081,10 @@
     "FR-167": [
       "docs/design_doc/orchestrator/183-delete-audit-completeness.md",
       "docs/qa/orchestrator/221-delete-audit-completeness.md"
+    ],
+    "FR-168": [
+      "docs/design_doc/orchestrator/184-task-delete-reference-disposition.md",
+      "docs/qa/orchestrator/222-task-delete-reference-disposition.md"
     ]
   },
   "supersedes": {

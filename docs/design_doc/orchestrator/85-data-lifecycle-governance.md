@@ -19,9 +19,11 @@ Logic: query terminal tasks older than N days → walk `{logs_dir}/{task_id}/` �
 
 ### Task Auto-Cleanup (Default Disabled)
 
-Terminated tasks and all associated data (items, runs, events, log files) are auto-deleted after N days. Default 0 (disabled) to avoid surprising users who need post-mortem access. Enable with `--task-retention-days 90`.
+Terminated tasks and all associated data are auto-deleted after N days. Default 0 (disabled) to avoid surprising users who need post-mortem access. Enable with `--task-retention-days 90`.
 
 Reuses existing `delete_task_and_collect_log_paths()` cascade delete.
+
+**Cascade scope.** This document originally scoped the cascade to "items, runs, events, log files", and that was an accurate description of what the routine did — which is why the seven other tables referencing `tasks(id)` refused every delete for as long as they existed. FR-168 widened it, and the scope is no longer a list here: it is derived from the schema on every delete and disposed of by a ruling recorded per reference. Items, runs, events and log files are still removed; beyond them, three tables are deleted with the task and four keep their row with the task reference nulled. A reference nobody has ruled on refuses the delete and names itself. The rulings and their reasons are in [DD-184](184-task-delete-reference-disposition.md); do not re-list them here, because a second copy is a second thing to keep true.
 
 ### DB VACUUM
 

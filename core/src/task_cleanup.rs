@@ -5,16 +5,23 @@
 //! related items, runs, events, and log files.
 
 use crate::async_database::AsyncDatabase;
-use crate::task_repository::AsyncSqliteTaskRepository;
+use crate::task_repository::{AsyncSqliteTaskRepository, TaskDeleteBlocked};
 use anyhow::Result;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, warn};
 
 /// Clean up terminated tasks older than `retention_days`.
 ///
-/// Cascade-deletes task_items, command_runs, events, and physically removes
-/// log files. Returns the number of tasks deleted.
+/// Cascade-deletes task_items, command_runs, events, disposes of every other
+/// reference to the task by the ruling recorded in `task_repository`, and
+/// physically removes log files. Returns the number of tasks deleted.
+///
+/// A task held by a reference with no recorded disposition is skipped whole and
+/// named in the log, and the sweep continues to the next task — the same answer
+/// the trigger history limit gives, because both go through the same routine.
+/// Aborting the batch instead would let one undisposable task stop every later
+/// task in the batch from ever being cleaned up.
 pub async fn cleanup_old_tasks(
     db: &AsyncDatabase,
     logs_dir: &Path,
@@ -42,10 +49,28 @@ pub async fn cleanup_old_tasks(
     }
 
     let mut deleted = 0u64;
+    let mut skipped = 0u64;
     let logs_dir = logs_dir.to_path_buf();
 
     for task_id in &task_ids {
-        let log_paths = repo.delete_task_and_collect_log_paths(task_id).await?;
+        let log_paths = match repo.delete_task_and_collect_log_paths(task_id).await {
+            Ok(log_paths) => log_paths,
+            Err(error) => match error.downcast::<TaskDeleteBlocked>() {
+                Ok(blocked) => {
+                    // Named at `warn!` rather than counted: `skipped=3` is a
+                    // number with no next action, and the table that held the
+                    // task is the fact worth carrying.
+                    warn!(
+                        task_id = %blocked.task_id,
+                        blocked_by = %blocked.blocked_by.join(", "),
+                        "task auto-cleanup skipped a task held by an undisposed reference"
+                    );
+                    skipped += 1;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            },
+        };
 
         // Physically remove log files.
         for path_str in &log_paths {
@@ -64,10 +89,10 @@ pub async fn cleanup_old_tasks(
         deleted += 1;
     }
 
-    if deleted > 0 {
+    if deleted > 0 || skipped > 0 {
         info!(
             tasks = deleted,
-            retention_days, "task auto-cleanup completed"
+            skipped, retention_days, "task auto-cleanup completed"
         );
     }
 
@@ -269,6 +294,124 @@ mod tests {
         assert!(
             !task_log_dir.exists(),
             "task log directory should be removed after cleanup"
+        );
+    }
+
+    /// Adds a table referencing `tasks(id)` that nobody has ruled on, and pins
+    /// `task_id` with it.
+    async fn pin_with_unruled_reference(db: &AsyncDatabase, task_id: &str) {
+        let id = task_id.to_owned();
+        test_support::writer(db)
+            .call(move |conn| {
+                conn.execute_batch(
+                    "CREATE TABLE IF NOT EXISTS later_addition (
+                         id TEXT PRIMARY KEY,
+                         task_id TEXT NOT NULL,
+                         FOREIGN KEY(task_id) REFERENCES tasks(id)
+                     );",
+                )?;
+                conn.execute(
+                    "INSERT INTO later_addition (id, task_id) VALUES (?1, ?1)",
+                    rusqlite::params![id],
+                )?;
+                Ok(())
+            })
+            .await
+            .expect("pin with an unruled reference");
+    }
+
+    /// FR-168: retention disposes of ruled references rather than aborting.
+    ///
+    /// The pinned task is seeded *first* so it is the first row the sweep
+    /// reaches. Before FR-168 the whole batch died on it and the two tasks
+    /// behind it were never cleaned up — and would never have been, on any
+    /// later run either, because the sweep hit the same row every time. The
+    /// ordering is the fixture: with the pinned task last, a sweep that aborts
+    /// and a sweep that skips return the same count.
+    #[tokio::test]
+    async fn retention_skips_the_unruled_and_cleans_the_rest() {
+        let mut ts = TestState::new();
+        let state = ts.build();
+        let logs_dir = tempfile::tempdir().unwrap();
+
+        for tid in ["t-pinned", "t-after-1", "t-after-2"] {
+            insert_task(&state.async_database, tid, "completed").await;
+            age_task(&state.async_database, tid, 30).await;
+        }
+        pin_with_unruled_reference(&state.async_database, "t-pinned").await;
+
+        let deleted = cleanup_old_tasks(&state.async_database, logs_dir.path(), 7, 100)
+            .await
+            .expect("an unruled reference is a retention outcome, not a sweep failure");
+
+        assert_eq!(
+            deleted, 2,
+            "the sweep did not get past the task it could not delete"
+        );
+        assert!(
+            task_exists(&state.async_database, "t-pinned").await,
+            "a task held by an unruled reference was destroyed anyway"
+        );
+        for tid in ["t-after-1", "t-after-2"] {
+            assert!(
+                !task_exists(&state.async_database, tid).await,
+                "{tid} was behind the pinned task and never got cleaned up"
+            );
+        }
+    }
+
+    /// FR-168: retention and an explicit delete give the same answer.
+    ///
+    /// Asserted as *observed behaviour on one fixture* rather than by checking
+    /// that both call the same function. A call-graph assertion passes on two
+    /// paths that share a routine and then disagree about what to do with its
+    /// error, which is exactly the state this FR found.
+    #[tokio::test]
+    async fn retention_and_explicit_delete_agree_on_the_same_fixture() {
+        use orchestrator_persistence::task_repository::AsyncSqliteTaskRepository;
+
+        // Same fixture, twice: once swept by retention, once deleted outright.
+        let mut retention_state = TestState::new();
+        let retention = retention_state.build();
+        let logs_dir = tempfile::tempdir().unwrap();
+        insert_task(&retention.async_database, "t-same", "completed").await;
+        age_task(&retention.async_database, "t-same", 30).await;
+        pin_with_unruled_reference(&retention.async_database, "t-same").await;
+
+        let mut delete_state = TestState::new();
+        let explicit = delete_state.build();
+        insert_task(&explicit.async_database, "t-same", "completed").await;
+        age_task(&explicit.async_database, "t-same", 30).await;
+        pin_with_unruled_reference(&explicit.async_database, "t-same").await;
+
+        cleanup_old_tasks(&retention.async_database, logs_dir.path(), 7, 100)
+            .await
+            .expect("retention treats it as an outcome");
+        let repo = AsyncSqliteTaskRepository::new(explicit.async_database.clone());
+        let explicit_result = repo.delete_task_and_collect_log_paths("t-same").await;
+
+        assert!(
+            task_exists(&retention.async_database, "t-same").await,
+            "retention destroyed a task held by an unruled reference"
+        );
+        assert!(
+            explicit_result.is_err(),
+            "an explicit delete destroyed what retention refused to touch"
+        );
+        assert!(
+            task_exists(&explicit.async_database, "t-same").await,
+            "the refused explicit delete removed the task anyway"
+        );
+
+        // The disagreement that would matter is one path succeeding where the
+        // other refuses. Both left the task standing, on the same fixture.
+        assert!(
+            explicit_result
+                .as_ref()
+                .err()
+                .map(|e| e.to_string().contains("later_addition.task_id"))
+                .unwrap_or(false),
+            "the explicit refusal did not name the reference: {explicit_result:?}"
         );
     }
 }

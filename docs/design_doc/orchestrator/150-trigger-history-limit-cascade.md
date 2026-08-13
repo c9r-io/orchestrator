@@ -225,18 +225,22 @@ now asserted directly against the connection: what is pinned is the reason the A
 
 ## Known limits
 
-- **`task_cleanup.rs` and `delete_task_impl` have the same defect, and this FR does not fix it.**
-  Both route through `items.rs`, which clears one of the eight blocking references. Any task that
-  used a handoff, a resume plan, or source ingest cannot be removed by retention cleanup or by
-  `orchestrator task delete`; the delete fails with `FOREIGN KEY constraint failed`. Extending the
-  cascade is a separate decision with a wider blast radius — it changes what an operator's explicit
-  `task delete` destroys — and FR-142's non-goal 3 excluded it. Recorded here and in the CHANGELOG
-  rather than left to be rediscovered, because it is a defect found by this work and not repaired
-  by it. The FR's characterisation of that path as "the correct one" is withdrawn.
-- **No test asserts which of the seven occur for real trigger tasks.** The skip path is asserted
-  with `resume_plans` because it is the cheapest to seed. Whether cron-fired tasks ever accumulate
-  handoff or source rows in practice is exactly what the skip log exists to measure, and it has not
-  been measured yet.
+- ~~**`task_cleanup.rs` and `delete_task_impl` have the same defect, and this FR does not fix it.**~~
+  **Closed by FR-168** ([DD-184](184-task-delete-reference-disposition.md)). The limit read: both
+  route through `items.rs`, which clears one of the eight blocking references, so any task that
+  used a handoff, a resume plan, or source ingest could be removed by neither retention cleanup nor
+  `orchestrator task delete`, failing with `FOREIGN KEY constraint failed`. Extending the cascade
+  was correctly identified here as a separate decision with a wider blast radius; FR-168 is that
+  decision, and it rules on all seven. Two things this entry got right are worth keeping: the
+  attribution belonged in the shared routine rather than beside one caller, and the wider blast
+  radius was real — the ruling had to be made per table, and three of the seven turned out to want
+  the opposite answer from the other four.
+- ~~**No test asserts which of the seven occur for real trigger tasks.**~~ Superseded rather than
+  closed. FR-168 derived, per column, the production statement that writes each task reference —
+  three of the seven acquire it by `UPDATE` rather than `INSERT`, and one writes it to a column
+  that is not the foreign key at all — so all seven are reachable. What is still unmeasured is the
+  *frequency*: which of them a cron-fired task accumulates in practice. That question lost most of
+  its force with the ruling, because all seven are now disposed of rather than refusing.
 - **Log file unlinking is best-effort and unasserted.** `cleanup_history` unlinks the returned
   paths and ignores failures, matching `task_cleanup`. The paths are asserted to come back from the
   sweep; that they are then removed from disk is not, and a path that fails to unlink leaves an

@@ -15,6 +15,8 @@ mod items;
 /// paths, maintenance jobs, tests asserting against a specific connection —
 /// need them without going back through the pool.
 pub mod queries;
+/// What happens to rows referencing a task when the task is deleted.
+pub mod references;
 /// Connection-level task and item state transitions, including the recovery
 /// passes that run at daemon start.
 ///
@@ -29,6 +31,10 @@ mod write_ops;
 pub use command_run::NewCommandRun;
 pub use creation::{NewTaskRow, insert_task_with_items, reset_task_item};
 pub(crate) use items::delete_task_and_collect_log_paths;
+pub use references::{
+    Disposition, TaskDeleteBlocked, blocking_references, disposition_for, recorded_dispositions,
+    references_holding,
+};
 pub use trait_def::{
     CommandRunRepository, EventRepository, TaskGraphRepository, TaskItemMutRepository,
     TaskItemQueryRepository, TaskQueryRepository, TaskRepository, TaskStateRepository,
@@ -43,6 +49,42 @@ use crate::async_database::{AsyncDatabase, flatten_err};
 use crate::dto::{CommandRunDto, EventDto, TaskGraphDebugBundle, TaskItemDto};
 use anyhow::Result;
 use std::sync::Arc;
+
+/// Carries an `anyhow::Error` across the worker boundary without flattening it.
+///
+/// `tokio_rusqlite::Error::Other` holds a `Box<dyn Error>`, and converting an
+/// `anyhow::Error` into that box **discards the concrete type**: the message
+/// survives and `downcast` afterwards fails. Measured, not assumed — a boxed
+/// `TaskDeleteBlocked` comes back out as something that still prints correctly
+/// and no longer downcasts.
+///
+/// Every caller of the delete path decides what to do by asking *whether* the
+/// refusal was a blocking reference: a retention sweep records a skip, an
+/// operator command prints a diagnostic, anything else propagates. The only
+/// alternative to keeping the type is matching on message text, which is the
+/// failure this repository keeps finding in its own postmortems.
+#[derive(Debug)]
+struct CarriedError(anyhow::Error);
+
+impl std::fmt::Display for CarriedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for CarriedError {}
+
+/// Flattens a worker error, keeping anything sent through [`CarriedError`]
+/// intact — including its downcast target and any context attached to it.
+fn recover_carried(err: tokio_rusqlite::Error) -> anyhow::Error {
+    match err {
+        tokio_rusqlite::Error::Other(inner) => match inner.downcast::<CarriedError>() {
+            Ok(carried) => carried.0,
+            Err(inner) => flatten_err(tokio_rusqlite::Error::Other(inner)),
+        },
+        other => flatten_err(other),
+    }
+}
 
 /// Tuple returned by detail queries: items, runs, events, and graph bundles.
 pub type TaskDetailRows = (
@@ -706,6 +748,38 @@ impl AsyncSqliteTaskRepository {
             .map_err(flatten_err)
     }
 
+    /// References with no recorded disposition that would refuse a delete of
+    /// `task_id`, in schema order. Empty means the delete would not be refused
+    /// for that reason.
+    ///
+    /// Read-only, and offered so a caller can find out *before* taking an
+    /// action it cannot undo. `delete_task` stops the task's runtime first, and
+    /// a delete that is then refused would leave the task stopped for nothing.
+    /// This does not make the delete itself conditional on an earlier read —
+    /// the delete re-checks under its own transaction and is the authority.
+    pub async fn references_blocking_delete(&self, task_id: &str) -> Result<Vec<String>> {
+        let task_id = task_id.to_owned();
+        self.async_db
+            .reader()
+            .call(move |conn| {
+                (|| -> Result<Vec<String>> {
+                    let refs = references::blocking_references(conn)?;
+                    let holding = references::references_holding(conn, &refs, &task_id)?;
+                    Ok(holding
+                        .into_iter()
+                        .filter(|held| {
+                            let (table, column) = held.split_once('.').unwrap_or((held, ""));
+                            references::disposition_for(table, column)
+                                == references::Disposition::BlockAndReport
+                        })
+                        .collect())
+                })()
+                .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+            })
+            .await
+            .map_err(flatten_err)
+    }
+
     /// Deletes a task and returns log paths that should be removed.
     pub async fn delete_task_and_collect_log_paths(&self, task_id: &str) -> Result<Vec<String>> {
         let task_id = task_id.to_owned();
@@ -713,10 +787,10 @@ impl AsyncSqliteTaskRepository {
             .writer()
             .call(move |conn| {
                 items::delete_task_and_collect_log_paths(conn, &task_id)
-                    .map_err(|e| tokio_rusqlite::Error::Other(e.into()))
+                    .map_err(|e| tokio_rusqlite::Error::Other(Box::new(CarriedError(e))))
             })
             .await
-            .map_err(flatten_err)
+            .map_err(recover_carried)
     }
 
     /// Inserts a command-run record.
