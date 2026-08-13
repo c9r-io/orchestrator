@@ -9,7 +9,7 @@ self_referential_safe: true
 **Module**: Orchestrator
 **Scope**: Unconditional delete auditing, per-kind action naming, enforced-mode conformance, the
 generic name for kinds outside the enum, and the kind-dispatch defects the behavioural tests exposed
-**Scenarios**: 8
+**Scenarios**: 5
 **Priority**: High
 
 ## Background
@@ -55,21 +55,23 @@ structural blindness FR-164 found in its `apply`.
 
 ---
 
-## Scenario 1: Envelope-less Mutating Delete Is Audited
+## Scenario 1: A Mutating Delete Is Audited, Envelope Or Not
 
-### Steps
+### Part A: Envelope-less Delete Is Audited
+
+#### Steps
 
 1. Run `cargo test -p orchestratord resource_delete_audit_tests::envelope_less_secret_store_delete_is_audited`.
 2. Inspect the assertion target: `control_action_audit`, via `AsyncActionAuditRepository::list`.
 
-### Expected
+#### Expected
 
 - Exactly one row with `action` = `resource.secret_store.delete`, `target_type` = `secret_store`,
   `target_id` = `secretstore/fr167-store`.
 - `reason_code` = `legacy_client` — the envelope-less client is recorded, not dropped.
 - `status` = `succeeded`.
 
-### Negative Fixture
+#### Negative Fixture
 
 Restore the pre-FR-167 guard, expressed against the resolved kind so it still compiles:
 
@@ -81,21 +83,21 @@ let attempt = if force_references
 **Measured**: five tests fail. This scenario reports `left: 0, right: 1` with "envelope-less
 SecretStore delete must leave exactly one named audit row". The kind sweep fails on
 `resource.trigger.delete` — the *first* kind in reverse order — which is what distinguishes this
-fixture's log from Scenario 5's.
+fixture's log from Scenario 4's.
 
 ---
 
-## Scenario 2: An Enveloped Delete Keeps The Client's Envelope
+### Part B: An Enveloped Delete Keeps The Client's Envelope
 
-This is the branch that has no counterpart in FR-164 and was red before this FR.
+The branch that has no counterpart in FR-164 and was red before this FR.
 
-### Steps
+#### Steps
 
 1. Run `cargo test -p orchestratord resource_delete_audit_tests::enveloped_delete_preserves_the_clients_reason_code`.
 2. The test passes `reason_code: operator_resource_delete`, an operator reason, and an idempotency
    key.
 
-### Expected
+#### Expected
 
 - One row whose `reason_code` is `operator_resource_delete` — **not** `legacy_client`.
 - `operator_reason` and `idempotency_key` are the client's, unmodified.
@@ -107,7 +109,7 @@ that audited unconditionally while ignoring the context it would return one row 
 
 ---
 
-## Scenario 3: Dry Run Stays Unaudited
+## Scenario 2: Dry Run Stays Unaudited
 
 ### Steps
 
@@ -126,7 +128,7 @@ nothing to do with delete.
 
 ---
 
-## Scenario 4: Enforced Mode Rejects An Envelope-less Delete
+## Scenario 3: Enforced Mode Rejects An Envelope-less Delete
 
 ### Steps
 
@@ -154,14 +156,16 @@ reproduced.
 
 ---
 
-## Scenario 5: Every ResourceKind Records Its Own Delete Action
+## Scenario 4: Every ResourceKind Records Its Own Delete Action
 
-### Steps
+### Part A: The Twelve Kinds
+
+#### Steps
 
 1. Run `cargo test -p orchestratord resource_delete_audit_tests::every_resource_kind_records_its_named_delete_action`.
 2. Run `cargo test -p orchestratord delete_action_naming`.
 
-### Expected
+#### Expected
 
 - Twelve kinds applied, then deleted in reverse dependency order, each recording exactly one row
   with its own `action` and `target_type`, `reason_code` = `legacy_client`.
@@ -169,7 +173,7 @@ reproduced.
   the two Source kinds.
 - Eleven rows read `status = succeeded`. **RuntimePolicy reads `status = failed`** — see below.
 
-### The RuntimePolicy Asymmetry
+#### The RuntimePolicy Asymmetry
 
 `RuntimePolicy` is not deletable. `canonical_project_kind` has no arm for it, because there is no
 `ProjectConfig` map to remove it from, so the delete fails with
@@ -180,7 +184,7 @@ This is asserted rather than skipped. An attempt to delete a project's runtime p
 the thing an audit trail exists to record, and a scenario that quietly exercised eleven kinds while
 claiming twelve would be §4.4 shape 2 applied to its own coverage.
 
-### How The Set Is Derived
+#### How The Set Is Derived
 
 `delete_action` and `resource_target_type` are exhaustive matches with **no `_` arm**, so a
 thirteenth `ResourceKind` variant fails to compile rather than silently inheriting
@@ -188,7 +192,7 @@ thirteenth `ResourceKind` variant fails to compile rather than silently inheriti
 `agent_orchestrator::resource::ALL_RESOURCE_KINDS` rather than against the literal 12, and that
 constant is itself guarded by `all_resource_kinds_covers_every_variant`.
 
-### Negative Fixture
+#### Negative Fixture
 
 Collapse one arm to the generic name — `ResourceKind::SecretStore => "resource.delete"`. Chosen over
 deleting the function because a half-reverted match is the realistic regression, not a missing
@@ -203,13 +207,13 @@ whose sweep failure names `resource.trigger.delete` instead, so the log says whi
 
 ---
 
-## Scenario 6: Kinds Outside The Enum Record The Generic Action
+### Part B: Kinds Outside The Enum Record The Generic Action
 
-### Steps
+#### Steps
 
 1. Run `cargo test -p orchestratord resource_delete_audit_tests::crd_and_custom_resource_deletes_record_the_generic_action`.
 
-### Expected
+#### Expected
 
 - A CRD-defined custom resource and the CRD itself are both deleted and both record `action` =
   `resource.delete`, `target_type` = `resource_manifest`, `status` = `succeeded`.
@@ -222,15 +226,17 @@ single builtin descriptor records `resource.apply` / `resource_manifest`.
 
 ---
 
-## Scenario 7: The Shipped Cleanup Action Does Not Regress
+## Scenario 5: The Shipped Cleanup Action And The CLI Envelope Do Not Regress
 
-### Steps
+### Part A: `delete_references` Stays Alone
+
+#### Steps
 
 1. Run `cargo test -p orchestratord resource_delete_audit_tests::force_references_still_records_delete_references_alone`.
 2. Run `./scripts/qa/test-source-task-binding.sh` — its own `source.binding.delete` assertion is
    independent of this FR's tests and was left untouched.
 
-### Expected
+#### Expected
 
 - A `--force-references` SourceTaskTemplate delete records exactly one `delete_references` row with
   `target_type` = `source_task_template` and `reason_code` = `operator_force_reference_cleanup`.
@@ -242,14 +248,14 @@ bare "`delete_references` exists" check while doubling every cleanup in the audi
 
 ---
 
-## Scenario 8: The CLI's Envelope Reaches The Row
+### Part B: The CLI's Envelope Reaches The Row
 
-### Steps
+#### Steps
 
 1. Run `cargo test -p orchestrator-cli resource_delete_envelope_tests`.
 2. Run `./scripts/qa/test-expert-resources-governed-editing.sh`.
 
-### Expected
+#### Expected
 
 From the unit tests, on the request actually constructed:
 
@@ -273,7 +279,7 @@ Before this FR the CLI sent the force-references `operator_reason` on every dele
 delete SourceTaskTemplate binding references" — which cost nothing while the daemon discarded it
 and would have been persisted as the operator's stated reason on every plain delete afterwards.
 
-### Negative Fixture
+#### Negative Fixture
 
 Comment the envelope out rather than deleting it, and set `audit: None`:
 
@@ -294,24 +300,27 @@ request actually constructed.
 
 ## Checklist
 
-- [ ] 场景 1：无信封 SecretStore delete 在 `control_action_audit`（点名该表）留下
+- [ ] 场景 1A：无信封 SecretStore delete 在 `control_action_audit`（点名该表）留下
       `resource.secret_store.delete` / `legacy_client` 行
-- [ ] 场景 2：**携带信封**的普通 delete 记下客户端自己的 `reason_code`
+- [ ] 场景 1B：**携带信封**的普通 delete 记下客户端自己的 `reason_code`
       （`operator_resource_delete`，非 `legacy_client`）、operator_reason 与幂等键
-- [ ] 场景 3：dry-run delete 不预留信封（与 seed 后基线比对，非与零比对）
-- [ ] 场景 4：`enforced` + 无信封 delete 被拒，断言诊断串 `action audit context is required`；
+- [ ] 场景 2：dry-run delete 不预留信封（与 seed 后基线比对，非与零比对）
+- [ ] 场景 3：`enforced` + 无信封 delete 被拒，断言诊断串 `action audit context is required`；
       随后带信封的同一删除成功
-- [ ] 场景 5：12 个 kind 各记一行具名动作；11 行 `succeeded`，RuntimePolicy 一行 `failed`
+- [ ] 场景 4A：12 个 kind 各记一行具名动作；11 行 `succeeded`，RuntimePolicy 一行 `failed`
       且诊断点名 `runtimepolicy`；`delete_action_naming` 五项全绿
-- [ ] 场景 6：CRD 与自定义资源删除记 `resource.delete` / `resource_manifest`，且仍带 target_id
-- [ ] 场景 7：`delete_references` 单行不回归，且**不**同时记 `source.template.delete`；
+- [ ] 场景 4B：CRD 与自定义资源删除记 `resource.delete` / `resource_manifest`，且仍带 target_id
+- [ ] 场景 5A：`delete_references` 单行不回归，且**不**同时记 `source.template.delete`；
       `test-source-task-binding.sh` 重跑全绿
-- [ ] 场景 8：`resource_delete_envelope_tests` 三项全绿；治理编辑 gate 中 CLI 删除留下
+- [ ] 场景 5B：`resource_delete_envelope_tests` 三项全绿；治理编辑 gate 中 CLI 删除留下
       `operator_resource_delete` 行，且资源确实消失
 - [ ] 三个负夹具各自实测目击红，且诊断互不相同（恢复旧守卫 / 塌回通用名 / 注释掉 CLI 信封——
       第三个同时验证 `grep -c` 仍返回 2）
 - [ ] `cargo test --workspace`、`cargo clippy --workspace --all-targets -- -D warnings`、
       `cargo fmt --all -- --check` 三项退出码直取为 0
+- [ ] GUI 套件须在 `gui/package.json` 声明的 `>=22 <26` 内运行。Node 26 下 12 个与本 FR
+      无关的用例因 jsdom 无 `localStorage` 而红，`coverage-governance.sh` 跑该套件故一并红；
+      Node 24.19.0 下实测 26 文件 126 用例全绿
 
 ## Known Limits
 
