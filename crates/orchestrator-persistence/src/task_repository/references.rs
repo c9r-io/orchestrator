@@ -131,7 +131,13 @@ pub fn recorded_dispositions() -> &'static [(&'static str, &'static str, Disposi
 /// in this list on its own. That is the point: a hand-written list of the
 /// seven would be correct today and silently short by one the next time
 /// somebody adds a table, which is the shape this repository keeps finding.
-pub fn blocking_references(conn: &Connection) -> Result<Vec<(String, String)>> {
+///
+/// Deliberately `pub(crate)`: it takes a `Connection`, and FR-141 governs how
+/// many public items of this crate demand a driver type — the reviewed count is
+/// zero. The assertions that need the raw derivation are unit tests below
+/// rather than integration tests, which would have required widening that
+/// boundary to reach them.
+pub(crate) fn blocking_references(conn: &Connection) -> Result<Vec<(String, String)>> {
     let mut stmt = conn.prepare(
         r#"SELECT m.name, f."from"
              FROM sqlite_master m
@@ -149,7 +155,9 @@ pub fn blocking_references(conn: &Connection) -> Result<Vec<(String, String)>> {
 }
 
 /// Which of `references` currently hold a row naming `task_id`.
-pub fn references_holding(
+///
+/// `pub(crate)` for the same reason as [`blocking_references`].
+pub(crate) fn references_holding(
     conn: &Connection,
     references: &[(String, String)],
     task_id: &str,
@@ -204,3 +212,118 @@ impl std::fmt::Display for TaskDeleteBlocked {
 }
 
 impl std::error::Error for TaskDeleteBlocked {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::PersistenceBootstrap;
+    use crate::test_support::open_conn;
+
+    /// A bootstrapped database, schema identical to production's.
+    fn schema_conn(dir: &std::path::Path) -> Connection {
+        let db_path = dir.join("references.db");
+        PersistenceBootstrap::ensure_current(&db_path).expect("bootstrap the schema");
+        open_conn(&db_path).expect("open database")
+    }
+
+    /// The blocking set is derived from the schema, so a table added after this
+    /// code was written appears in it with nothing edited.
+    ///
+    /// That derivation is the line between this design and a hand-written list
+    /// of the seven, and it cannot be asserted by naming an existing table: the
+    /// live ones are all ruled on, and a fixture naming one would break the day
+    /// somebody ruled differently. The table is created here instead.
+    #[test]
+    fn a_table_added_later_appears_in_the_blocking_set() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let conn = schema_conn(temp.path());
+
+        let before = blocking_references(&conn).expect("derive before");
+        assert!(
+            !before.iter().any(|(t, _)| t == "later_addition"),
+            "the fixture table already existed, so this proves nothing"
+        );
+
+        conn.execute_batch(
+            "CREATE TABLE later_addition (
+                 id TEXT PRIMARY KEY,
+                 task_id TEXT NOT NULL,
+                 FOREIGN KEY(task_id) REFERENCES tasks(id)
+             );",
+        )
+        .expect("add a table");
+
+        let after = blocking_references(&conn).expect("derive after");
+        assert!(
+            after
+                .iter()
+                .any(|(t, c)| t == "later_addition" && c == "task_id"),
+            "a table added after this code was written did not appear in the derived \
+             blocking set: {after:?}"
+        );
+        // And it is unruled, so it refuses rather than being silently disposed of.
+        assert_eq!(
+            disposition_for("later_addition", "task_id"),
+            Disposition::BlockAndReport
+        );
+    }
+
+    /// A cascading reference is not a blocker and must not be reported as one.
+    ///
+    /// The mutation this guards is dropping the `on_delete` filter from the
+    /// query, which would name `task_graph_runs` — a table that has never
+    /// refused anything — and send the next reader after the wrong thing.
+    #[test]
+    fn a_cascading_reference_is_not_a_blocker() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let conn = schema_conn(temp.path());
+        let refs = blocking_references(&conn).expect("derive the blocking set");
+        for cascading in ["task_graph_runs", "task_graph_snapshots"] {
+            assert!(
+                !refs.iter().any(|(t, _)| t == cascading),
+                "{cascading} declares ON DELETE CASCADE and never refuses a delete, \
+                 but it was reported as a blocker: {refs:?}"
+            );
+        }
+        // `task_items` is cleared by the cascade itself and is likewise not a blocker.
+        assert!(!refs.iter().any(|(t, _)| t == "task_items"));
+    }
+
+    /// Every ruling names a live reference, and every live reference is ruled on.
+    ///
+    /// A ruling whose table or column was renamed or dropped matches nothing: it
+    /// changes no behaviour, produces no diagnostic and appears in no log, while
+    /// the reference it governed silently reverts to refusing every delete.
+    /// `disposition_for` cannot notice — it returns the fail-closed default and
+    /// cannot tell "nobody ruled on this" from "somebody ruled on a name that no
+    /// longer exists". This is the check that can.
+    #[test]
+    fn the_ruling_and_the_live_schema_agree_in_both_directions() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let conn = schema_conn(temp.path());
+        let live = blocking_references(&conn).expect("derive the blocking set");
+
+        for (table, column, _) in recorded_dispositions() {
+            assert!(
+                live.iter().any(|(t, c)| t == table && c == column),
+                "a ruling names {table}.{column}, which is not a blocking reference in the \
+                 live schema. Either it was renamed or dropped and this entry is dead, or it \
+                 gained a cascade and the ruling is now a second opinion. Both are silent."
+            );
+        }
+
+        // The converse is allowed to fail when somebody adds a table — that is
+        // the design — but it should fail here rather than in front of an
+        // operator whose delete stopped working.
+        for (table, column) in &live {
+            assert_ne!(
+                disposition_for(table, column),
+                Disposition::BlockAndReport,
+                "{table}.{column} references tasks(id) with no cascade and nobody has ruled \
+                 on it. Deletes of any task it holds now refuse and name it, which is the \
+                 intended fail-closed behaviour — but the ruling is what closes it. See \
+                 docs/design_doc/orchestrator/184-task-delete-reference-disposition.md."
+            );
+        }
+    }
+}

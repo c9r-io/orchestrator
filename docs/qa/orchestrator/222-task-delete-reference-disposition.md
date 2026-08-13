@@ -42,7 +42,8 @@ registered migration chain production runs.
 Primary entry points:
 
 ```bash
-cargo test -p orchestrator-persistence --test task_delete_disposition   # 7 tests
+cargo test -p orchestrator-persistence --test task_delete_disposition   # 6 tests
+cargo test -p orchestrator-persistence --lib references                 # 3 tests
 cargo test -p orchestrator-persistence --test round_trip                # 20 tests
 cargo test -p agent-orchestrator --lib task_cleanup                     # 9 tests
 cargo test -p agent-orchestrator --lib history_cleanup_visibility
@@ -97,8 +98,8 @@ cargo test -p orchestrator-persistence --test task_delete_disposition \
   the_recorded_map_is_the_ruling
 cargo test -p orchestrator-persistence --test task_delete_disposition \
   each_ruling_matches_the_nullability_that_justified_it
-cargo test -p orchestrator-persistence --test task_delete_disposition \
-  no_ruling_names_a_reference_that_no_longer_exists
+cargo test -p orchestrator-persistence --lib \
+  task_repository::references::tests::the_ruling_and_the_live_schema_agree_in_both_directions
 ```
 
 **Expected result**
@@ -144,10 +145,18 @@ stopping it is observable.
 
 **Expected result**
 
-Passes. The table appears in `blocking_references()` without anything being told about it; the
-delete fails with a `TaskDeleteBlocked` naming `later_addition.task_id`; the rendered message
+Passes. The delete fails with a `TaskDeleteBlocked` naming `later_addition.task_id`; the rendered
+message
 contains that string; and both the task and the pinning row are still present, because the refusal
 happens before anything is mutated rather than being rolled back after.
+
+That the table lands in the derived blocking set at all is asserted separately, by
+`references::tests::a_table_added_later_appears_in_the_blocking_set` — a **unit** test, because
+`blocking_references` takes a `Connection` and stays `pub(crate)`: FR-141 governs how many public
+items of this crate demand a driver type, and the reviewed count is zero. Reaching it from an
+integration test would have widened that boundary to reach a test, which is the wrong trade. A
+companion unit test asserts the converse, that the cascading `task_graph_runs` and
+`task_graph_snapshots` are *not* reported as blockers.
 
 The table is created rather than named from the schema on purpose. No table in the tree is
 currently unruled, so a fixture naming one would break the moment somebody ruled on it. Creating

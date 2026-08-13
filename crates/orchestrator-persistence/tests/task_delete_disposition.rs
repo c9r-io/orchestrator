@@ -14,8 +14,8 @@
 use orchestrator_persistence::async_database::AsyncDatabase;
 use orchestrator_persistence::schema::PersistenceBootstrap;
 use orchestrator_persistence::task_repository::{
-    AsyncSqliteTaskRepository, Disposition, TaskDeleteBlocked, blocking_references,
-    disposition_for, recorded_dispositions,
+    AsyncSqliteTaskRepository, Disposition, TaskDeleteBlocked, disposition_for,
+    recorded_dispositions,
 };
 use orchestrator_persistence::test_support::open_conn;
 use std::sync::Arc;
@@ -299,13 +299,11 @@ async fn an_unruled_reference_refuses_the_delete_and_names_itself() {
     )
     .expect("add a table nobody has ruled on");
 
-    // It is in the derived blocking set without anything being told about it.
-    let refs = blocking_references(&conn).expect("derive the blocking set");
-    assert!(
-        refs.iter()
-            .any(|(t, c)| t == "later_addition" && c == "task_id"),
-        "a table added after the fact did not appear in the derived blocking set: {refs:?}"
-    );
+    // That the table lands in the derived blocking set at all is asserted by
+    // `references::tests::a_table_added_later_appears_in_the_blocking_set`,
+    // inside the crate: the derivation helper takes a `Connection` and stays
+    // `pub(crate)` so this crate's public API keeps demanding no driver type
+    // (FR-141). What is asserted here is the consequence an operator sees.
 
     let repo = AsyncSqliteTaskRepository::new(Arc::new(db.clone()));
     let error = repo
@@ -430,44 +428,4 @@ async fn no_event_outlives_the_task_it_names() {
         1,
         "the delete took events belonging to a task it was not asked about"
     );
-}
-
-/// Every recorded ruling names a reference that exists in the live schema.
-///
-/// A ruling whose table or column has been renamed or dropped matches nothing.
-/// It changes no behaviour, produces no diagnostic and appears in no log, while
-/// the reference it was meant to govern silently reverts to refusing every
-/// delete. Nothing in the map's own lookup can notice — the lookup returns the
-/// fail-closed default and cannot tell "nobody ruled on this" from "somebody
-/// ruled on a name that no longer exists". This is the check that can.
-#[tokio::test]
-async fn no_ruling_names_a_reference_that_no_longer_exists() {
-    let temp = tempfile::tempdir().expect("temp dir");
-    let (conn, _db) = fixture(temp.path()).await;
-    let live = blocking_references(&conn).expect("derive the blocking set");
-
-    for (table, column, _) in recorded_dispositions() {
-        assert!(
-            live.iter().any(|(t, c)| t == table && c == column),
-            "a ruling names {table}.{column}, which is not a blocking reference in the live \
-             schema. Either it was renamed or dropped and this entry is dead, or it gained a \
-             cascade and the ruling is now a second opinion. Both are silent by default."
-        );
-    }
-
-    // And the converse: every live reference has a ruling, so the fail-closed
-    // default is currently unreached in production. This is allowed to fail
-    // when somebody adds a table — that is the design — but it should fail
-    // loudly here rather than being discovered by an operator whose delete
-    // stopped working.
-    for (table, column) in &live {
-        assert_ne!(
-            disposition_for(table, column),
-            Disposition::BlockAndReport,
-            "{table}.{column} references tasks(id) with no cascade and nobody has ruled on it. \
-             Deletes of any task it holds now refuse and name it, which is the intended \
-             fail-closed behaviour — but the ruling is what closes it. See \
-             docs/design_doc/orchestrator/184-task-delete-reference-disposition.md."
-        );
-    }
 }

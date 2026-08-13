@@ -31,10 +31,7 @@ mod write_ops;
 pub use command_run::NewCommandRun;
 pub use creation::{NewTaskRow, insert_task_with_items, reset_task_item};
 pub(crate) use items::delete_task_and_collect_log_paths;
-pub use references::{
-    Disposition, TaskDeleteBlocked, blocking_references, disposition_for, recorded_dispositions,
-    references_holding,
-};
+pub use references::{Disposition, TaskDeleteBlocked, disposition_for, recorded_dispositions};
 pub use trait_def::{
     CommandRunRepository, EventRepository, TaskGraphRepository, TaskItemMutRepository,
     TaskItemQueryRepository, TaskQueryRepository, TaskRepository, TaskStateRepository,

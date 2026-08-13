@@ -323,12 +323,12 @@
     "crates/orchestrator-persistence/src/task_repository/items.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 2,
-      "sql": 11,
+      "sql": 13,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/mod.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 46,
+      "rusqlite": 50,
       "sql": 0,
       "category": "persistence-layer"
     },
@@ -336,6 +336,12 @@
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 4,
       "sql": 28,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/references.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 1,
+      "sql": 2,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/state.rs": {
@@ -359,7 +365,7 @@
     "crates/orchestrator-persistence/src/trigger_state.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 7,
-      "sql": 8,
+      "sql": 6,
       "category": "persistence-layer"
     },
     "crates/orchestrator-security/src/lib.rs": {
@@ -401,8 +407,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 39,
-    "rusqlite": 207,
-    "sql": 601
+    "referencedFiles": 40,
+    "rusqlite": 212,
+    "sql": 603
   }
 }

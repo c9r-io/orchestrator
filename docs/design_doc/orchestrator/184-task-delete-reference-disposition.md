@@ -129,6 +129,12 @@ returns. Two derivations of one fact are two things to keep in agreement.
   any error, so one undeletable task stopped every task behind it from ever being
   cleaned up — on that run and on every later run, because the sweep reached the same
   row each time.
+- `blocking_references` and `references_holding` are `pub(crate)`, not `pub`. They
+  take a `Connection`, and FR-141 governs how many public items of this crate demand
+  a driver type — the reviewed count is zero, and the first version of this work took
+  it to two purely so an integration test could reach the derivation. The assertions
+  that need it are unit tests instead. A governed boundary is not a thing to widen for
+  a test's convenience; the ledger caught it, which is what the ledger is for.
 - The typed error had to be carried across the worker boundary deliberately.
   `tokio_rusqlite::Error::Other` holds a `Box<dyn Error>`, and converting an
   `anyhow::Error` into that box **discards the concrete type**: the message survives and
