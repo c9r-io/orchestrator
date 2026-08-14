@@ -128,6 +128,35 @@ the next start reclaims it and binds successfully, with a **different** socket i
 The inode comparison is what distinguishes "the stale socket was removed and rebound"
 from "the stale socket was reused"; an existence check cannot tell those apart.
 
+## Checklist
+
+- [ ] Scenario 1: after the predecessor exits, the socket is present with **the same
+      inode** recorded during the overlap, and the pidfile still names the successor
+- [ ] Scenario 1: `daemon status` names the successor and a real RPC through that
+      socket succeeds — the file existing is not the service answering
+- [ ] Scenario 1: the `mv` route reaches the same end state as `rm -rf`
+- [ ] Scenario 2: a third daemon is refused with `another orchestratord is already
+      running (PID <B>)` — the string and the PID, not the exit code
+- [ ] Scenario 3: a clean SIGTERM stop removes both the socket and the pidfile
+- [ ] Scenario 4: SIGKILL leaves both behind, and the next start binds a socket with a
+      **different** inode
+- [ ] Scenarios 1 and 3 give identical verdicts under `--foreground` and daemonize
+- [ ] The gate reports a verdict, not a truncated run: the summary line is present
+
+## Mutation Evidence
+
+| Mutation | Caught by | Diagnostic |
+|---|---|---|
+| restore the pre-FR-170 unconditional `cleanup` (both `remove_file` calls unguarded) | Scenarios 1 and 2, in all four form/route combinations — **16 named failures**, while Scenarios 3 and 4 stay green | `socket inode was <N> during the overlap, now <gone>`; `pidfile should name <PID>, reads <gone>`; `daemon status did not name <PID>; got: orchestratord is not running` |
+| `cleanup` that removes nothing at all | Scenario 3 only | `a clean stop left socket=present pidfile=present` |
+| pidfile ownership checked by inode instead of contents | unit `cleanup_leaves_a_pid_file_naming_another_process` | the fixture overwrites in place, so the inode is unchanged and an identity check deletes a successor's pidfile |
+
+Scenarios 3 and 4 staying green under the first mutation is the evidence that they
+guard the opposite direction — an over-strict ownership check — rather than
+duplicating their neighbours. The first mutation was also run to confirm the gate
+produces a **verdict** and not an abort: an earlier revision of it exited before the
+summary line, which is a truncated run and not a red one.
+
 ## Known limits
 
 - **A daemonized predecessor cannot explain itself after `rm -rf`.** It redirects its
