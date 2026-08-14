@@ -126,14 +126,25 @@ Found by running the probe, not by reading the diff.
 
 - **The split-brain window is bounded, not closed.** Between the recreate and the
   old daemon's exit (~15s) a second daemon can start, and for that window both are
-  alive. Closing it requires fixing the singleton guard, which is deliberately a
-  separate FR — **now filed as FR-170**: `detect_running_daemon` keeps its evidence
-  inside the directory whose loss it must survive, and the alternatives (an flock,
-  the socket, state outside `data_dir`) each have consequences this FR did not
-  fund. Note the chain is three links, not one: the socket cannot stand in for the
-  pidfile either, because `main.rs` unconditionally removes any existing socket
-  before binding — the socket is guarded by the pidfile, the pidfile by the data
-  directory, and the data directory by nothing.
+  alive. The singleton guard keeps its evidence inside the directory whose loss it
+  must survive, and the chain is three links, not one: the socket cannot stand in
+  for the pidfile either, because `main.rs` unconditionally removes any existing
+  socket before binding — the socket is guarded by the pidfile, the pidfile by the
+  data directory, and the data directory by nothing.
+
+  **Correction (FR-170, measured after this document was written).** The sentence
+  above understated the residue, and the understatement mattered. The window was
+  not merely a period during which two daemons coexist: at the *end* of it, this
+  document's own self-termination unlinked the **successor's** socket and pidfile,
+  because teardown named both by path and those paths had become the successor's.
+  The survivor was left alive holding seven database fds on an unlinked socket,
+  invisible to `daemon status`, unreachable by `daemon stop`, never self-terminating
+  (its own data directory was intact, so this watcher never fired) — and with the
+  pidfile gone, a third daemon started cleanly on the same path. The mechanism this
+  document describes is unchanged and correct; what was wrong was calling the
+  residue bounded. Ruled and closed by
+  [DD-186](186-daemon-artifact-ownership.md), which also records why the ruling was
+  artifact ownership rather than the lock FR-170 anticipated.
 - **Only whole-directory loss is detected.** The socket file deleted on its own,
   the database file deleted on its own, or the database truncated, are each a
   distinct "I can no longer serve" signal, and none is measured or handled. The FR

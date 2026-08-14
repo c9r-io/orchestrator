@@ -54,6 +54,10 @@
         "worktreeDirty": false
       }
     },
+    "scripts/qa/test-daemon-artifact-ownership.sh": {
+      "owner": "docs/qa/orchestrator/224-daemon-artifact-ownership.md",
+      "lastRun": null
+    },
     "scripts/qa/test-daemon-readiness.sh": {
       "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md",
       "lastRun": {

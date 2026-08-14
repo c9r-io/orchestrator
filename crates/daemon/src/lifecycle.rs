@@ -169,10 +169,57 @@ pub fn detect_running_daemon(pid_path: &Path) -> Option<u32> {
     }
 }
 
-/// Clean up socket and PID file on shutdown.
-pub fn cleanup(socket_path: &Path, pid_path: &Path) {
-    let _ = std::fs::remove_file(socket_path);
-    let _ = std::fs::remove_file(pid_path);
+/// Whether the PID file at `path` still names *this* process.
+///
+/// The pidfile's owner is written in the pidfile, so this asks it directly. The
+/// obvious alternative — remembering the inode at write time — is a proxy, and
+/// it is wrong on the one mutation that matters: `std::fs::write` truncates in
+/// place, so a second daemon writing the same path keeps the same inode and an
+/// identity check would call its pidfile ours (FR-170).
+#[cfg(unix)]
+pub fn pid_file_is_ours(pid_path: &Path) -> bool {
+    read_pid_file(pid_path) == Some(std::process::id())
+}
+
+/// Clean up the socket and PID file on shutdown — but only the ones still ours.
+///
+/// `socket_identity` is the `(st_dev, st_ino)` recorded when *this* daemon bound
+/// the socket, and `None` when it never bound one at all (the `--bind` TCP path),
+/// in which case there is nothing here to remove.
+///
+/// Both removals are conditional because a path is not an identity, and this is
+/// the exit half of the same error `data_dir_identity` documents for the entry
+/// half. Measured before this guard existed (FR-170): after the data directory
+/// was deleted and recreated, a second daemon took the path and became ready,
+/// and ~15s later the first daemon's unconditional teardown unlinked *its
+/// successor's* socket and pidfile. The survivor stayed alive holding seven
+/// database fds and a listening socket on an unlinked inode, `daemon status`
+/// reported "not running", `daemon stop` could not find it, its own data
+/// directory was intact so the vanish watcher never fired — and with the pidfile
+/// gone, a third daemon started cleanly on the same path. Bounding the window
+/// (DD-185) does not help: the damage is done by the exit, not by the overlap.
+///
+/// The two artifacts are checked by deliberately different evidence. A socket
+/// has no readable content, so its inode is its identity; a pidfile has, and
+/// for it the inode is the wrong question — see `pid_file_is_ours`.
+#[cfg(unix)]
+pub fn cleanup(socket_path: &Path, socket_identity: Option<(u64, u64)>, pid_path: &Path) {
+    if socket_identity.is_some() && path_identity(socket_path) == socket_identity {
+        let _ = std::fs::remove_file(socket_path);
+    }
+    if pid_file_is_ours(pid_path) {
+        let _ = std::fs::remove_file(pid_path);
+    }
+}
+
+/// Identity of any path: `(st_dev, st_ino)`, or `None` when it cannot be stat'd.
+///
+/// Follows symlinks, so a path swapped for a link to somewhere else reads as the
+/// target's identity and therefore as a change — which is the answer this wants.
+#[cfg(unix)]
+pub fn path_identity(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
 }
 
 /// Identity of the data directory: `(st_dev, st_ino)`.
@@ -191,8 +238,7 @@ pub fn cleanup(socket_path: &Path, pid_path: &Path) {
 /// the other as healthy.
 #[cfg(unix)]
 pub fn data_dir_identity(path: &Path) -> Option<(u64, u64)> {
-    use std::os::unix::fs::MetadataExt;
-    std::fs::metadata(path).ok().map(|m| (m.dev(), m.ino()))
+    path_identity(path)
 }
 
 /// Whether the data directory the daemon started with is gone.
@@ -324,6 +370,129 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let pid_path = dir.path().join("daemon.pid");
         assert!(detect_running_daemon(&pid_path).is_none());
+    }
+
+    // --- FR-170: teardown removes only what this process still owns ---------
+    //
+    // The positive cases below are the ones that run every day; the two negative
+    // cases are the defect. Each negative applies the mutation the obvious
+    // implementation is *least* likely to catch, which is why they are not
+    // symmetric: the socket case replaces the file (a new inode under the same
+    // name), and the pidfile case overwrites it **in place** — `fs::write`
+    // truncates rather than relinking, so the inode is unchanged and an
+    // identity-based pidfile check would call a successor's file ours.
+
+    /// Bind a real socket so the identity recorded is a socket's, not a
+    /// regular file's, exactly as `main.rs` records it after `bind`.
+    #[cfg(unix)]
+    fn bind_socket(path: &Path) -> std::os::unix::net::UnixListener {
+        std::os::unix::net::UnixListener::bind(path).expect("bind test socket")
+    }
+
+    #[test]
+    fn cleanup_removes_both_artifacts_when_they_are_still_ours() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("orchestrator.sock");
+        let pid_path = dir.path().join("daemon.pid");
+
+        let _listener = bind_socket(&socket_path);
+        let identity = path_identity(&socket_path);
+        write_pid_file(&pid_path).unwrap();
+
+        cleanup(&socket_path, identity, &pid_path);
+
+        assert!(!socket_path.exists(), "our own socket must be cleaned up");
+        assert!(!pid_path.exists(), "our own pidfile must be cleaned up");
+    }
+
+    #[test]
+    fn cleanup_leaves_a_socket_that_is_no_longer_the_one_we_bound() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("orchestrator.sock");
+
+        let listener = bind_socket(&socket_path);
+        let ours = path_identity(&socket_path);
+
+        // A successor takes the path: same name, different inode. This is
+        // delete-and-recreate of the data directory, reduced to one file.
+        drop(listener);
+        std::fs::remove_file(&socket_path).unwrap();
+        let _successor = bind_socket(&socket_path);
+        let theirs = path_identity(&socket_path);
+        assert_ne!(ours, theirs, "the successor must have its own inode");
+
+        cleanup(&socket_path, ours, &dir.path().join("absent.pid"));
+
+        assert!(
+            socket_path.exists(),
+            "a successor's socket must survive our teardown"
+        );
+        assert_eq!(
+            path_identity(&socket_path),
+            theirs,
+            "and it must still be the successor's socket, not a replacement"
+        );
+    }
+
+    #[test]
+    fn cleanup_leaves_a_pid_file_naming_another_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+
+        write_pid_file(&pid_path).unwrap();
+        let ours = path_identity(&pid_path);
+
+        // Overwrite in place, deliberately: this is the mutation that keeps the
+        // inode and so defeats an identity check.
+        std::fs::write(&pid_path, "2000000000").unwrap();
+        assert_eq!(
+            path_identity(&pid_path),
+            ours,
+            "the fixture is only meaningful while the inode is unchanged"
+        );
+
+        cleanup(&dir.path().join("absent.sock"), None, &pid_path);
+
+        assert!(
+            pid_path.exists(),
+            "a successor's pidfile must survive our teardown"
+        );
+        assert_eq!(read_pid_file(&pid_path), Some(2_000_000_000));
+    }
+
+    #[test]
+    fn cleanup_removes_no_socket_when_this_daemon_bound_none() {
+        // The `--bind` TCP path: a socket file at that path was left by some
+        // earlier UDS daemon and was never ours to delete.
+        let dir = tempfile::tempdir().unwrap();
+        let socket_path = dir.path().join("orchestrator.sock");
+        let _stranger = bind_socket(&socket_path);
+
+        cleanup(&socket_path, None, &dir.path().join("absent.pid"));
+
+        assert!(socket_path.exists(), "a socket we never bound must survive");
+    }
+
+    #[test]
+    fn cleanup_is_a_no_op_when_neither_artifact_is_present() {
+        let dir = tempfile::tempdir().unwrap();
+        cleanup(
+            &dir.path().join("absent.sock"),
+            Some((1, 1)),
+            &dir.path().join("absent.pid"),
+        );
+    }
+
+    #[test]
+    fn pid_file_is_ours_distinguishes_owner_from_stranger_and_absence() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("daemon.pid");
+
+        assert!(!pid_file_is_ours(&pid_path), "absent is not ours");
+        write_pid_file(&pid_path).unwrap();
+        assert!(pid_file_is_ours(&pid_path));
+        std::fs::write(&pid_path, "2000000000").unwrap();
+        assert!(!pid_file_is_ours(&pid_path), "a stranger's is not ours");
     }
 
     #[test]

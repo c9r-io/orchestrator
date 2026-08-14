@@ -167,6 +167,16 @@ Neither is a deletion of the whole feature, which is the mutation that proves
 least. In both cases the other scenarios stayed green, which is the evidence that
 each fixture is aimed at something specific rather than duplicating its neighbours.
 
+## What this document deliberately stops short of
+
+Every scenario here ends at the old daemon's exit. What that exit *does to the
+successor* is the subject of
+[QA-224](224-daemon-artifact-ownership.md): teardown named the socket and pidfile by
+path, so the exit asserted as correct above used to unlink the second daemon's files
+and leave it alive, unreachable and unstoppable. Read the two together — an exit that
+is timely and well-explained can still be destructive, and nothing in this document
+would have noticed.
+
 ## Checklist
 
 - [ ] Scenario 1: the daemon exits after its data dir is removed, within ~15s, and

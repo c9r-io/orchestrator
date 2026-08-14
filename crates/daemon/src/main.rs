@@ -1031,6 +1031,11 @@ fn main() -> Result<()> {
             }
         };
 
+        // Identity of the socket this daemon binds, so teardown can tell its own
+        // socket from a successor's at the same path (FR-170). Stays `None` on
+        // both TCP paths, which bind no socket file and so have none to remove.
+        let mut socket_identity: Option<(u64, u64)> = None;
+
         // Determine bind address: UDS by default, secure TCP if --bind provided
         if let Some(addr) = args.bind.as_deref() {
             let addr = addr.parse().context("invalid bind address")?;
@@ -1090,8 +1095,26 @@ fn main() -> Result<()> {
                 // UDS transport
                 use tokio::net::UnixListener;
 
-                // Remove stale socket
-                let _ = std::fs::remove_file(&socket_path);
+                // Remove a stale socket left by a previous daemon.
+                //
+                // This stays unconditional on purpose, re-argued rather than
+                // inherited (FR-170). Reaching here means the pidfile guard
+                // above found no live daemon, and a socket left behind by a
+                // SIGKILL must be removable or the daemon could never restart —
+                // a state orchestrator-client's connect.rs already explains to
+                // users. What is no longer inherited is discarding the error: a
+                // failure that is not "it was not there" is a real obstacle, and
+                // reporting it as `failed to bind UDS` names the wrong file.
+                match std::fs::remove_file(&socket_path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        return Err(anyhow::Error::new(e).context(format!(
+                            "failed to remove existing socket at {}",
+                            socket_path.display()
+                        )));
+                    }
+                }
                 let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
 
                 // Harden socket permissions to owner-only regardless of umask.
@@ -1103,6 +1126,11 @@ fn main() -> Result<()> {
                     )
                     .context("failed to set UDS socket permissions to 0600")?;
                 }
+
+                // Recorded after bind, so it is the identity of the socket this
+                // process is actually listening on. Teardown removes the socket
+                // only while the path still resolves here (FR-170).
+                socket_identity = lifecycle::path_identity(&socket_path);
 
                 // Wrap accepted connections with peer-credential validation.
                 // Connections from a different UID are dropped before entering
@@ -1283,7 +1311,7 @@ fn main() -> Result<()> {
 
         // Normal shutdown
         inner.daemon_runtime.mark_stopped();
-        lifecycle::cleanup(&socket_path, &pid_path);
+        lifecycle::cleanup(&socket_path, socket_identity, &pid_path);
         emit_daemon_event(&inner, "daemon_shutdown_completed", serde_json::json!({
             "reason": shutdown_reason(&inner, restart_rx.borrow().as_ref()),
         }))

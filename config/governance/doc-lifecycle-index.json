@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 481,
-    "active": 468,
+    "documents": 483,
+    "active": 470,
     "superseded": 13,
-    "withRelatedFr": 328
+    "withRelatedFr": 330
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -545,6 +545,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-169"
+      ]
+    },
+    "docs/design_doc/orchestrator/186-daemon-artifact-ownership.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-170"
       ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
@@ -1956,6 +1962,12 @@
         "FR-169"
       ]
     },
+    "docs/qa/orchestrator/224-daemon-artifact-ownership.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-170"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3101,6 +3113,10 @@
     "FR-169": [
       "docs/design_doc/orchestrator/185-daemon-data-dir-vanish-self-termination.md",
       "docs/qa/orchestrator/223-daemon-data-dir-vanish-self-termination.md"
+    ],
+    "FR-170": [
+      "docs/design_doc/orchestrator/186-daemon-artifact-ownership.md",
+      "docs/qa/orchestrator/224-daemon-artifact-ownership.md"
     ]
   },
   "supersedes": {
