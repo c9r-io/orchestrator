@@ -58,9 +58,9 @@
       "owner": "docs/qa/orchestrator/224-daemon-artifact-ownership.md",
       "lastRun": {
         "date": "2026-08-14",
-        "revision": "a62e5982509f1702f9691e58cb01586417cd8fc7",
+        "revision": "214c4bb58b2f18d739a6c51afdb7e8d8faa41b26",
         "exitStatus": 0,
-        "worktreeDirty": true
+        "worktreeDirty": false
       }
     },
     "scripts/qa/test-daemon-readiness.sh": {
