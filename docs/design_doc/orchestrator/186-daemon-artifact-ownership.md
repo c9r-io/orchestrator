@@ -148,10 +148,22 @@ FR-170 listed three uncounted possibilities. All were checked:
   distinct "I can no longer serve" signal and none is measured.
 - **Behaviour on the real `~/.orchestratord` is inferred, not observed.** Every
   measurement ran against isolated data directories, deliberately.
-- **A gate that guards against a defect can carry it.** This one did: `inode_of`
-  returned non-zero for a missing socket, `set -e` took the enclosing assignment, and
-  against the pre-fix binary the gate printed two PASS lines, **no FAIL line and no
-  summary**, while the defect it exists to catch was present. A truncated run reads
-  exactly like a complete one to a reader who trusts the exit code. Both halves are
-  repaired — the helper is total, and the EXIT trap announces a run that ended before
-  its summary — but the general lesson is in the skill's §4.4, not only here.
+- **A gate that guards against a defect can carry it, and this one carried two.** Both
+  were found by running it against the pre-fix binary, and both would have made a
+  regression unreportable rather than red:
+  - `inode_of` returned non-zero for a missing socket, `set -e` took the enclosing
+    assignment, and the gate printed two PASS lines, **no FAIL line and no summary**,
+    while the defect it exists to catch was present. A truncated run reads exactly like
+    a complete one to a reader who trusts the exit code.
+  - The third-daemon probe ran `orchestratord --foreground` inside a command
+    substitution, which **assumes the refusal**. Under the regression the daemon starts
+    and never returns, so the gate **hung** rather than failing — and a hung gate is
+    worse than a red one, because CI reports a timeout with no diagnostic, no summary
+    and no named subject. macOS has no `timeout(1)`, so the bound is explicit in
+    `probe_third_daemon`, which also reclaims the daemon it started: a probe that leaks
+    the process it was testing for would break the `CLAUDE.md` daemon rule inside the
+    check written to enforce it.
+
+  Both are repaired. The general lesson — *run a new gate against the broken state it
+  exists to catch, and confirm it produced a verdict rather than merely a non-zero exit
+  or a hang* — is in the skill's §4.4, not only here.

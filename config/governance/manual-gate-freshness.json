@@ -13,7 +13,7 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-14",
-        "revision": "7923bc0528c8b12d5b0dab89597b9da159a03bd7",
+        "revision": "a62e5982509f1702f9691e58cb01586417cd8fc7",
         "exitStatus": 0,
         "worktreeDirty": false
       }
@@ -56,7 +56,12 @@
     },
     "scripts/qa/test-daemon-artifact-ownership.sh": {
       "owner": "docs/qa/orchestrator/224-daemon-artifact-ownership.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-14",
+        "revision": "a62e5982509f1702f9691e58cb01586417cd8fc7",
+        "exitStatus": 0,
+        "worktreeDirty": true
+      }
     },
     "scripts/qa/test-daemon-readiness.sh": {
       "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md",

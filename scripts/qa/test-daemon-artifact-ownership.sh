@@ -112,6 +112,15 @@ VANISH_BUDGET=40
 # FAIL line and no summary, while the defect it exists to catch was present.
 inode_of() { stat -f %i "$1" 2>/dev/null || stat -c %i "$1" 2>/dev/null || true; }
 
+# Open file descriptors on the runtime database, or 0. Total for inode_of's
+# reason: a dead PID makes lsof exit non-zero, and that must be an answer here
+# rather than the end of the run.
+db_fds() {
+  local pid="$1"
+  [[ -n "$pid" ]] || { echo 0; return 0; }
+  lsof -p "$pid" 2>/dev/null | grep -c 'agent_orchestrator\.db' || true
+}
+
 # The longest socket path this run will ask the kernel to bind. A premise that
 # no longer holds is a named failure, never a puzzling one: without this, an
 # over-long TMPDIR surfaces as four "the daemon never became ready" timeouts
@@ -150,6 +159,35 @@ start_daemon() {
     # call site, never a `set -e` abort that swallows the summary line.
     gate_daemon_pid_from_file "$data_dir/daemon.pid" || true
   fi
+}
+
+# Attempt a third daemon and report what happened, in bounded time.
+#
+# The obvious form -- OUT="$("$ORCHD" --foreground ... 2>&1 || true)" -- assumes
+# the refusal. When a regression removes the guard the daemon *starts*, and in
+# foreground it never returns: the gate hangs instead of going red, and a hung
+# gate is worse than a failed one because CI reports a timeout with no
+# diagnostic and no summary line. macOS has no timeout(1), so the bound is
+# explicit here. Sets THIRD_OUT and THIRD_STARTED; reclaims the daemon if one
+# came up, because a probe that leaks the process it was testing for is the
+# CLAUDE.md daemon rule broken by the check written to enforce it.
+probe_third_daemon() {
+  local data_dir="$1" log="$2" waited=0
+  THIRD_OUT=""; THIRD_STARTED=0
+  ORCHESTRATORD_DATA_DIR="$data_dir" "$ORCHD" --foreground --workers 1 \
+    --webhook-bind none >"$log" 2>&1 &
+  THIRD_PID=$!
+  while gate_daemon_alive "$THIRD_PID" && ((waited < 150)); do
+    sleep 0.1
+    waited=$((waited + 1))
+  done
+  if gate_daemon_alive "$THIRD_PID"; then
+    THIRD_STARTED=1
+    gate_daemon_stop "$THIRD_PID" >/dev/null 2>&1 || true
+  fi
+  wait "$THIRD_PID" 2>/dev/null || true
+  THIRD_PID=""
+  THIRD_OUT="$(cat "$log" 2>/dev/null || true)"
 }
 
 wait_ready() {
@@ -197,11 +235,23 @@ for FORM in foreground daemonize; do
     # Recorded during the overlap: this is what must still be true afterwards.
     SOCK_INO_DURING="$(inode_of "$DD/orchestrator.sock")"
 
+    # The predecessor is still holding the orphaned database open. Asserted
+    # here rather than only after its exit, because "a dead process holds no
+    # fds" is true of any dead PID and of one that never existed — the
+    # non-vacuous half of FR-169's 7 -> 0 measurement is the 7.
+    OLD_FDS_DURING="$(db_fds "$OLD_PID")"
+    if [[ "$OLD_FDS_DURING" -gt 0 ]]; then
+      pass "$LABEL: during the overlap the predecessor still holds $OLD_FDS_DURING database fds on the orphaned inode"
+    else
+      fail "$LABEL: expected the predecessor to still hold database fds during the overlap; counted $OLD_FDS_DURING"
+    fi
+
     # Case 2 belongs here, while the successor is alive and the predecessor has
     # not yet exited — a third daemon must be refused, and say so by name.
-    THIRD_OUT="$(ORCHESTRATORD_DATA_DIR="$DD" "$ORCHD" --foreground --workers 1 \
-      --webhook-bind none 2>&1 || true)"
-    if grep -qF "another orchestratord is already running (PID $NEW_PID)" <<<"$THIRD_OUT"; then
+    probe_third_daemon "$DD" "$QA_ROOT/third-during-$SLUG.log"
+    if ((THIRD_STARTED)); then
+      fail "$LABEL: a third daemon STARTED during the overlap instead of being refused"
+    elif grep -qF "another orchestratord is already running (PID $NEW_PID)" <<<"$THIRD_OUT"; then
       pass "$LABEL: a third daemon is refused, naming the holder's PID $NEW_PID"
     else
       fail "$LABEL: expected refusal naming PID $NEW_PID; got: $(tail -3 <<<"$THIRD_OUT")"
@@ -221,6 +271,12 @@ for FORM in foreground daemonize; do
       gate_daemon_stop "$NEW_PID" >/dev/null 2>&1 || true
       OLD_PID=""; NEW_PID=""
       continue
+    fi
+    OLD_FDS_AFTER="$(db_fds "$OLD_PID")"
+    if [[ "$OLD_FDS_AFTER" -eq 0 ]]; then
+      pass "$LABEL: the predecessor's database fds fell $OLD_FDS_DURING -> 0"
+    else
+      fail "$LABEL: the predecessor still holds $OLD_FDS_AFTER database fds after exiting"
     fi
     OLD_PID=""
 
@@ -289,6 +345,19 @@ for FORM in foreground daemonize; do
       pass "$LABEL: a real RPC through the surviving socket succeeds"
     else
       fail "$LABEL: RPC through the surviving socket failed: $(head -3 <<<"$RPC_OUT")"
+    fi
+
+    # The case that actually failed before DD-186: during the overlap the
+    # pidfile still existed, so a third daemon was refused either way. It is
+    # *after* the predecessor's teardown — which used to delete that pidfile —
+    # that the refusal had nothing left to stand on.
+    probe_third_daemon "$DD" "$QA_ROOT/third-after-$SLUG.log"
+    if ((THIRD_STARTED)); then
+      fail "$LABEL: after the predecessor's exit a third daemon STARTED — the pidfile that refuses it is gone"
+    elif grep -qF "another orchestratord is already running (PID $NEW_PID)" <<<"$THIRD_OUT"; then
+      pass "$LABEL: after the predecessor's exit, a third daemon is still refused, naming PID $NEW_PID"
+    else
+      fail "$LABEL: after the predecessor's exit, expected refusal naming PID $NEW_PID; got: $(tail -3 <<<"$THIRD_OUT")"
     fi
 
     # ── Case 3, NEGATIVE: a normal stop must still clean up after itself ─────

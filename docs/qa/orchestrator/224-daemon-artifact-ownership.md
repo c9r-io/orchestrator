@@ -46,7 +46,7 @@ cargo build -p orchestratord -p orchestrator-cli
 bash scripts/qa/test-daemon-artifact-ownership.sh
 ```
 
-30 assertions; the gate is `manual-runbook` because it starts real daemons and needs
+42 assertions; the gate is `manual-runbook` because it starts real daemons and needs
 built binaries. On macOS, `TMPDIR` is a 48-character `/var/folders/...` path and a UDS
 path has a hard 104-byte limit, so the gate checks the budget up front and fails by
 name rather than emitting four "the daemon never became ready" timeouts.
@@ -71,6 +71,7 @@ cargo test -p orchestratord --bins lifecycle::tests::pid_file_is_ours
 4. Wait for A to self-terminate (~15s: `DATA_DIR_CHECK_PERIOD` × `DATA_DIR_CHECK_CONFIRMATIONS`).
 5. Re-read the socket inode and the pidfile; run `orchestrator daemon status` and one
    real RPC (`orchestrator task list -o json`).
+6. Count A's open database fds during the overlap and again after it exits.
 
 **Expected result**
 
@@ -78,6 +79,9 @@ cargo test -p orchestratord --bins lifecycle::tests::pid_file_is_ours
 - The socket is still present **with the same inode recorded in step 3** — presence
   alone is not sufficient, since a deleted socket recreated by anything would satisfy it.
 - The pidfile still names B.
+- A holds database fds on the orphaned inode **during** the overlap and 0 after — 7 → 0.
+  The `7` is the half that carries the weight: "a dead process holds no fds" is true of
+  any dead PID and of one that never existed, so the post-exit count alone is vacuous.
 - `daemon status` reports B by PID, and the RPC succeeds — the file existing is not the
   same fact as the service answering.
 
@@ -90,14 +94,18 @@ directory's `(dev, ino)` enters the same window and must reach the same end stat
 
 1. Reach the overlap of scenario 1, with B ready and A not yet exited.
 2. Attempt to start a third daemon on the same path.
+3. Wait for A to exit, then attempt a third daemon **again** — the decisive half.
 
 **Expected result**
 
-Refused, with the diagnostic naming the holder:
+Refused both times, with the diagnostic naming the holder:
 `another orchestratord is already running (PID <B>)`. The **string and the PID** are
 asserted, not the exit code — a start can fail many ways and a code cannot say which.
-Before DD-186 this case passed only until A exited, at which point the pidfile was gone
-and a third daemon started cleanly.
+
+The second attempt is the one that matters. During the overlap the pidfile still
+existed, so a third daemon was refused before DD-186 too; it is *after* A's teardown —
+which used to delete that pidfile — that the refusal had nothing left to stand on, and
+a third daemon started cleanly onto a path already held by two processes.
 
 ## Scenario 3 (negative): A normal stop still cleans up after itself
 
@@ -135,8 +143,12 @@ from "the stale socket was reused"; an existence check cannot tell those apart.
 - [ ] Scenario 1: `daemon status` names the successor and a real RPC through that
       socket succeeds — the file existing is not the service answering
 - [ ] Scenario 1: the `mv` route reaches the same end state as `rm -rf`
+- [ ] Scenario 1: the predecessor holds database fds on the orphaned inode **during**
+      the overlap, and they fall to 0 after it exits (7 → 0)
 - [ ] Scenario 2: a third daemon is refused with `another orchestratord is already
       running (PID <B>)` — the string and the PID, not the exit code
+- [ ] Scenario 2: still refused **after** the predecessor's teardown, which is the
+      case that actually failed before DD-186
 - [ ] Scenario 3: a clean SIGTERM stop removes both the socket and the pidfile
 - [ ] Scenario 4: SIGKILL leaves both behind, and the next start binds a socket with a
       **different** inode
@@ -147,15 +159,29 @@ from "the stale socket was reused"; an existence check cannot tell those apart.
 
 | Mutation | Caught by | Diagnostic |
 |---|---|---|
-| restore the pre-FR-170 unconditional `cleanup` (both `remove_file` calls unguarded) | Scenarios 1 and 2, in all four form/route combinations — **16 named failures**, while Scenarios 3 and 4 stay green | `socket inode was <N> during the overlap, now <gone>`; `pidfile should name <PID>, reads <gone>`; `daemon status did not name <PID>; got: orchestratord is not running` |
+| restore the pre-FR-170 unconditional `cleanup` (both `remove_file` calls unguarded) | Scenarios 1 and 2, in all four form/route combinations — **22 passed, 20 failed**, while Scenarios 3 and 4 stay green | `socket inode was <N> during the overlap, now <gone>`; `pidfile should name <PID>, reads <gone>`; `daemon status did not name <PID>; got: orchestratord is not running`; and the decisive one, `after the predecessor's exit a third daemon STARTED — the pidfile that refuses it is gone` |
 | `cleanup` that removes nothing at all | Scenario 3 only | `a clean stop left socket=present pidfile=present` |
 | pidfile ownership checked by inode instead of contents | unit `cleanup_leaves_a_pid_file_naming_another_process` | the fixture overwrites in place, so the inode is unchanged and an identity check deletes a successor's pidfile |
 
 Scenarios 3 and 4 staying green under the first mutation is the evidence that they
 guard the opposite direction — an over-strict ownership check — rather than
-duplicating their neighbours. The first mutation was also run to confirm the gate
-produces a **verdict** and not an abort: an earlier revision of it exited before the
-summary line, which is a truncated run and not a red one.
+duplicating their neighbours.
+
+The mutation run is also how two defects **in the gate itself** were found, both of
+which would have made a regression unreportable rather than red:
+
+- `inode_of` returned non-zero for a missing socket, `set -e` took the enclosing
+  assignment, and the run ended before its summary line — a truncated run, which reads
+  exactly like a complete one to anyone trusting the exit code (§4.4 shape 7). The
+  helper is now total and an EXIT trap announces a run that never reached its summary.
+- The third-daemon probe ran `orchestratord --foreground` in a command substitution,
+  which assumes the refusal. Under the regression the daemon *starts*, and in
+  foreground it never returns: the gate **hung** instead of failing. macOS has no
+  `timeout(1)`, so `probe_third_daemon` bounds the wait itself, reports "a third daemon
+  STARTED" as the failure, and reclaims the process it started.
+
+Run every new gate against the broken state it exists to catch, and check that it
+produced a verdict — not merely a non-zero exit, and not a hang.
 
 ## Known limits
 
