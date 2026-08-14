@@ -54,6 +54,13 @@ FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 
+# One scratch directory for the whole run, and therefore one EXIT trap. The
+# fixture corpus lives inside it too: a second `trap ... EXIT` would silently
+# replace this one rather than adding to it, and the survivor would be whichever
+# was installed last.
+GATE_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/md-link-integrity.XXXXXX")"
+trap 'rm -rf "$GATE_SCRATCH"' EXIT
+
 # ── Extraction ─────────────────────────────────────────────────────────────────
 
 # Emit "<line>\t<target>" for every inline markdown link in one file, after removing
@@ -127,11 +134,32 @@ exempt_targets_for() {
 # ── The checks ─────────────────────────────────────────────────────────────────
 
 # Check 1: every relative link target in every tracked markdown file resolves.
+#
+# The inner loop reads a file rather than `< <(extract_links …)`, and that is not a
+# style choice. Measured on bash 3.2.57 (macOS): a *function* running an outer
+# read-loop that forks one process substitution per iteration dies of a fatal
+# signal at iteration ~251 — 134/SIGABRT in one worktree, 138/SIGBUS in another,
+# on identical input, and not at all under `bash -x`. The byte-identical loop
+# outside a function survives the whole corpus, and so does this one once the
+# inner process substitution is gone. It is the shell state copied on each fork,
+# not anything about the corpus: reversing the file order moves the crash to a
+# different file at the same iteration count, and the file it lands on has no
+# links in it at all. See DD-187.
+#
+# Materialising also makes the producer's status observable, which
+# `< <(producer)` structurally cannot do — a failing extractor there is
+# indistinguishable from a file with no links (§4.4 shape 5, the reason
+# scripts/lib/gate_jq.sh exists).
 check_link_targets_resolve() {
   local root="$1" file line target exempt rc=0
+  local links="$GATE_SCRATCH/links.tsv"
   while IFS= read -r file; do
     [[ -z "$file" ]] && continue
     [[ -f "$root/$file" ]] || continue
+    if ! extract_links "$root/$file" > "$links"; then
+      echo "    $file: link extraction failed; this file was not checked" >&2
+      return 1
+    fi
     exempt="$(exempt_targets_for "$root" "$file")" || return 1
     while IFS=$'\t' read -r line target; do
       [[ -z "$target" ]] && continue
@@ -139,7 +167,7 @@ check_link_targets_resolve() {
       grep -qxF "$target" <<< "$exempt" && continue
       echo "    $file:$line links '$target', which does not resolve" >&2
       rc=1
-    done < <(extract_links "$root/$file")
+    done < "$links"
   done < <(git -C "$root" ls-files '*.md')
   return $rc
 }
@@ -196,8 +224,8 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   echo "=== FR-131: markdown link integrity (negative and positive fixtures) ==="
   echo ""
 
-  FIXTURE_ROOT="$(mktemp -d)"
-  trap 'rm -rf "$FIXTURE_ROOT"' EXIT
+  FIXTURE_ROOT="$GATE_SCRATCH/fixtures"
+  mkdir -p "$FIXTURE_ROOT"
 
   # A small synthetic corpus rather than a copy of 603 files, so each case is legible
   # and the positive controls state exactly which link shape they defend.

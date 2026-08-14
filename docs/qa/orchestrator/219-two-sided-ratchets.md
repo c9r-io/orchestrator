@@ -233,3 +233,11 @@ statistics used to print before either check ran, so a truncated run's tail was
 indistinguishable from a healthy one, which is item 4 of that ticket's own repair
 list. Neither the abort nor the banner is affected by requirements 3 or 4, which
 touched no workflow and no markdown link.
+
+**Resolved 2026-08-14.** The abort is fixed and the ticket is closed. It was never
+the corpus and never BSD awk: a shell *function* forking one process substitution
+per iteration dies on bash 3.2 at around iteration 251, whichever file that happens
+to be. The gate now reads its inner loop from a scratch file. See
+[DD-187](../../design_doc/orchestrator/187-markdown-link-gate-process-substitution-crash.md)
+and [QA 225](225-markdown-link-gate-loop-shape.md). The paragraph above stands as
+the record of what was true when this FR was certified.

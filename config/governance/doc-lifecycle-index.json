@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 483,
-    "active": 470,
+    "documents": 485,
+    "active": 472,
     "superseded": 13,
     "withRelatedFr": 330
   },
@@ -552,6 +552,9 @@
       "relatedFr": [
         "FR-170"
       ]
+    },
+    "docs/design_doc/orchestrator/187-markdown-link-gate-process-substitution-crash.md": {
+      "lifecycle": "active"
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
       "lifecycle": "active"
@@ -1967,6 +1970,9 @@
       "relatedFr": [
         "FR-170"
       ]
+    },
+    "docs/qa/orchestrator/225-markdown-link-gate-loop-shape.md": {
+      "lifecycle": "active"
     },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
