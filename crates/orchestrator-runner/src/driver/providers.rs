@@ -280,7 +280,7 @@ fn quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::driver::{DriverEvent, SessionRef};
+    use crate::driver::{DriverEvent, DriverOutcome, SessionRef};
     use orchestrator_config::config::{AgentDriverConfig, DriverOptions, DriverTransport};
     use std::collections::HashMap;
     #[cfg(unix)]
@@ -384,6 +384,91 @@ mod tests {
             std::fs::read_to_string(stdout_path).unwrap(),
             "prompt over stdin\n"
         );
+    }
+
+    /// The assertion whose absence let the CPU-limit classifier sit dead.
+    ///
+    /// `detect_resource_exceeded` keys the CPU case on `exit_signal`, and it had
+    /// a green unit test the whole time — one that hand-built a `WaitResult`
+    /// carrying a signal no production path could produce. The gap was between
+    /// the process and that struct, which is where this test looks: a real child
+    /// killed by a real signal must report the signal.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shell_driver_reports_the_signal_that_killed_the_child() {
+        let (outcome, exit_code, exit_signal) = run_shell_to_completion("kill -s XCPU $$").await;
+
+        assert_eq!(outcome, DriverOutcome::Failed);
+        assert_eq!(
+            exit_signal,
+            Some(libc::SIGXCPU),
+            "a signal-killed child must report the signal that killed it"
+        );
+        assert_eq!(
+            exit_code, -1,
+            "a signal-killed child has no exit code; -1 is what the non-driver wait path reports"
+        );
+    }
+
+    /// The other direction, and the one the repair could break: an ordinary
+    /// non-zero exit must not acquire a signal. Without this, mapping "no exit
+    /// code" onto a signal-shaped value would pass the test above while
+    /// classifying every failed step as a resource kill.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn shell_driver_reports_no_signal_for_an_ordinary_failure() {
+        let (outcome, exit_code, exit_signal) = run_shell_to_completion("exit 3").await;
+
+        assert_eq!(outcome, DriverOutcome::Failed);
+        assert_eq!(exit_code, 3);
+        assert_eq!(
+            exit_signal, None,
+            "a process that exited on its own was not killed by anything"
+        );
+    }
+
+    #[cfg(unix)]
+    async fn run_shell_to_completion(shell_command: &str) -> (DriverOutcome, i32, Option<i32>) {
+        let root = tempdir().unwrap();
+        let config = driver(DriverProvider::Shell);
+        let runner = orchestrator_config::config::RunnerConfig {
+            policy: orchestrator_config::config::RunnerPolicy::Unsafe,
+            ..Default::default()
+        };
+        let extra_env = HashMap::new();
+        let profile = crate::runner::ResolvedExecutionProfile::host();
+        let mut session = ShellCliDriver
+            .start(DriverStartRequest {
+                driver: &config,
+                runner: &runner,
+                shell_command,
+                stdin_payload: None,
+                prompt: "",
+                cwd: root.path(),
+                stdout: std::fs::File::create(root.path().join("stdout.log")).unwrap(),
+                stderr: std::fs::File::create(root.path().join("stderr.log")).unwrap(),
+                redaction_patterns: &[],
+                extra_env: &extra_env,
+                execution_profile: &profile,
+                artifacts_dir: root.path(),
+                session_ref: None,
+                mcp_callback: None,
+            })
+            .await
+            .unwrap();
+
+        let mut events = session.take_events().unwrap();
+        while let Some(event) = events.next().await {
+            if let DriverEvent::Finished {
+                outcome,
+                exit_code,
+                exit_signal,
+            } = event.unwrap()
+            {
+                return (outcome, exit_code, exit_signal);
+            }
+        }
+        panic!("driver stream ended without a terminal event");
     }
 
     #[test]

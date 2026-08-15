@@ -93,10 +93,10 @@
     "scripts/qa/test-fr001-sandbox-matrix.sh": {
       "owner": "docs/qa/orchestrator/57-sandbox-resource-limits-extended.md",
       "lastRun": {
-        "date": "2026-08-12",
-        "revision": "0d1807d428e36a23181369f34b3b8faaff567487",
+        "date": "2026-08-15",
+        "revision": "48974aaf836c54bc1220506df1cf2255abd935db",
         "exitStatus": 0,
-        "worktreeDirty": false
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-fr013-control-plane-protection.sh": {

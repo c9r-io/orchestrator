@@ -287,7 +287,11 @@ pub(crate) fn project_driver_events(
                         "output_tokens": tokens.output,
                     }),
                 ),
-                DriverEvent::Finished { outcome, exit_code } => (
+                DriverEvent::Finished {
+                    outcome,
+                    exit_code,
+                    exit_signal,
+                } => (
                     "driver_finished",
                     json!({
                         "outcome": match outcome {
@@ -296,6 +300,10 @@ pub(crate) fn project_driver_events(
                             DriverOutcome::Cancelled => "cancelled",
                         },
                         "exit_code": exit_code,
+                        // Recorded rather than only classified on: an operator
+                        // reading a step that was killed used to see exit_code
+                        // and nothing naming the cause (DD-188).
+                        "exit_signal": exit_signal,
                     }),
                 ),
             };
@@ -523,6 +531,7 @@ mod tests {
             DriverEvent::Finished {
                 outcome: DriverOutcome::Success,
                 exit_code: 0,
+                exit_signal: None,
             },
         ];
         let projected = project_driver_events(

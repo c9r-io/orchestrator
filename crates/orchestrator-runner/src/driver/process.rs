@@ -105,15 +105,46 @@ impl ProcessSession {
                 let _ = event_tx.send(Err(error));
             }
             if !wait_terminal.swap(true, Ordering::SeqCst) {
-                let (outcome, exit_code) = match status {
-                    Ok(status) if cancelled => {
-                        (DriverOutcome::Cancelled, status.code().unwrap_or(-5))
+                // A signal-killed child has no exit code, and the signal is the
+                // only record of why it died. Reporting `unwrap_or(1)` and
+                // dropping `status.signal()` made "killed by SIGXCPU"
+                // indistinguishable from "exited 1", which left the CPU-limit
+                // arm of detect_resource_exceeded with no reachable input on
+                // any driver-executed step. `-1` rather than `1` is the code
+                // the non-driver wait path already reports for this case, and
+                // two paths disagreeing about the same event is what let the
+                // gap go unnoticed. See DD-188.
+                let signal_of = |status: &std::process::ExitStatus| -> Option<i32> {
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::process::ExitStatusExt;
+                        status.signal()
                     }
-                    Ok(status) if status.success() => (DriverOutcome::Success, 0),
-                    Ok(status) => (DriverOutcome::Failed, status.code().unwrap_or(1)),
-                    Err(_) => (DriverOutcome::Failed, -3),
+                    #[cfg(not(unix))]
+                    {
+                        let _ = status;
+                        None
+                    }
                 };
-                let _ = event_tx.send(Ok(DriverEvent::Finished { outcome, exit_code }));
+                let (outcome, exit_code, exit_signal) = match status {
+                    Ok(status) if cancelled => (
+                        DriverOutcome::Cancelled,
+                        status.code().unwrap_or(-5),
+                        signal_of(&status),
+                    ),
+                    Ok(status) if status.success() => (DriverOutcome::Success, 0, None),
+                    Ok(status) => (
+                        DriverOutcome::Failed,
+                        status.code().unwrap_or(-1),
+                        signal_of(&status),
+                    ),
+                    Err(_) => (DriverOutcome::Failed, -3, None),
+                };
+                let _ = event_tx.send(Ok(DriverEvent::Finished {
+                    outcome,
+                    exit_code,
+                    exit_signal,
+                }));
             }
         });
 
@@ -377,6 +408,8 @@ fn parse_claude_event(value: &Value) -> (Vec<DriverEvent>, Option<String>) {
                 DriverOutcome::Success
             },
             exit_code: if failed { 1 } else { 0 },
+            // Protocol-reported outcome, not a process status: no signal exists.
+            exit_signal: None,
         });
     }
     (events, session)
@@ -433,6 +466,7 @@ fn parse_codex_event(value: &Value) -> (Vec<DriverEvent>, Option<String>) {
         "turn.failed" | "error" => events.push(DriverEvent::Finished {
             outcome: DriverOutcome::Failed,
             exit_code: 1,
+            exit_signal: None,
         }),
         _ => {}
     }
