@@ -28,13 +28,29 @@ def fr_number(path)
   File.basename(path).match(/\Afr[-_ ]?0*(\d+).*\.md\z/i)&.captures&.first&.to_i
 end
 
+# Both walks pass --full-history, and they have to pass the *same* thing.
+#
+# `git log -- <path>` simplifies history by default: at a merge whose tree is
+# TREESAME to one parent it follows that parent only, so a file added and then
+# deleted on a side branch can disappear from the walk entirely. A pull request
+# is exactly that shape — actions/checkout builds refs/pull/N/merge and every CI
+# run of this tool has HEAD on a merge commit — while a developer running it on
+# the branch tip does not, which is why this passed locally and failed in CI on
+# the first pull request this repository ever opened.
+#
+# The two walks must agree by construction, not by luck: `historical_paths`
+# decides which paths exist to explain and `content_at_latest_existing_revision`
+# has to find a revision for each one. Under simplification the first found
+# FR-169 (its --diff-filter forces the diff) and the second did not, and the
+# disagreement surfaced as "history listed X, but no revision contains it" —
+# a message about the tree that was really about the walk.
 def historical_paths(root)
-  output = git(root, "log", "--format=", "--name-only", "--diff-filter=ACDMRT", "HEAD", "--", "docs/feature_request")
+  output = git(root, "log", "--full-history", "--format=", "--name-only", "--diff-filter=ACDMRT", "HEAD", "--", "docs/feature_request")
   output.lines.map(&:strip).reject(&:empty?).select { |path| fr_number(path) }.uniq.sort
 end
 
 def content_at_latest_existing_revision(root, path)
-  commits = git(root, "log", "--format=%H", "HEAD", "--", path).lines.map(&:strip)
+  commits = git(root, "log", "--full-history", "--format=%H", "HEAD", "--", path).lines.map(&:strip)
   commits.each do |commit|
     content, found = git(root, "show", "#{commit}:#{path}", allow_failure: true)
     return content if found
