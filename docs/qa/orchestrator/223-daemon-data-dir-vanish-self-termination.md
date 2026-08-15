@@ -47,7 +47,7 @@ bash <scratch>/recreate-probe.sh                             # delete-and-recrea
 **Steps**
 
 ```bash
-cargo test -p orchestratord --bins lifecycle::tests::data_dir_identity_is_none_once_removed
+cargo test -p orchestratord --bins lifecycle::tests::a_removed_data_dir_reads_gone_by_both_facts
 bash <scratch>/datadir-vanish-probe.sh
 ```
 
@@ -77,7 +77,7 @@ replaced.
 **Steps**
 
 ```bash
-cargo test -p orchestratord --bins lifecycle::tests::data_dir_identity_changes_when_the_path_is_recreated
+cargo test -p orchestratord --bins lifecycle::tests::a_recreated_data_dir_cannot_reuse_the_identity_this_daemon_holds
 cargo test -p orchestratord --bins lifecycle::tests::a_replaced_directory_trips_it_like_a_removed_one
 bash <scratch>/recreate-probe.sh
 ```
@@ -92,10 +92,25 @@ readings disagree, and that disagreement is the point. The old daemon EXITED by
 t+13s, and its open database fds go from **7 to 0**.
 
 **This is the scenario that separates the implementation from the obvious one.**
-Replacing `data_dir_identity` with `if path.exists()` leaves Scenarios 1, 3 and 4
-green and fails only this one — verified, see Mutation Evidence. Without it,
-nothing in this document would notice a daemon writing an orphaned inode while a
-second daemon owns its name.
+Replacing the identity comparison with `if path.exists()` leaves Scenarios 1, 3
+and 4 green and fails only this one — verified, see Mutation Evidence. Without
+it, nothing in this document would notice a daemon writing an orphaned inode
+while a second daemon owns its name.
+
+**Amended 2026-08-15.** The comparison as first shipped was unsound on Linux, and
+this document's own fixture asserted the unsoundness. FR-169 re-stat'd the path
+and held nothing open, so the removed inode's number was free — and a recreated
+directory takes it straight back: measured in an alpine container, 49 of 50
+trials produced an *identical* `(st_dev, st_ino)`, on the platform this daemon
+ships to. The watcher compared equal and never fired. Certification was on APFS,
+which does not do that, so nothing here could have seen it.
+
+The daemon now holds the data directory **open** for its lifetime. That is what
+makes the comparison sound: an open descriptor pins the inode, so the number
+cannot be recycled into the replacement. Re-measured with the handle held: 0 of
+30 identical on Linux, 0 of 30 on macOS. `held_links` (zero once a held directory
+is removed) is read as a second, cheaper signal — Linux zeroes it, macOS does
+not, so it is one arm of a disjunction and never asserted on its own.
 
 ---
 
@@ -158,7 +173,8 @@ Each mutation was applied and run; each names the diagnostic it produced.
 
 | Mutation | Caught by | Diagnostic |
 |---|---|---|
-| `data_dir_identity` returns `Some((0,0))` when the path exists — i.e. presence instead of identity | Scenario 2 only | `delete-and-recreate produced the same identity, so the watcher would not notice the daemon is writing an orphaned inode` — left `(0,0)`, right `(0,0)` |
+| `DataDirHandle::observe` returns `at_path: Some(identity)` whenever the path exists — i.e. presence instead of identity | Scenario 2 only | `the replacement took the identity of the directory this daemon still holds open, so the watcher would not notice the orphaned inode` |
+| drop the held descriptor and re-stat the path instead (the pre-2026-08-15 shape) | Scenario 2, **on Linux only** | same diagnostic, 49 runs in 50; green on macOS every time, which is how it shipped |
 | delete `*confirmations = 0` from `observe_data_dir` | Scenario 3, second case only | `a successful stat did not reset the counter` — left 2 |
 
 Both mutations are ones an author would plausibly make: the first is the simpler

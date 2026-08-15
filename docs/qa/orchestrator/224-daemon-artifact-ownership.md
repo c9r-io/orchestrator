@@ -29,8 +29,19 @@ pidfile gone, a third daemon then started cleanly on the same path.
 
 The repair is
 [DD-186](../../design_doc/orchestrator/186-daemon-artifact-ownership.md): a daemon
-removes the socket only while the path still resolves to the inode it bound, and the
-pidfile only while it still names this process.
+removes the socket only while the ownership token beside it still names this process,
+and the pidfile only while it still names this process.
+
+**Amended 2026-08-15.** DD-186 shipped the socket half as an inode comparison, on the
+reasoning that a socket has no readable content so its inode is its identity. The first
+premise is true and the second does not follow: unlinking the path frees the inode even
+while the listener is accepting on it, so the number is reusable at once — and Linux
+reuses it, in 50 of 50 measured trials for a regular file. The guard was therefore
+inverted on the platform this daemon ships to: a dying daemon would read a successor's
+socket as its own and unlink it, which is the exact damage it was written to prevent.
+Certification was on APFS, which does not reuse. The socket now gets the readable content
+it lacked, in a `<socket>.owner` token holding a per-process UUID, and the comparison is
+content — the same evidence the pidfile half always used.
 
 ## Safety
 
@@ -66,18 +77,20 @@ cargo test -p orchestratord --bins lifecycle::tests::pid_file_is_ours
 
 1. Start daemon A on a fresh data directory and wait until it is ready.
 2. `rm -rf` the data directory and `mkdir` it again at the same path.
-3. Start daemon B on that path and wait until it is ready. Record the socket's **inode**
-   and the pidfile's contents while both daemons are alive.
+3. Start daemon B on that path and wait until it is ready. Record the socket's **inode**,
+   its **ownership token** and the pidfile's contents while both daemons are alive.
 4. Wait for A to self-terminate (~15s: `DATA_DIR_CHECK_PERIOD` × `DATA_DIR_CHECK_CONFIRMATIONS`).
-5. Re-read the socket inode and the pidfile; run `orchestrator daemon status` and one
-   real RPC (`orchestrator task list -o json`).
+5. Re-read the socket inode, its ownership token and the pidfile; run
+   `orchestrator daemon status` and one real RPC (`orchestrator task list -o json`).
 6. Count A's open database fds during the overlap and again after it exits.
 
 **Expected result**
 
 - A exits within the budget, naming the data directory in its log.
-- The socket is still present **with the same inode recorded in step 3** — presence
-  alone is not sufficient, since a deleted socket recreated by anything would satisfy it.
+- The socket is still present **with the inode and the ownership token recorded in step
+  3**. Presence alone is not sufficient, since a deleted socket recreated by anything
+  would satisfy it — and on Linux neither is the inode alone, since a rebound socket
+  usually takes the freed number straight back. The token cannot collide.
 - The pidfile still names B.
 - A holds database fds on the orphaned inode **during** the overlap and 0 after — 7 → 0.
   The `7` is the half that carries the weight: "a dead process holds no fds" is true of
@@ -124,17 +137,19 @@ nothing at all would satisfy scenarios 1 and 2.
 
 **Steps**
 
-1. Start a daemon, wait for readiness, record its socket inode, then `SIGKILL` it
-   (`gate_daemon_kill_hard`).
+1. Start a daemon, wait for readiness, record its socket ownership token, then
+   `SIGKILL` it (`gate_daemon_kill_hard`).
 2. Confirm the socket and pidfile were left behind.
 3. Start a new daemon on the same directory and wait for readiness.
 
 **Expected result**
 
 The debris survives the SIGKILL — that is what the entry-side removal exists for — and
-the next start reclaims it and binds successfully, with a **different** socket inode.
-The inode comparison is what distinguishes "the stale socket was removed and rebound"
-from "the stale socket was reused"; an existence check cannot tell those apart.
+the next start reclaims it and binds successfully, writing a **different** ownership
+token. That comparison is what distinguishes "the stale socket was removed and rebound"
+from "the stale socket was reused"; an existence check cannot tell those apart, and
+neither can an inode comparison on Linux — this assertion read `REBOUND_INO != STALE_INO`
+until 2026-08-15, which would have failed there on a restart that worked perfectly.
 
 ## Checklist
 
@@ -150,8 +165,8 @@ from "the stale socket was reused"; an existence check cannot tell those apart.
 - [ ] Scenario 2: still refused **after** the predecessor's teardown, which is the
       case that actually failed before DD-186
 - [ ] Scenario 3: a clean SIGTERM stop removes both the socket and the pidfile
-- [ ] Scenario 4: SIGKILL leaves both behind, and the next start binds a socket with a
-      **different** inode
+- [ ] Scenario 4: SIGKILL leaves both behind, and the next start binds a socket it
+      claims with a **different** ownership token
 - [ ] Scenarios 1 and 3 give identical verdicts under `--foreground` and daemonize
 - [ ] The gate reports a verdict, not a truncated run: the summary line is present
 
@@ -162,6 +177,8 @@ from "the stale socket was reused"; an existence check cannot tell those apart.
 | restore the pre-FR-170 unconditional `cleanup` (both `remove_file` calls unguarded) | Scenarios 1 and 2, in all four form/route combinations — **22 passed, 20 failed**, while Scenarios 3 and 4 stay green | `socket inode was <N> during the overlap, now <gone>`; `pidfile should name <PID>, reads <gone>`; `daemon status did not name <PID>; got: orchestratord is not running`; and the decisive one, `after the predecessor's exit a third daemon STARTED — the pidfile that refuses it is gone` |
 | `cleanup` that removes nothing at all | Scenario 3 only | `a clean stop left socket=present pidfile=present` |
 | pidfile ownership checked by inode instead of contents | unit `cleanup_leaves_a_pid_file_naming_another_process` | the fixture overwrites in place, so the inode is unchanged and an identity check deletes a successor's pidfile |
+| socket ownership checked by inode instead of the token (the pre-2026-08-15 shape) | unit `cleanup_leaves_a_socket_that_is_no_longer_the_one_we_bound`, **on Linux only** | the successor's claim overwrites in place, so the inode is unchanged and an identity check unlinks a live successor's socket; green on macOS, which is how it shipped |
+| remove the `.owner` token and keep the claim | unit `cleanup_leaves_a_socket_whose_token_has_been_removed` | an unreadable token must fail closed, or a crash between the two unlinks turns into a successor's socket removed by a stranger |
 
 Scenarios 3 and 4 staying green under the first mutation is the evidence that they
 guard the opposite direction — an over-strict ownership check — rather than

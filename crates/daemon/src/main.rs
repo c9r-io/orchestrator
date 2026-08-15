@@ -908,15 +908,18 @@ fn main() -> Result<()> {
         // before this existed — 22h34m in the field, and in an isolated repro it
         // stayed alive at t+2/5/10/20/30s while writing zero bytes of log.
         //
-        // The check is on identity rather than path presence because
-        // delete-and-recreate is the worse half: the path reads healthy while the
-        // old daemon writes an orphaned inode and a second daemon takes the name.
-        // See lifecycle::data_dir_identity.
+        // The check holds the directory open rather than re-stat'ing the path,
+        // because delete-and-recreate is the worse half: the path reads healthy
+        // while the old daemon writes an orphaned inode and a second daemon takes
+        // the name — and comparing the path's inode number does not separate the
+        // two on Linux, which hands the freed number straight back. See
+        // lifecycle::DataDirHandle.
         //
         // This does not add an exit path. It triggers `shutdown_notify`, the same
         // handle the RPC shutdown uses, so there is one shutdown sequence and not
         // a second one that has to be kept in agreement with it.
-        if let Some(expected_identity) = lifecycle::data_dir_identity(&inner.data_dir) {
+        if let Ok(data_dir_handle) = lifecycle::DataDirHandle::open(&inner.data_dir) {
+            let expected_identity = data_dir_handle.identity();
             let watcher_notify = shutdown_notify.clone();
             let watcher_state = inner.clone();
             let mut watcher_shutdown = shutdown_rx.clone();
@@ -931,7 +934,7 @@ fn main() -> Result<()> {
                 loop {
                     tokio::select! {
                         _ = interval.tick() => {
-                            let current = lifecycle::data_dir_identity(&data_dir);
+                            let current = data_dir_handle.observe(&data_dir);
                             if !lifecycle::observe_data_dir(
                                 expected_identity,
                                 current,
@@ -961,12 +964,12 @@ fn main() -> Result<()> {
                 }
             });
         } else {
-            // Startup already requires the directory; if it cannot be stat'd here
+            // Startup already requires the directory; if it cannot be opened here
             // something is wrong enough to say so rather than silently skip the
             // watcher for the rest of the process's life.
             tracing::warn!(
                 data_dir = %inner.data_dir.display(),
-                "cannot read the data directory's identity; the vanish watcher is not armed"
+                "cannot open the data directory; the vanish watcher is not armed"
             );
         }
 
@@ -1031,10 +1034,10 @@ fn main() -> Result<()> {
             }
         };
 
-        // Identity of the socket this daemon binds, so teardown can tell its own
+        // Proof that this daemon bound the socket, so teardown can tell its own
         // socket from a successor's at the same path (FR-170). Stays `None` on
         // both TCP paths, which bind no socket file and so have none to remove.
-        let mut socket_identity: Option<(u64, u64)> = None;
+        let mut socket_ownership: Option<lifecycle::SocketOwnership> = None;
 
         // Determine bind address: UDS by default, secure TCP if --bind provided
         if let Some(addr) = args.bind.as_deref() {
@@ -1127,10 +1130,13 @@ fn main() -> Result<()> {
                     .context("failed to set UDS socket permissions to 0600")?;
                 }
 
-                // Recorded after bind, so it is the identity of the socket this
+                // Written after bind, so the token only ever names a socket this
                 // process is actually listening on. Teardown removes the socket
-                // only while the path still resolves here (FR-170).
-                socket_identity = lifecycle::path_identity(&socket_path);
+                // only while that token is still ours (FR-170).
+                socket_ownership = Some(
+                    lifecycle::claim_socket(&socket_path)
+                        .context("failed to record socket ownership")?,
+                );
 
                 // Wrap accepted connections with peer-credential validation.
                 // Connections from a different UID are dropped before entering
@@ -1311,7 +1317,7 @@ fn main() -> Result<()> {
 
         // Normal shutdown
         inner.daemon_runtime.mark_stopped();
-        lifecycle::cleanup(&socket_path, socket_identity, &pid_path);
+        lifecycle::cleanup(&socket_path, socket_ownership.as_ref(), &pid_path);
         emit_daemon_event(&inner, "daemon_shutdown_completed", serde_json::json!({
             "reason": shutdown_reason(&inner, restart_rx.borrow().as_ref()),
         }))

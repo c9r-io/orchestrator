@@ -111,6 +111,8 @@ VANISH_BUDGET=40
 # Measured: against the pre-FR-170 teardown this gate printed two PASS lines, no
 # FAIL line and no summary, while the defect it exists to catch was present.
 inode_of() { stat -f %i "$1" 2>/dev/null || stat -c %i "$1" 2>/dev/null || true; }
+# The ownership token beside a socket, or empty when there is none to read.
+owner_of() { tr -d '[:space:]' < "$1.owner" 2>/dev/null || true; }
 
 # Open file descriptors on the runtime database, or 0. Total for inode_of's
 # reason: a dead PID makes lsof exit non-zero, and that must be an answer here
@@ -234,6 +236,7 @@ for FORM in foreground daemonize; do
 
     # Recorded during the overlap: this is what must still be true afterwards.
     SOCK_INO_DURING="$(inode_of "$DD/orchestrator.sock")"
+    SOCK_OWNER_DURING="$(owner_of "$DD/orchestrator.sock")"
 
     # The predecessor is still holding the orphaned database open. Asserted
     # here rather than only after its exit, because "a dead process holds no
@@ -316,13 +319,20 @@ for FORM in foreground daemonize; do
       fail "$LABEL: the predecessor exited without the 'data directory is gone' diagnostic in $PRED_LOG"
     fi
 
-    # Case 1. The inode, not mere presence: a socket deleted and recreated by
-    # anything at all would satisfy an -e test.
+    # Case 1. Not mere presence: a socket deleted and recreated by anything at
+    # all would satisfy an -e test. Both facts are asserted because on Linux
+    # neither is sufficient alone — a rebound socket usually takes the freed
+    # inode number straight back (measured 50/50 for a regular file), so an
+    # unchanged inode is not by itself proof that nothing was unlinked. The
+    # ownership token is: it is content, minted per process, and a successor
+    # that had to rebind would have written its own.
     SOCK_INO_AFTER="$(inode_of "$DD/orchestrator.sock")"
-    if [[ -n "$SOCK_INO_AFTER" && "$SOCK_INO_AFTER" == "$SOCK_INO_DURING" ]]; then
-      pass "$LABEL: the successor's socket survived, same inode ($SOCK_INO_AFTER)"
+    SOCK_OWNER_AFTER="$(owner_of "$DD/orchestrator.sock")"
+    if [[ -n "$SOCK_INO_AFTER" && "$SOCK_INO_AFTER" == "$SOCK_INO_DURING" \
+       && -n "$SOCK_OWNER_AFTER" && "$SOCK_OWNER_AFTER" == "$SOCK_OWNER_DURING" ]]; then
+      pass "$LABEL: the successor's socket survived, same inode ($SOCK_INO_AFTER) and same claim"
     else
-      fail "$LABEL: socket inode was $SOCK_INO_DURING during the overlap, now ${SOCK_INO_AFTER:-<gone>}"
+      fail "$LABEL: socket was inode $SOCK_INO_DURING / claim ${SOCK_OWNER_DURING:-<none>} during the overlap, now inode ${SOCK_INO_AFTER:-<gone>} / claim ${SOCK_OWNER_AFTER:-<none>}"
     fi
 
     PIDFILE_AFTER="$(cat "$DD/daemon.pid" 2>/dev/null || true)"
@@ -380,7 +390,7 @@ DD="$QA_ROOT/dd-ck"
 mkdir -p "$DD"
 OLD_PID="$(start_daemon "$DD" foreground "$QA_ROOT/crash.log")"
 if wait_ready "$DD"; then
-  STALE_INO="$(inode_of "$DD/orchestrator.sock")"
+  STALE_OWNER="$(owner_of "$DD/orchestrator.sock")"
   gate_daemon_kill_hard "$OLD_PID" || fail "the crashed daemon survived SIGKILL"
   OLD_PID=""
 
@@ -392,11 +402,17 @@ if wait_ready "$DD"; then
 
   NEW_PID="$(start_daemon "$DD" foreground "$QA_ROOT/crash-restart.log")"
   if wait_ready "$DD"; then
-    REBOUND_INO="$(inode_of "$DD/orchestrator.sock")"
-    if [[ -n "$REBOUND_INO" && "$REBOUND_INO" != "$STALE_INO" ]]; then
-      pass "the next start reclaimed the crash debris and bound a new socket ($STALE_INO -> $REBOUND_INO)"
+    # The claim, not the inode. This assertion used to read
+    # `REBOUND_INO != STALE_INO`, which is a claim about the inode allocator
+    # rather than about the daemon: a socket unlinked and rebound at the same
+    # path takes the freed number back on Linux (measured 50 times in 50), so
+    # the restart this case exists to prove would have read as a failure there.
+    # The token is minted per process and cannot collide.
+    REBOUND_OWNER="$(owner_of "$DD/orchestrator.sock")"
+    if [[ -n "$REBOUND_OWNER" && "$REBOUND_OWNER" != "$STALE_OWNER" ]]; then
+      pass "the next start reclaimed the crash debris and bound a socket it claims as its own"
     else
-      fail "expected a new socket inode after restart; stale=$STALE_INO now=${REBOUND_INO:-<gone>}"
+      fail "expected a fresh socket claim after restart; stale=${STALE_OWNER:-<none>} now=${REBOUND_OWNER:-<none>}"
     fi
   else
     fail "a daemon could not start over its own crash debris"
