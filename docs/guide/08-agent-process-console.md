@@ -98,11 +98,10 @@ Start the daemon in one terminal:
 orchestratord --foreground --workers 2
 ```
 
-On first use, initialize the runtime and run preflight checks in another terminal:
+On first use, wait for the daemon and run preflight checks in another terminal:
 
 ```bash
-orchestrator init
-orchestrator daemon status
+orchestrator daemon status --wait-ready
 orchestrator check --project <project>
 ```
 
@@ -116,11 +115,11 @@ npm --prefix gui ci
 npm --prefix gui run build
 ```
 
-Start the daemon, then initialize and launch the GUI in another terminal:
+Start the daemon, then launch the GUI in another terminal:
 
 ```bash
 ./target/release/orchestratord --foreground --workers 2
-./target/release/orchestrator init
+./target/release/orchestrator daemon status --wait-ready
 cargo run -p orchestrator-gui
 ```
 

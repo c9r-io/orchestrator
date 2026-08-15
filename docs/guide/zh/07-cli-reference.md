@@ -50,11 +50,18 @@ Agent Orchestrator CLI 全部命令速查。
 
 ### init
 
-创建运行时目录和 SQLite 表结构。
+报告当前使用的运行时路径，并可选地创建一个工作区根目录。
 
 ```bash
-orchestrator init
+orchestrator init [<root>]
 ```
+
+`init` 是一次发往运行中 daemon 的 RPC，所以它不是安装步骤，也不可能是：daemon
+在绑定套接字之前就已创建数据目录并跑完全部迁移。不带参数时 `init` 什么都不创建
+——它打印 daemon 解析出的数据目录与数据库路径。带 `<root>` 时它只创建那一个目录，
+相对路径按数据目录解析。
+
+要等待一个真正能服务的 daemon，请用 `daemon status --wait-ready`。
 
 ### apply
 

@@ -77,7 +77,7 @@ cargo fmt --all -- --check
 orchestratord --foreground --workers 2
 
 # In another terminal
-orchestrator init
+orchestrator daemon status --wait-ready
 orchestrator apply -f fixtures/manifests/bundles/capability-test.yaml
 orchestrator task create --goal "test run"
 orchestrator task list

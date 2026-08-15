@@ -13,11 +13,11 @@ cargo install orchestrator-cli
 ## Quick Start
 
 ```bash
-# Start the daemon first
+# Start the daemon first — it creates the database and runs every migration
 orchestratord --foreground --workers 2
 
 # Then use the CLI
-orchestrator init
+orchestrator daemon status --wait-ready
 orchestrator apply -f manifest.yaml
 orchestrator task create --goal "My first QA run"
 orchestrator task list
