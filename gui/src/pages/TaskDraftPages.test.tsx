@@ -2,9 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { invoke } from "@tauri-apps/api/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import TaskList from "./TaskList";
-import WishDetail from "./WishDetail";
-import WishPool from "./WishPool";
+import TaskDraftDetail from "./TaskDraftDetail";
+import TaskDraftList from "./TaskDraftList";
 import { RoleContext, hasAccess } from "../hooks/useRole";
 import { useGrpc } from "../hooks/useGrpc";
 import { useStream } from "../hooks/useStream";
@@ -41,7 +40,7 @@ function task(
 
 function detail(status: string): TaskDetailType {
   return {
-    ...task("wish-1", status, { name: "Draft Slack automation" }),
+    ...task("draft-1", status, { name: "Draft Slack automation" }),
     items: [],
   };
 }
@@ -56,80 +55,31 @@ function renderAs(role: Role, child: React.ReactNode) {
   );
 }
 
-describe("TaskList", () => {
-  beforeEach(() => {
-    vi.mocked(useGrpc).mockReturnValue({
-      data: [
-        task("done", "completed", { finished_items: 2 }),
-        task("active", "running", { total_items: 0, name: "" }),
-        task("broken", "failed"),
-        task("waiting", "pending"),
-        task("custom", "queued"),
-      ],
-      error: null,
-      loading: false,
-      call: vi.fn().mockResolvedValue(null),
-    });
-  });
-
-  afterEach(cleanup);
-
-  it("renders task state and progress, refreshes, and opens rows without double navigation", () => {
-    const onSelect = vi.fn();
-    renderAs("operator", <TaskList onSelect={onSelect} />);
-
-    expect(screen.getByText("2/2")).toBeVisible();
-    expect(screen.getByText("-")).toBeVisible();
-    expect(screen.getByText("completed").className).toContain("badge-success");
-    expect(screen.getByText("running").className).toContain("badge-info");
-    expect(screen.getByText("failed").className).toContain("badge-danger");
-    expect(screen.getByText("pending").className).toContain("badge-warning");
-    expect(screen.getByText("queued").className).toContain("badge");
-
-    fireEvent.click(screen.getByText("active"));
-    fireEvent.click(screen.getAllByRole("button", { name: "View" })[0]);
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    expect(onSelect.mock.calls).toEqual([["active"], ["done"]]);
-    expect(vi.mocked(useGrpc).mock.results[0].value.call).toHaveBeenCalledTimes(2);
-  });
-
-  it("hides operator actions and represents loading, errors, and empty results", () => {
-    const call = vi.fn();
-    vi.mocked(useGrpc).mockReturnValue({ data: [], error: "offline", loading: true, call });
-    renderAs("read_only", <TaskList onSelect={vi.fn()} />);
-
-    expect(screen.queryByText("Actions")).not.toBeInTheDocument();
-    expect(screen.getByText("offline")).toBeVisible();
-    expect(screen.getByText("No tasks found.")).toBeVisible();
-    expect(document.querySelectorAll(".skeleton")).toHaveLength(3);
-  });
-});
-
-describe("WishPool", () => {
+describe("TaskDraftList", () => {
   beforeEach(() => {
     vi.mocked(invoke).mockReset();
   });
 
   afterEach(cleanup);
 
-  it("sorts, filters, and opens wishes with mouse and keyboard", async () => {
+  it("sorts, filters, and opens drafts with mouse and keyboard", async () => {
     vi.mocked(invoke).mockResolvedValue([
       task("old", "completed", { updated_at: "2026-07-18T00:00:00Z" }),
       task("new", "running", { updated_at: "2026-07-18T01:00:00Z" }),
       task("cancelled", "deleted", { updated_at: "2026-07-18T00:30:00Z" }),
     ]);
-    const onSelectWish = vi.fn();
-    renderAs("operator", <WishPool onSelectWish={onSelectWish} />);
+    const onSelectDraft = vi.fn();
+    renderAs("operator", <TaskDraftList onSelectDraft={onSelectDraft} />);
 
-    const wishes = await screen.findAllByRole("button", { name: /任务草稿:/ });
-    expect(wishes.map((item) => item.getAttribute("aria-label"))).toEqual([
+    const drafts = await screen.findAllByRole("button", { name: /任务草稿:/ });
+    expect(drafts.map((item) => item.getAttribute("aria-label"))).toEqual([
       "任务草稿: new",
       "任务草稿: cancelled",
       "任务草稿: old",
     ]);
-    fireEvent.click(wishes[0]);
-    fireEvent.keyDown(wishes[1], { key: "Enter" });
-    expect(onSelectWish.mock.calls).toEqual([["new"], ["cancelled"]]);
+    fireEvent.click(drafts[0]);
+    fireEvent.keyDown(drafts[1], { key: "Enter" });
+    expect(onSelectDraft.mock.calls).toEqual([["new"], ["cancelled"]]);
 
     fireEvent.click(screen.getByRole("button", { name: "待确认" }));
     expect(screen.getByRole("button", { name: "任务草稿: old" })).toBeVisible();
@@ -140,12 +90,12 @@ describe("WishPool", () => {
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
   });
 
-  it("creates a trimmed wish from the button or shortcut and reports provider errors", async () => {
+  it("creates a trimmed draft from the button or shortcut and reports provider errors", async () => {
     vi.mocked(invoke)
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce({ task_id: "draft-2", status: "pending", message: "created" });
-    const onSelectWish = vi.fn();
-    const view = renderAs("operator", <WishPool onSelectWish={onSelectWish} />);
+    const onSelectDraft = vi.fn();
+    const view = renderAs("operator", <TaskDraftList onSelectDraft={onSelectDraft} />);
     expect(await screen.findByText("还没有草稿，在上方输入你的第一个需求吧")).toBeVisible();
 
     const input = screen.getByRole("textbox", { name: "需求描述" });
@@ -155,20 +105,20 @@ describe("WishPool", () => {
       goal: "automate Slack",
       project_id: "wish-pool",
     }));
-    expect(onSelectWish).toHaveBeenCalledWith("draft-2");
+    expect(onSelectDraft).toHaveBeenCalledWith("draft-2");
 
     vi.mocked(invoke).mockRejectedValueOnce("creation denied");
-    fireEvent.change(input, { target: { value: "retry wish" } });
+    fireEvent.change(input, { target: { value: "retry draft" } });
     fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
     expect(await screen.findByText("creation denied")).toBeVisible();
 
     view.unmount();
-    renderAs("read_only", <WishPool onSelectWish={vi.fn()} />);
+    renderAs("read_only", <TaskDraftList onSelectDraft={vi.fn()} />);
     expect(screen.queryByRole("textbox", { name: "需求描述" })).not.toBeInTheDocument();
   });
 });
 
-describe("WishDetail", () => {
+describe("TaskDraftDetail", () => {
   const call = vi.fn();
   const start = vi.fn();
   const stop = vi.fn();
@@ -202,13 +152,13 @@ describe("WishDetail", () => {
     });
     const onConfirmed = vi.fn();
     const view = renderAs("operator", (
-      <WishDetail taskId="wish-1" onBack={vi.fn()} onConfirmed={onConfirmed} />
+      <TaskDraftDetail taskId="draft-1" onBack={vi.fn()} onConfirmed={onConfirmed} />
     ));
 
     expect(await screen.findByRole("log", { name: "FR 草稿内容" })).toHaveTextContent("# FR draft");
     fireEvent.click(screen.getByRole("button", { name: "确认开发" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("task_create", {
-      goal: "wish-1 goal",
+      goal: "draft-1 goal",
       name: "Draft Slack automation",
     }));
     expect(onConfirmed).toHaveBeenCalledWith("implementation-1");
@@ -220,7 +170,7 @@ describe("WishDetail", () => {
     vi.mocked(useGrpc).mockReturnValue({ data: detail("running"), error: "stale", loading: false, call });
     vi.mocked(invoke).mockRejectedValue("delete denied");
     const onBack = vi.fn();
-    renderAs("operator", <WishDetail taskId="wish-1" onBack={onBack} onConfirmed={vi.fn()} />);
+    renderAs("operator", <TaskDraftDetail taskId="draft-1" onBack={onBack} onConfirmed={vi.fn()} />);
 
     expect(screen.getByText("stale")).toBeVisible();
     expect(screen.getByRole("log", { name: "FR 草稿内容" })).toHaveTextContent("live draft");
@@ -230,13 +180,13 @@ describe("WishDetail", () => {
     const dialog = screen.getByRole("dialog", { name: "取消草稿" });
     fireEvent.click(within(dialog).getByRole("button", { name: "确认取消" }));
     expect(await screen.findByText("delete denied")).toBeVisible();
-    expect(invoke).toHaveBeenCalledWith("task_delete", { task_id: "wish-1", force: true });
+    expect(invoke).toHaveBeenCalledWith("task_delete", { task_id: "draft-1", force: true });
   });
 
   it("uses streamed logs when completed-log loading fails and hides actions from readers", async () => {
     vi.mocked(useGrpc).mockReturnValue({ data: detail("completed"), error: null, loading: false, call });
     vi.mocked(invoke).mockRejectedValue(new Error("logs unavailable"));
-    renderAs("read_only", <WishDetail taskId="wish-1" onBack={vi.fn()} onConfirmed={vi.fn()} />);
+    renderAs("read_only", <TaskDraftDetail taskId="draft-1" onBack={vi.fn()} onConfirmed={vi.fn()} />);
 
     expect(await screen.findByRole("log", { name: "FR 草稿内容" })).toHaveTextContent("live draft");
     expect(screen.queryByRole("button", { name: "确认开发" })).not.toBeInTheDocument();

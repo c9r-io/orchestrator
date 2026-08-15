@@ -1,4 +1,4 @@
-/** Status icon + badge component used across wish pool and progress pages. */
+/** Status icon + badge component used across the task draft and progress pages. */
 import i18n from "../lib/i18n";
 
 interface Props {

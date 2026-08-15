@@ -26,14 +26,14 @@ vi.mock("./lib/telemetry", () => ({ recordUiMetric: vi.fn() }));
 vi.mock("./components/ConnectionBanner", () => ({ default: ({ state }: { state: { kind: string } }) => <div>banner {state.kind}</div> }));
 vi.mock("./pages/ConnectionStatus", () => ({ default: ({ state }: { state: { kind: string } }) => <div>connection {state.kind}</div> }));
 vi.mock("./pages/AttentionInbox", () => ({ default: ({ nativeNotificationsEnabled, onOpenTask }: { nativeNotificationsEnabled: boolean; onOpenTask: (id: string, reviewResume?: boolean) => void }) => <><button onClick={() => onOpenTask("task-attention")}>attention page {String(nativeNotificationsEnabled)}</button><button onClick={() => onOpenTask("task-review", true)}>attention review</button></> }));
-vi.mock("./pages/ProcessList", () => ({ default: ({ onSelect }: { onSelect: (id: string) => void }) => <button onClick={() => onSelect("task-list")}>process list</button> }));
+vi.mock("./pages/ProgressList", () => ({ default: ({ onSelect }: { onSelect: (id: string) => void }) => <button onClick={() => onSelect("task-list")}>process list</button> }));
 vi.mock("./pages/ProcessWorkspace", () => ({ default: ({ taskId, onBack, autoReviewResume, onAutoReviewConsumed }: { taskId: string; onBack: () => void; autoReviewResume?: boolean; onAutoReviewConsumed?: () => void }) => <><button onClick={onBack}>process workspace {taskId}</button><button onClick={onAutoReviewConsumed}>consume review {String(autoReviewResume)}</button></> }));
 vi.mock("./pages/SessionList", () => ({ default: ({ onSelect }: { onSelect: (id: string) => void }) => <button onClick={() => onSelect("session-list")}>session list</button> }));
 vi.mock("./pages/SessionInspector", () => ({ default: ({ sessionId, onOpenProcess }: { sessionId: string; onOpenProcess: (id: string) => void }) => <button onClick={() => onOpenProcess("task-session")}>session inspector {sessionId}</button> }));
 vi.mock("./pages/Sources", () => ({ default: ({ onOpenTask }: { onOpenTask: (id: string) => void }) => <button onClick={() => onOpenTask("task-source")}>sources page</button> }));
 vi.mock("./pages/System", () => ({ default: ({ initialSection }: { initialSection?: string }) => <div>system {initialSection}</div> }));
-vi.mock("./pages/WishPool", () => ({ default: ({ onSelectWish }: { onSelectWish: (id: string) => void }) => <button onClick={() => onSelectWish("draft-1")}>wish pool</button> }));
-vi.mock("./pages/WishDetail", () => ({ default: ({ taskId, onConfirmed }: { taskId: string; onConfirmed: (id: string) => void }) => <button onClick={() => onConfirmed("task-confirmed")}>wish detail {taskId}</button> }));
+vi.mock("./pages/TaskDraftList", () => ({ default: ({ onSelectDraft }: { onSelectDraft: (id: string) => void }) => <button onClick={() => onSelectDraft("draft-1")}>task draft list</button> }));
+vi.mock("./pages/TaskDraftDetail", () => ({ default: ({ taskId, onConfirmed }: { taskId: string; onConfirmed: (id: string) => void }) => <button onClick={() => onConfirmed("task-confirmed")}>task draft detail {taskId}</button> }));
 
 const navigate = vi.fn();
 const reconnect = vi.fn();
@@ -111,7 +111,7 @@ describe("App shell", () => {
     expect(navigate).toHaveBeenCalledWith({ page: "sources" });
     route = { page: "new-process", draftId: "draft-1" };
     view.rerender(<App />);
-    fireEvent.click(screen.getByRole("button", { name: /wish detail draft-1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /task draft detail draft-1/ }));
     expect(navigate).toHaveBeenCalledWith({ page: "processes", taskId: "task-confirmed" });
   });
 

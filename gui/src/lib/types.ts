@@ -459,6 +459,3 @@ export interface ResumeExecution {
   status: string;
   child_task_id: string | null;
 }
-
-/** Wish status derived from task status + workflow context. */
-export type WishStatus = "drafting" | "pending_confirm" | "confirmed" | "failed" | "cancelled";

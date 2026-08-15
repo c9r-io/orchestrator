@@ -6,64 +6,64 @@ import i18n from "../lib/i18n";
 import type { TaskSummary, TaskCreateResult } from "../lib/types";
 
 interface Props {
-  onSelectWish: (taskId: string) => void;
+  onSelectDraft: (taskId: string) => void;
 }
 
 const MAX_CHARS = 2000;
 
 const STATUS_FILTERS = [
-  i18n.wishPool.filterAll,
-  i18n.wishPool.filterDrafting,
-  i18n.wishPool.filterPendingConfirm,
-  i18n.wishPool.filterConfirmed,
-  i18n.wishPool.filterCancelled,
+  i18n.taskDraftList.filterAll,
+  i18n.taskDraftList.filterDrafting,
+  i18n.taskDraftList.filterPendingConfirm,
+  i18n.taskDraftList.filterConfirmed,
+  i18n.taskDraftList.filterCancelled,
 ] as const;
 
-function wishStatusLabel(status: string): string {
+function draftStatusLabel(status: string): string {
   switch (status.toLowerCase()) {
     case "running":
     case "in_progress":
-      return i18n.wishStatus.drafting;
+      return i18n.taskDraftStatus.drafting;
     case "completed":
     case "succeeded":
-      return i18n.wishStatus.pendingConfirm;
+      return i18n.taskDraftStatus.pendingConfirm;
     case "paused":
-      return i18n.wishStatus.paused;
+      return i18n.taskDraftStatus.paused;
     case "failed":
     case "error":
-      return i18n.wishStatus.failed;
+      return i18n.taskDraftStatus.failed;
     case "deleted":
-      return i18n.wishStatus.cancelled;
+      return i18n.taskDraftStatus.cancelled;
     default:
       return status;
   }
 }
 
 function matchesFilter(task: TaskSummary, filter: string): boolean {
-  if (filter === i18n.wishPool.filterAll) return true;
-  return wishStatusLabel(task.status) === filter;
+  if (filter === i18n.taskDraftList.filterAll) return true;
+  return draftStatusLabel(task.status) === filter;
 }
 
-export default function WishPool({ onSelectWish }: Props) {
+export default function TaskDraftList({ onSelectDraft }: Props) {
   const [input, setInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [wishes, setWishes] = useState<TaskSummary[]>([]);
-  const [filter, setFilter] = useState<string>(i18n.wishPool.filterAll);
+  const [drafts, setDrafts] = useState<TaskSummary[]>([]);
+  const [filter, setFilter] = useState<string>(i18n.taskDraftList.filterAll);
   const [error, setError] = useState<string | null>(null);
   const { canAccess } = useRole();
 
-  const loadWishes = useCallback(async () => {
+  const loadDrafts = useCallback(async () => {
     try {
       const tasks = await invoke<TaskSummary[]>("task_list", { project_filter: "wish-pool" });
-      setWishes(tasks.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
+      setDrafts(tasks.sort((a, b) => b.updated_at.localeCompare(a.updated_at)));
     } catch {
       // silently fail on list refresh
     }
   }, []);
 
   useEffect(() => {
-    loadWishes();
-  }, [loadWishes]);
+    loadDrafts();
+  }, [loadDrafts]);
 
   const handleSubmit = async () => {
     if (!input.trim() || submitting) return;
@@ -75,8 +75,8 @@ export default function WishPool({ onSelectWish }: Props) {
         project_id: "wish-pool",
       });
       setInput("");
-      // Navigate to the newly created wish detail
-      onSelectWish(result.task_id);
+      // Navigate to the newly created draft detail
+      onSelectDraft(result.task_id);
     } catch (e) {
       setError(typeof e === "string" ? e : String(e));
     } finally {
@@ -91,11 +91,11 @@ export default function WishPool({ onSelectWish }: Props) {
     }
   };
 
-  const filtered = wishes.filter((w) => matchesFilter(w, filter));
+  const filtered = drafts.filter((w) => matchesFilter(w, filter));
 
   return (
     <div>
-      <h1 className="page-title">{i18n.wishPool.title}</h1>
+      <h1 className="page-title">{i18n.taskDraftList.title}</h1>
 
       {/* Input area */}
       {canAccess("operator") && (
@@ -104,8 +104,8 @@ export default function WishPool({ onSelectWish }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value.slice(0, MAX_CHARS))}
             onKeyDown={handleKeyDown}
-            placeholder={i18n.wishPool.placeholder}
-            aria-label={i18n.wishPool.inputLabel}
+            placeholder={i18n.taskDraftList.placeholder}
+            aria-label={i18n.taskDraftList.inputLabel}
             style={{
               width: "100%",
               minHeight: 120,
@@ -136,9 +136,9 @@ export default function WishPool({ onSelectWish }: Props) {
               className="btn btn-primary"
               onClick={handleSubmit}
               disabled={!input.trim() || submitting}
-              aria-label={i18n.wishPool.submitLabel}
+              aria-label={i18n.taskDraftList.submitLabel}
             >
-              {submitting ? i18n.wishPool.submitting : i18n.wishPool.submit}
+              {submitting ? i18n.taskDraftList.submitting : i18n.taskDraftList.submit}
             </button>
           </div>
           {error && (
@@ -161,41 +161,41 @@ export default function WishPool({ onSelectWish }: Props) {
         ))}
         <button
           className="btn btn-ghost"
-          onClick={loadWishes}
+          onClick={loadDrafts}
           style={{ marginLeft: "auto", fontSize: 13 }}
         >
           {i18n.common.refresh}
         </button>
       </div>
 
-      {/* Wish list */}
+      {/* Draft list */}
       {filtered.length === 0 && (
         <div className="liquid-glass" style={{ textAlign: "center" }}>
           <p style={{ color: "var(--text-secondary)" }}>
-            {wishes.length === 0 ? i18n.wishPool.emptyFirst : i18n.wishPool.emptyFiltered}
+            {drafts.length === 0 ? i18n.taskDraftList.emptyFirst : i18n.taskDraftList.emptyFiltered}
           </p>
         </div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {filtered.map((wish) => (
+        {filtered.map((draft) => (
           <div
-            key={wish.id}
+            key={draft.id}
             className="liquid-glass"
             style={{ cursor: "pointer", padding: 16 }}
-            onClick={() => onSelectWish(wish.id)}
+            onClick={() => onSelectDraft(draft.id)}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => e.key === "Enter" && onSelectWish(wish.id)}
-            aria-label={i18n.wishPool.wishLabel(wish.name || wish.goal)}
+            onKeyDown={(e) => e.key === "Enter" && onSelectDraft(draft.id)}
+            aria-label={i18n.taskDraftList.draftLabel(draft.name || draft.goal)}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <StatusIcon status={wish.status} />
+              <StatusIcon status={draft.status} />
               <span style={{ flex: 1, fontWeight: 500 }}>
-                {wish.goal?.slice(0, 50) || wish.name || wish.id.slice(0, 8)}
+                {draft.goal?.slice(0, 50) || draft.name || draft.id.slice(0, 8)}
               </span>
               <span style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                {wish.updated_at}
+                {draft.updated_at}
               </span>
             </div>
           </div>
