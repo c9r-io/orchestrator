@@ -106,7 +106,7 @@ self_referential_safe_scenarios: [S1, S3, S5]
 
 ### Notes
 
-Full interruption-resume testing requires simulating a mid-rotation crash, which is covered by the `full_rotation_lifecycle` unit test in `core/src/secret_key_lifecycle.rs`. This scenario validates the CLI surface and guard logic.
+Full interruption-resume testing requires simulating a mid-rotation crash, which is covered by the `full_rotation_lifecycle` unit test in `crates/orchestrator-security/src/secret_key_lifecycle.rs`. This scenario validates the CLI surface and guard logic.
 
 ---
 

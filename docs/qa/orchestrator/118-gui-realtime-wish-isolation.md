@@ -158,7 +158,7 @@ self_referential_safe: false
 
 **S4 — FAILED**
 - 错误：`task.create: project not found: wish-pool`
-- 根因：`crates/orchestrator-scheduler/src/task_ops.rs:117-124` 要求 project_id 必须在 `active.config.projects` 中存在
+- 根因：`core/src/task_ops.rs:117-124` 要求 project_id 必须在 `active.config.projects` 中存在
 - 影响：GUI WishPool 创建许愿时会失败（`WishPool.tsx:68` 传递 `project_id: "wish-pool"`）
 
 ### GUI 专用项 (需要 Tauri GUI 运行)

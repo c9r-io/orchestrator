@@ -66,7 +66,7 @@ Verify that `apply_to_project` correctly routes resources into project scope and
 
 2. Verify project_id is stored in task creation path:
    ```bash
-   rg -n "project_id\|project_name" core/src/task_repository/ core/src/service/task.rs
+   rg -n "project_id\|project_name" core/src/task_repository/ crates/orchestrator-scheduler/src/service/task.rs
    ```
 
 ### Expected
@@ -99,7 +99,7 @@ Verify workflows are resolved from project scope (no fallback to global), via un
 
 2. Code review: confirm project-scoped workflow resolution has no global fallback:
    ```bash
-   rg -n "project.*workflow\|resolve.*workflow\|no fallback" core/src/resource/apply.rs core/src/service/task.rs
+   rg -n "project.*workflow\|resolve.*workflow\|no fallback" core/src/resource/apply.rs crates/orchestrator-scheduler/src/service/task.rs
    ```
 
 3. Run CRD scope serde tests:

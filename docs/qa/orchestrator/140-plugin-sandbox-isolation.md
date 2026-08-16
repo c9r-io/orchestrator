@@ -183,7 +183,7 @@ Verify that runtime plugin execution logs the sandbox profile name and policy ve
    → Expected: Field in struct + INSERT statement
 4. Verify migration step exists:
    ```bash
-   rg "m0025_plugin_audit_sandbox_columns" core/src/persistence/migration_steps.rs
+   rg "m0025_plugin_audit_sandbox_columns" crates/orchestrator-persistence/src/migration_steps.rs
    ```
 
 ### Expected

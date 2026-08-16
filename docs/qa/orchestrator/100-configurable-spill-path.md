@@ -82,7 +82,7 @@ rg 'state\.logs_dir' crates/orchestrator-scheduler/src/scheduler/item_executor/
 1. Verify migration adds the column:
 
 ```bash
-rg 'm0026_add_artifacts_dir' core/src/persistence/migration_steps.rs
+rg 'm0026_add_artifacts_dir' crates/orchestrator-persistence/src/migration_steps.rs
 # Expected: ALTER TABLE tasks ADD COLUMN artifacts_dir
 ```
 
@@ -96,7 +96,7 @@ rg 'artifacts_dir' core/src/task_ops.rs
 3. Verify runtime loading reads the column:
 
 ```bash
-rg 'artifacts_dir' core/src/task_repository/queries.rs
+rg 'artifacts_dir' crates/orchestrator-persistence/src/task_repository/queries.rs
 # Expected: COALESCE(artifacts_dir,'') in SELECT
 ```
 

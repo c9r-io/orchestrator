@@ -98,7 +98,7 @@ Verify that store operations support multiple output formats and project-scoped 
 
 1. **Code review** — verify project-scoped isolation in store table:
    ```bash
-   rg -n "PRIMARY KEY.*store_name.*project_id.*key" core/src/persistence/migration_steps.rs
+   rg -n "PRIMARY KEY.*store_name.*project_id.*key" crates/orchestrator-persistence/src/migration_steps.rs
    ```
 
 2. **Unit test** — verify export supports JSON and YAML output:

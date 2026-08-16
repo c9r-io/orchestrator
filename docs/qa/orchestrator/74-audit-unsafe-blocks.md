@@ -34,7 +34,7 @@ self_referential_safe: true
 ### S3: Eliminated unsafe blocks use safe wrappers
 
 **Steps:**
-1. Verify `core/src/runner/sandbox.rs` uses `nix::unistd::geteuid()` (no `libc::geteuid`)
+1. Verify `crates/orchestrator-runner/src/runner/sandbox.rs` uses `nix::unistd::geteuid()` (no `libc::geteuid`)
 2. Verify `crates/daemon/src/lifecycle.rs` uses `nix::sys::signal::kill()` (no `libc::kill`)
 
 **Expected:** Both files use `nix` wrappers for `kill()` and `geteuid()` respectively.
@@ -89,4 +89,4 @@ self_referential_safe: true
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
 | 1 | All scenarios verified | ☑ | S1-S7 PASS (2026-03-21); S2 rewritten from code-injection to `#![forbid(unsafe_code)]` grep verification. S7: 409 lib tests passed. |
-| 2 | All scenarios verified (2026-03-31) | ☑ | S1: deny clippy attr verified in cli/main.rs:9, core/lib.rs:20, daemon/main.rs:9. S2: forbid(unsafe_code) in proto/lib.rs:1. S3: nix wrappers confirmed in sandbox.rs and lifecycle.rs. S4: 45 safety tests passed. S5: 100% SAFETY comment coverage verified. S6: Miri job at ci.yml:91. S7: 1337+6+32+145+50+435+25 = 2030 lib tests passed. |
+| 2 | All scenarios verified (2026-03-31) | ☑ | S1: deny clippy attr verified in cli/main.rs:9, core/src/lib.rs:20, daemon/main.rs:9. S2: forbid(unsafe_code) in proto/lib.rs:1. S3: nix wrappers confirmed in sandbox.rs and lifecycle.rs. S4: 45 safety tests passed. S5: 100% SAFETY comment coverage verified. S6: Miri job at ci.yml:91. S7: 1337+6+32+145+50+435+25 = 2030 lib tests passed. |

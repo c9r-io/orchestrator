@@ -131,7 +131,7 @@ moved", "the count is equal" — cannot show that the chain still works.
 
 1. `cargo test -p agent-orchestrator schema_snapshot::tests::a_second_bootstrap_applies_nothing_and_changes_nothing`
 2. `cargo test -p agent-orchestrator schema_snapshot::tests::an_interrupted_chain_resumes_to_the_same_schema`
-3. `ruby -e 'puts File.read("core/src/persistence/migration.rs").scan(/version: \d+/).length'`
+3. `ruby -e 'puts File.read("crates/orchestrator-persistence/src/migration.rs").scan(/version: \d+/).length'`
 
 ### Expected result
 
