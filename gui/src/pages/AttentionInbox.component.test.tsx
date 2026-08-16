@@ -183,6 +183,15 @@ describe("AttentionInbox component", () => {
       "attention_claim",
       expect.objectContaining({ id: "attention-1" }),
     ));
+    // Wait for the claim to *settle*, not merely to have been dispatched.
+    // runMutation refuses to start while another mutation is in flight
+    // (`if (!canMutate || busyMutation) return`), which is the product behaviour
+    // an operator wants: a second keystroke must not race the first. Asserting
+    // on the invoke call alone only proves the claim was sent, so the next
+    // keystroke could arrive while busyMutation was still set — and under React
+    // 19's scheduling it reliably does. The announcement is the component's own
+    // signal that the mutation finished.
+    await screen.findByText("claim succeeded for Approval required");
     fireEvent.keyDown(document, { key: "s" });
     await waitFor(() => expect(invoke).toHaveBeenCalledWith(
       "attention_snooze",
