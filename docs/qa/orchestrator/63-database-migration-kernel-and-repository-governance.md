@@ -50,7 +50,7 @@ Verify migration registration remains strictly ordered and safe after the kernel
    ```
 2. Search for catalog ownership in the new migration kernel:
    ```bash
-   rg -n "pub fn registered_migrations|pub struct Migration" core/src/persistence/migration.rs
+   rg -n "pub fn registered_migrations|pub struct Migration" crates/orchestrator-persistence/src/migration.rs
    ```
 3. Search for any migration step implementation still added directly in the old file:
    ```bash
@@ -59,7 +59,7 @@ Verify migration registration remains strictly ordered and safe after the kernel
 
 ### Expected
 - All invariant tests pass.
-- `core/src/persistence/migration.rs` owns the registered migration catalog.
+- `crates/orchestrator-persistence/src/migration.rs` owns the registered migration catalog.
 - The legacy file only hosts compatibility forwarding and tests.
 - No migration step implementation remains in `core/src/migration.rs`.
 
@@ -126,7 +126,7 @@ Verify FR-009 closure did not allow new business SQL helpers to grow from compat
 - `core/src/db.rs` does not gain **new** business SQL helpers after the FR-009 refactor (existing legacy helpers like `count_non_terminal_tasks_by_workspace`, `insert_control_plane_audit`, etc. are pre-migration code and acceptable until a future migration iteration).
 - `SchedulerRepository` trait exists in `core/src/persistence/repository/scheduler.rs`.
 - `ConfigRepository` trait exists in `core/src/persistence/repository/config.rs`.
-- `TaskRepository` trait exists in `core/src/task_repository/trait_def.rs`.
+- `TaskRepository` trait exists in `crates/orchestrator-persistence/src/task_repository/trait_def.rs`.
 - New SQL for task/scheduler/config operations should be added to their respective repository implementations, not to `db.rs`.
 
 > **Note**: Full SQL migration from legacy modules (`db_write.rs`, `task_ops.rs`) into repository implementations is an ongoing effort. `scheduler_service.rs` was decomposed in 2026-03-26 (see Design Doc 92); its scheduling SQL now lives in the `orchestrator-scheduler` crate and its worker helpers moved to `service/system.rs`. This scenario governs that the **boundary** (traits) exists and no **new** helpers are added to `db.rs`, not that all legacy SQL has been migrated.
@@ -213,7 +213,7 @@ SELECT version, name FROM schema_migrations ORDER BY version;
 
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
-| 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-04-01 | Claude | Invariant tests passed; catalog ownership moved to `core/src/persistence/migration.rs` |
+| 1 | Migration Catalog Has Stable Governance Invariants | PASS | 2026-04-01 | Claude | Invariant tests passed; catalog ownership moved to `crates/orchestrator-persistence/src/migration.rs` |
 | 2 | Pending Migration Execution Remains Idempotent And Safe | PASS | 2026-04-01 | Claude | Fresh-db, idempotency, and failed-migration regressions all passed |
 | 3 | Runtime Persistence Continues Moving Behind Repository Boundaries | PASS | 2026-04-01 | Claude | `SchedulerRepository`、`ConfigRepository` 和 task write repository seam 已落地；`DbWriteCoordinator` 不再持有 SQL |
 | 4 | CLI Exposes Read-Only Schema And Migration Status | PASS | 2026-04-01 | Claude | Core service + CLI command regressions passed after `db` command rollout |

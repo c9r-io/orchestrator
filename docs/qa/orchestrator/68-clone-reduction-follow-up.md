@@ -88,7 +88,7 @@ clippy, fmt, or code-review gate and does not rely on daemon control-plane inter
 - If graph replay or materialization regresses, inspect `core/src/dynamic_orchestration/{dag,graph}.rs` and `crates/orchestrator-scheduler/src/scheduler/trace.rs`
 - If item fan-out state propagation regresses, inspect `core/src/dynamic_orchestration/{adaptive,step_pool}.rs`
 - If command-run/event persistence regresses, inspect `core/src/db_write.rs` and `core/src/scheduler/phase_runner/{setup,record}.rs`
-- If manifest export or secret-key audit output regresses, inspect `core/src/resource/export.rs` and `core/src/secret_key_lifecycle.rs`
+- If manifest export or secret-key audit output regresses, inspect `core/src/resource/export.rs` and `crates/orchestrator-security/src/secret_key_lifecycle.rs`
 
 ## Checklist
 

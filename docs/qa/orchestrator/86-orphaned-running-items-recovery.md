@@ -50,7 +50,7 @@ Verify that `recover_orphaned_running_items()` resets all running items to `pend
 
 ### Steps
 
-1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items()` function
+1. Review `crates/orchestrator-persistence/src/task_repository/state.rs` — `recover_orphaned_running_items()` function
 2. Review `crates/daemon/src/main.rs` — startup sequence calling `recover_orphaned_running_items()` before worker spawn
 3. Run unit test:
    ```bash
@@ -76,7 +76,7 @@ Verify that startup recovery does nothing and returns empty when there are no or
 
 ### Steps
 
-1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items()` with no running items
+1. Review `crates/orchestrator-persistence/src/task_repository/state.rs` — `recover_orphaned_running_items()` with no running items
 2. Run unit test:
    ```bash
    cargo test -p orchestrator-core -- recover_orphaned_running_items_returns_empty_when_no_orphans
@@ -98,7 +98,7 @@ Verify that `recover_orphaned_running_items_for_task()` only recovers items for 
 
 ### Steps
 
-1. Review `core/src/task_repository/state.rs` — `recover_orphaned_running_items_for_task()` function
+1. Review `crates/orchestrator-persistence/src/task_repository/state.rs` — `recover_orphaned_running_items_for_task()` function
 2. Run unit test:
    ```bash
    cargo test -p orchestrator-core -- recover_orphaned_running_items_for_task_only_affects_target_task
@@ -121,7 +121,7 @@ Verify that items in terminal states (`qa_passed`, `fixed`, `completed`) are not
 
 ### Steps
 
-1. Review `core/src/task_repository/state.rs` — recovery SQL `WHERE status='running'` filter
+1. Review `crates/orchestrator-persistence/src/task_repository/state.rs` — recovery SQL `WHERE status='running'` filter
 2. Run unit test:
    ```bash
    cargo test -p orchestrator-core -- recover_orphaned_running_items_does_not_affect_terminal_items
@@ -144,7 +144,7 @@ Verify that `recover_stalled_running_items()` correctly uses the time threshold 
 
 ### Steps
 
-1. Review `core/src/task_repository/state.rs` — `recover_stalled_running_items()` function
+1. Review `crates/orchestrator-persistence/src/task_repository/state.rs` — `recover_stalled_running_items()` function
 2. Review `crates/daemon/src/main.rs` — background stall sweep loop and `--stall-timeout-mins` CLI flag
 3. Run unit test:
    ```bash

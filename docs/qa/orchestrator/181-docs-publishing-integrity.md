@@ -255,7 +255,7 @@ unreachable code presented as a rule, and it was deleted rather than given a fix
 1. `git ls-files site/en/showcases site/zh/showcases | wc -l`
 2. `rg -n 'site/en/showcases|site/zh/showcases' .gitignore`
 3. `ls -1 site/en/showcases/*.md | wc -l`
-4. `./scripts/qa/qa-doc-lint.sh` — or `./scripts/qa-doc-lint.sh`
+4. `./scripts/qa-doc-lint.sh` — or `./scripts/qa-doc-lint.sh`
 5. Confirm both showcase source locales are in the language they claim:
 
 ```bash

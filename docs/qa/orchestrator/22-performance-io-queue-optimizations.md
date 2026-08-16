@@ -45,7 +45,7 @@ Verify phase result writes persist all structured fields (output_json, artifacts
    ```bash
    rg -n "insert_command_run|output_json|artifacts_json|validation_status" \
      core/src/task_repository/mod.rs \
-     core/src/task_repository/write_ops.rs
+     crates/orchestrator-persistence/src/task_repository/write_ops.rs
    ```
 
 2. **Code review** — verify event publication is tied to run ID:
@@ -121,7 +121,7 @@ Verify log tail implementation uses efficient reverse-seek scanning — validate
    ```bash
    rg -n "stdout_path|task_logs|spill.*path" \
      core/src/task_repository/mod.rs \
-     core/src/task_repository/write_ops.rs \
+     crates/orchestrator-persistence/src/task_repository/write_ops.rs \
      crates/orchestrator-scheduler/src/scheduler/item_executor/tests.rs
    ```
 

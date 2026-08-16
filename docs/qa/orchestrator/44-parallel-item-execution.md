@@ -28,7 +28,7 @@ When `max_parallel <= 1`, the existing sequential loop runs unchanged. When `> 1
 
 | File | Role |
 |------|------|
-| `core/src/config/workflow.rs` | `max_parallel` on `WorkflowConfig`, `WorkflowStepConfig` |
+| `crates/orchestrator-config/src/config/workflow.rs` | `max_parallel` on `WorkflowConfig`, `WorkflowStepConfig` |
 | `crates/orchestrator-config/src/config/execution.rs` | `max_parallel` on `TaskExecutionStep`, `TaskExecutionPlan` |
 | `core/src/scheduler/loop_engine.rs` | `ScopeSegment.max_parallel`, parallel dispatch in `StepScope::Item` |
 | `core/src/scheduler/item_executor.rs` | `OwnedProcessItemRequest`, `process_item_filtered_owned` |
@@ -194,7 +194,7 @@ Verify the database uses a writer+reader connection model with WAL mode and busy
 
 2. Verify busy_timeout is configured in code:
    ```bash
-   rg -n "SQLITE_BUSY_TIMEOUT_MS" core/src/persistence/sqlite.rs
+   rg -n "SQLITE_BUSY_TIMEOUT_MS" crates/orchestrator-persistence/src/sqlite.rs
    ```
 
 3. Run unit tests that validate database bootstrap and paired-connection configuration:

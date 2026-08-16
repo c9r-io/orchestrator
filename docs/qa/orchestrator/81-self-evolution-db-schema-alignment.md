@@ -15,7 +15,7 @@ Verify that the database schema supports the self-evolution workflow's dynamic i
 ### S-01: `task_items` table has required columns for dynamic items
 
 **Steps**:
-1. Inspect migration m0008 in `core/src/persistence/migration_steps.rs` (lines 490-509)
+1. Inspect migration m0008 in `crates/orchestrator-persistence/src/migration_steps.rs` (lines 490-509)
 2. Confirm `ALTER TABLE task_items ADD COLUMN dynamic_vars_json TEXT`
 3. Confirm `ALTER TABLE task_items ADD COLUMN label TEXT`
 4. Confirm `ALTER TABLE task_items ADD COLUMN source TEXT NOT NULL DEFAULT 'static'`
@@ -27,7 +27,7 @@ Verify that the database schema supports the self-evolution workflow's dynamic i
 ### S-02: `workflow_store_entries` table exists with correct schema
 
 **Steps**:
-1. Inspect migration m0007 in `core/src/persistence/migration_steps.rs` (lines 442-465)
+1. Inspect migration m0007 in `crates/orchestrator-persistence/src/migration_steps.rs` (lines 442-465)
 2. Confirm PRIMARY KEY is `(store_name, project_id, key)`
 3. Confirm columns: `store_name`, `project_id`, `key`, `value_json`, `task_id`, `created_at`, `updated_at`
 
@@ -38,7 +38,7 @@ Verify that the database schema supports the self-evolution workflow's dynamic i
 ### S-03: `events` table has required columns
 
 **Steps**:
-1. Inspect migration m0001 in `core/src/persistence/migration_steps.rs` (lines 94-101)
+1. Inspect migration m0001 in `crates/orchestrator-persistence/src/migration_steps.rs` (lines 94-101)
 2. Confirm columns: `task_id`, `event_type`, `payload_json`, `created_at`
 
 **Expected**:

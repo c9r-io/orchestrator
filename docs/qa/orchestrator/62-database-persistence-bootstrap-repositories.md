@@ -79,13 +79,13 @@ Verify business modules can no longer import or call a public `crate::db::ensure
    ```
 3. Search for the replacement private helper location:
    ```bash
-   rg -n "fn ensure_column_exists" core/src/persistence/migration_steps.rs
+   rg -n "fn ensure_column_exists" crates/orchestrator-persistence/src/migration_steps.rs
    ```
 
 ### Expected
 - Step 1 returns no matches.
 - Step 2 returns no matches.
-- Step 3 returns exactly one private helper definition in `core/src/persistence/migration_steps.rs`.
+- Step 3 returns exactly one private helper definition in `crates/orchestrator-persistence/src/migration_steps.rs`.
 
 ### Expected Data State
 ```sql
@@ -192,7 +192,7 @@ Verify the persistence extraction does not regress orchestrator package behavior
 | # | Scenario | Status | Test Date | Tester | Notes |
 |---|----------|--------|-----------|--------|-------|
 | 1 | Persistence Bootstrap Owns Schema Initialization | PASS | 2026-03-31 | Claude | Focused bootstrap test passed; no schema init errors |
-| 2 | Public DB Facade No Longer Exposes `ensure_column` | PASS | 2026-03-31 | Claude | `rg` confirmed no public `pub fn ensure_column` and no `crate::db::ensure_column` call sites remain; private helper confirmed at `core/src/persistence/migration_steps.rs:6` |
+| 2 | Public DB Facade No Longer Exposes `ensure_column` | PASS | 2026-03-31 | Claude | `rg` confirmed no public `pub fn ensure_column` and no `crate::db::ensure_column` call sites remain; private helper confirmed at `crates/orchestrator-persistence/src/migration_steps.rs:6` |
 | 3 | Session Async Wrapper Delegates Through Repository Boundary | PASS | 2026-03-31 | Claude | Both session tests passed; insert/load/update/cleanup intact |
 | 4 | Local Workflow Store Uses Repository-Backed Persistence | PASS | 2026-03-31 | Claude | All 4 store tests passed; CRUD/upsert/list/prune semantics intact |
 | 5 | Full Package Regression Remains Green After Persistence Refactor | PASS | 2026-03-31 | Claude | 1337 lib tests passed; no regressions in scheduler/session/store/migration |

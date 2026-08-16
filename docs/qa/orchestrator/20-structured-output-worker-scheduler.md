@@ -104,7 +104,7 @@ Verify structured fields (output_json, artifacts_json, confidence, quality_score
    ```bash
    rg -n "insert_command_run|output_json|artifacts_json|validation_status" \
      core/src/task_repository/mod.rs \
-     core/src/task_repository/write_ops.rs
+     crates/orchestrator-persistence/src/task_repository/write_ops.rs
    ```
 
 3. **Unit test** — run output capture and persistence tests:
@@ -138,7 +138,7 @@ Verify phase outputs are published as observable events — validated via code r
    ```bash
    rg -n "run_id|event_type" \
      core/src/db_write.rs \
-     core/src/task_repository/write_ops.rs
+     crates/orchestrator-persistence/src/task_repository/write_ops.rs
    ```
 
 3. **Unit test** — run trace and event tests:

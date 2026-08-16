@@ -127,7 +127,7 @@ Verify redaction logic correctly replaces sensitive tokens in text output, via u
 
 4. Code review: verify redaction is applied before persistence:
    ```bash
-   rg -n "redact_text|pipe_and_redact|redaction_patterns" core/src/runner/redact.rs core/src/runner/mod.rs core/src/output_capture.rs
+   rg -n "redact_text|pipe_and_redact|redaction_patterns" crates/orchestrator-runner/src/runner/redact.rs crates/orchestrator-runner/src/runner/mod.rs crates/orchestrator-runner/src/output_capture.rs
    ```
 
 ### Expected

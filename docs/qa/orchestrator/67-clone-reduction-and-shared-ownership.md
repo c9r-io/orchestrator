@@ -74,8 +74,8 @@ code review, and workspace gates; no live task queue or daemon lifecycle interac
 
 ## Failure Notes
 
-- If runtime-context sharing regresses, inspect `core/src/config/execution.rs` and `core/src/scheduler/runtime.rs`
-- If item fan-out or graph execution starts deep-cloning runtime state again, inspect `core/src/scheduler/loop_engine/segment.rs` and `core/src/scheduler/loop_engine/graph.rs`
+- If runtime-context sharing regresses, inspect `crates/orchestrator-config/src/config/execution.rs` and `crates/orchestrator-scheduler/src/scheduler/runtime.rs`
+- If item fan-out or graph execution starts deep-cloning runtime state again, inspect `crates/orchestrator-scheduler/src/scheduler/loop_engine/segment.rs` and `crates/orchestrator-scheduler/src/scheduler/loop_engine/graph.rs`
 - If task list/info/watch responses regress, inspect `crates/daemon/src/server/mapping.rs` and `crates/daemon/src/server/task.rs`
 - If trace output or anomaly detection regresses, inspect `core/src/scheduler/trace/{builder,anomaly,time}.rs`
 

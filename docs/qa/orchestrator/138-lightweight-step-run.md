@@ -34,7 +34,7 @@ self_referential_safe: true
 ## Scenario 3: step_filter And initial_vars Are Persisted
 
 ### Steps
-1. Run `rg 'step_filter_json|initial_vars_json' core/src/persistence/migration_steps.rs core/src/task_ops.rs`.
+1. Run `rg 'step_filter_json|initial_vars_json' crates/orchestrator-persistence/src/migration_steps.rs core/src/task_ops.rs`.
 
 ### Expected
 - Migration `m0023` adds both columns and task creation persists both values.
