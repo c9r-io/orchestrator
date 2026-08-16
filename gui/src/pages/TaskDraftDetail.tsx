@@ -15,12 +15,12 @@ interface Props {
 }
 
 const PROGRESS_PHASES = [
-  { delay: 0, text: i18n.wishDetail.phaseUnderstanding },
-  { delay: 3000, text: i18n.wishDetail.phaseDesigning },
-  { delay: 8000, text: i18n.wishDetail.phaseWriting },
+  { delay: 0, text: i18n.taskDraftDetail.phaseUnderstanding },
+  { delay: 3000, text: i18n.taskDraftDetail.phaseDesigning },
+  { delay: 8000, text: i18n.taskDraftDetail.phaseWriting },
 ];
 
-export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
+export default function TaskDraftDetail({ taskId, onBack, onConfirmed }: Props) {
   const { data, error, call } = useGrpc<TaskDetail>("task_info");
   const { canAccess } = useRole();
   const [showCancel, setShowCancel] = useState(false);
@@ -109,7 +109,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
   return (
     <div>
       <button className="btn btn-ghost" onClick={onBack} style={{ marginBottom: 12 }}>
-        {i18n.wishDetail.backToPool}
+        {i18n.taskDraftDetail.backToList}
       </button>
 
       {error && <p style={{ color: "var(--danger)" }}>{error}</p>}
@@ -117,12 +117,12 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
 
       {data && (
         <>
-          {/* Original wish */}
+          {/* Original draft */}
           <div className="liquid-glass" style={{ marginBottom: 16 }}>
             <h3 style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 4 }}>
-              {i18n.wishDetail.originalWish}
+              {i18n.taskDraftDetail.originalRequest}
             </h3>
-            <p>{data.goal || i18n.wishDetail.noDescription}</p>
+            <p>{data.goal || i18n.taskDraftDetail.noDescription}</p>
             <div style={{ marginTop: 8 }}>
               <StatusIcon status={data.status} />
             </div>
@@ -131,7 +131,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
           {/* FR Draft preview */}
           <div className="liquid-glass" style={{ marginBottom: 16 }}>
             <h3 style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 8 }}>
-              {isCompleted ? i18n.wishDetail.frDraftPreview : phaseText}
+              {isCompleted ? i18n.taskDraftDetail.frDraftPreview : phaseText}
             </h3>
 
             {isDrafting && !displayContent && (
@@ -159,7 +159,7 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
                   overflowY: "auto",
                 }}
                 role="log"
-                aria-label={i18n.wishDetail.frDraftContent}
+                aria-label={i18n.taskDraftDetail.frDraftContent}
               >
                 {displayContent}
               </div>
@@ -173,25 +173,25 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
                 <button
                   className="btn btn-primary"
                   onClick={handleConfirm}
-                  aria-label={i18n.wishDetail.confirmDev}
+                  aria-label={i18n.taskDraftDetail.confirmDev}
                 >
-                  {i18n.wishDetail.confirmDev}
+                  {i18n.taskDraftDetail.confirmDev}
                 </button>
               )}
               <button
                 className="btn btn-secondary"
                 onClick={onBack}
-                aria-label={i18n.wishDetail.modifyWish}
+                aria-label={i18n.taskDraftDetail.modifyRequest}
               >
-                {i18n.wishDetail.modifyWish}
+                {i18n.taskDraftDetail.modifyRequest}
               </button>
               <button
                 className="btn btn-ghost"
                 style={{ color: "var(--danger)" }}
                 onClick={() => setShowCancel(true)}
-                aria-label={i18n.wishDetail.cancelWish}
+                aria-label={i18n.taskDraftDetail.cancelDraft}
               >
-                {i18n.wishDetail.cancelWish}
+                {i18n.taskDraftDetail.cancelDraft}
               </button>
             </div>
           )}
@@ -200,9 +200,9 @@ export default function WishDetail({ taskId, onBack, onConfirmed }: Props) {
 
       <ConfirmDialog
         open={showCancel}
-        title={i18n.wishDetail.cancelTitle}
-        message={i18n.wishDetail.cancelMessage}
-        confirmLabel={i18n.wishDetail.cancelConfirm}
+        title={i18n.taskDraftDetail.cancelTitle}
+        message={i18n.taskDraftDetail.cancelMessage}
+        confirmLabel={i18n.taskDraftDetail.cancelConfirm}
         destructive
         onConfirm={handleCancel}
         onCancel={() => setShowCancel(false)}

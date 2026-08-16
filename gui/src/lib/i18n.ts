@@ -68,11 +68,13 @@ const zh = {
     toggleDark: "切换到深色模式",
   },
 
-  // FR-166: "Wish" was a fourth noun for a thing the rest of the system calls a task.
-  // It had no definition anywhere in docs/guide, and its own route already reads
-  // `new-task`. These strings now say draft; the `wish-pool` project id they operate
-  // on is a wire value and deliberately unchanged.
-  wishPool: {
+  // FR-166 retired "Wish" — a fourth noun for a thing the rest of the system calls a
+  // task, defined nowhere in docs/guide, on a route that already read `new-task`. It
+  // changed these strings and stopped there, so the noun survived in the key names,
+  // the component names and the types until they were renamed too: a reader of the
+  // code still met it first. The `wish-pool` project id is the one deliberate
+  // survivor — it is a wire value, matched by crates/gui/src/commands/stream.rs.
+  taskDraftList: {
     title: "任务草稿",
     placeholder: "描述你想要实现的功能，比如：我想让用户能通过邮箱注册账号...",
     inputLabel: "需求描述",
@@ -81,7 +83,7 @@ const zh = {
     submit: "创建草稿",
     emptyFirst: "还没有草稿，在上方输入你的第一个需求吧",
     emptyFiltered: "没有匹配的草稿",
-    wishLabel: (name: string) => `任务草稿: ${name}`,
+    draftLabel: (name: string) => `任务草稿: ${name}`,
     filterAll: "全部",
     filterDrafting: "草稿中",
     filterPendingConfirm: "待确认",
@@ -89,7 +91,7 @@ const zh = {
     filterCancelled: "已取消",
   },
 
-  wishStatus: {
+  taskDraftStatus: {
     drafting: "草稿中",
     pendingConfirm: "待确认",
     paused: "已暂停",
@@ -97,15 +99,15 @@ const zh = {
     cancelled: "已取消",
   },
 
-  wishDetail: {
-    backToPool: "\u2190 返回任务草稿",
-    originalWish: "原始需求",
+  taskDraftDetail: {
+    backToList: "\u2190 返回任务草稿",
+    originalRequest: "原始需求",
     noDescription: "(无描述)",
     frDraftPreview: "FR 草稿预览",
     frDraftContent: "FR 草稿内容",
     confirmDev: "确认开发",
-    modifyWish: "修改需求",
-    cancelWish: "取消",
+    modifyRequest: "修改需求",
+    cancelDraft: "取消",
     cancelTitle: "取消草稿",
     cancelMessage: "确定要取消这个任务草稿吗？此操作不可撤销。",
     cancelConfirm: "确认取消",

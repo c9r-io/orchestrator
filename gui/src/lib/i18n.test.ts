@@ -24,10 +24,10 @@ describe("console vocabulary", () => {
   it("calls a pending task a draft rather than a wish", () => {
     // "Wish" was never defined in docs/guide and had already leaked into the Chinese
     // console guide undefined. The wire value it operates on is deliberately untouched.
-    expect(i18n.wishPool.title).toBe("任务草稿");
-    expect(i18n.wishPool.wishLabel("x")).toBe("任务草稿: x");
-    expect(i18n.wishDetail.cancelTitle).toBe("取消草稿");
-    for (const value of Object.values(i18n.wishPool)) {
+    expect(i18n.taskDraftList.title).toBe("任务草稿");
+    expect(i18n.taskDraftList.draftLabel("x")).toBe("任务草稿: x");
+    expect(i18n.taskDraftDetail.cancelTitle).toBe("取消草稿");
+    for (const value of Object.values(i18n.taskDraftList)) {
       if (typeof value === "string") expect(value).not.toContain("许愿");
     }
   });

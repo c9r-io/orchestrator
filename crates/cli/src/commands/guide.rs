@@ -1710,13 +1710,16 @@ fn system_entries() -> Vec<GuideEntry> {
             command: "init",
             alias: None,
             category: GuideCategory::SystemAdmin,
-            summary: "Initialize orchestrator runtime",
-            description: "Set up the runtime directory and initial configuration.",
+            summary: "Report runtime paths, and optionally create one workspace root",
+            description: "An RPC to a running daemon, so it is not a setup step: the daemon creates the data directory and applies every migration before it binds its socket. With no argument it creates nothing and prints the resolved data directory and database path. Given a root, it creates that one directory. To wait for a daemon that can serve, use `daemon status --wait-ready`.",
             examples: &[
-                ("orchestrator init", "Initialize in default location"),
+                (
+                    "orchestrator init",
+                    "Print the data directory and database path in use",
+                ),
                 (
                     "orchestrator init /custom/path",
-                    "Initialize in a custom path",
+                    "Create one workspace root at a custom path",
                 ),
             ],
         },

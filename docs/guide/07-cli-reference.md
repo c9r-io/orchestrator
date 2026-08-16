@@ -50,11 +50,20 @@ The daemon holds all state (engine, DB, task queue). The CLI is a thin RPC clien
 
 ### init
 
-Create runtime directories and SQLite schema.
+Report the runtime paths in use, and optionally create one workspace root.
 
 ```bash
-orchestrator init
+orchestrator init [<root>]
 ```
+
+`init` is an RPC to a running daemon, so it is not a setup step and cannot be
+one: the daemon creates the data directory and applies every migration before
+it binds its socket. With no argument `init` creates nothing — it prints the
+data directory and database path the daemon resolved. Given `<root>` it creates
+that one directory, resolving a relative path under the data directory.
+
+To wait for a daemon that can actually serve, use `daemon status --wait-ready`
+(see [daemon management](#daemon-management)).
 
 ### apply
 

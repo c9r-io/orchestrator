@@ -13,14 +13,14 @@ import i18n from "./lib/i18n";
 import ConnectionBanner from "./components/ConnectionBanner";
 import ConnectionStatus from "./pages/ConnectionStatus";
 import AttentionInbox from "./pages/AttentionInbox";
-import ProcessList from "./pages/ProcessList";
+import ProgressList from "./pages/ProgressList";
 import ProcessWorkspace from "./pages/ProcessWorkspace";
 import SessionList from "./pages/SessionList";
 import SessionInspector from "./pages/SessionInspector";
 import Sources from "./pages/Sources";
 import System from "./pages/System";
-import WishPool from "./pages/WishPool";
-import WishDetail from "./pages/WishDetail";
+import TaskDraftList from "./pages/TaskDraftList";
+import TaskDraftDetail from "./pages/TaskDraftDetail";
 
 const nav: Array<{ page: ConsoleFeature; label: string; icon: string; shortcut: string }> = [
   { page: "attention", label: "Attention", icon: "!", shortcut: "1" },
@@ -115,7 +115,7 @@ export default function App() {
       case "attention": return <AttentionInbox initialAttentionId={route.attentionId} nativeNotificationsEnabled={nativeNotificationsEnabled} onOpenTask={(taskId, reviewResume) => go({ page: "processes", taskId, reviewResume })} onOpenSourceRoute={(resourceId) => go({ page: "sources", section: "automations", automationView: "routes", resourceId })} />;
       case "processes": return route.taskId
         ? <ProcessWorkspace taskId={route.taskId} onBack={() => go({ page: "processes" })} autoReviewResume={route.reviewResume} onAutoReviewConsumed={() => go({ page: "processes", taskId: route.taskId })} />
-        : <ProcessList onSelect={(taskId) => go({ page: "processes", taskId })} />;
+        : <ProgressList onSelect={(taskId) => go({ page: "processes", taskId })} />;
       case "sessions": return route.sessionId
         ? <SessionInspector sessionId={route.sessionId} onBack={() => go({ page: "sessions" })} onOpenProcess={(taskId) => go({ page: "processes", taskId })} />
         : <SessionList onSelect={(sessionId) => go({ page: "sessions", sessionId })} />;
@@ -124,8 +124,8 @@ export default function App() {
         : <Sources route={route} onNavigate={go} onOpenTask={(taskId) => go({ page: "processes", taskId })} />;
       case "system": return <System initialSection={route.section} />;
       case "new-process": return route.draftId
-        ? <WishDetail taskId={route.draftId} onBack={() => go({ page: "new-process" })} onConfirmed={(taskId) => go({ page: "processes", taskId })} />
-        : <WishPool onSelectWish={(draftId) => go({ page: "new-process", draftId })} />;
+        ? <TaskDraftDetail taskId={route.draftId} onBack={() => go({ page: "new-process" })} onConfirmed={(taskId) => go({ page: "processes", taskId })} />
+        : <TaskDraftList onSelectDraft={(draftId) => go({ page: "new-process", draftId })} />;
     }
   })();
 

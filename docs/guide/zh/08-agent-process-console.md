@@ -98,11 +98,10 @@ Console 的五个主页面还可在构建时分别用 `VITE_CONSOLE_ATTENTION`�
 orchestratord --foreground --workers 2
 ```
 
-首次使用时，在另一个终端初始化运行时并做预检：
+首次使用时，在另一个终端等待 daemon 就绪并做预检：
 
 ```bash
-orchestrator init
-orchestrator daemon status
+orchestrator daemon status --wait-ready
 orchestrator check --project <project>
 ```
 
@@ -124,10 +123,10 @@ npm --prefix gui run build
 ./target/release/orchestratord --foreground --workers 2
 ```
 
-另开终端初始化并启动 GUI：
+另开终端等待 daemon 就绪并启动 GUI：
 
 ```bash
-./target/release/orchestrator init
+./target/release/orchestrator daemon status --wait-ready
 cargo run -p orchestrator-gui
 ```
 
