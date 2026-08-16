@@ -89,13 +89,13 @@ allow-wildcard-paths = true
 
 # ── Accepted duplicates ───────────────────────────────────────────────────────
 #
-# 48 crates resolve to more than one version; 71 extra copies are accepted here,
+# 48 crates resolve to more than one version; 72 extra copies are accepted here,
 # each naming the dependency that introduces it and the version being kept.
 # Both numbers are re-derived from this file's own skip list by
-# prose-counts-derived in scripts/qa/dependency-policy.rb. The previous
-# revision said 70, because base64@0.22.1 arrived after the sentence was
-# written — a stated count invites exactly that drift, so the count is now
-# gated rather than trusted (FR-153).
+# prose-counts-derived in scripts/qa/dependency-policy.rb. It said 70 once,
+# because base64@0.22.1 arrived after the sentence was written, and 71 until
+# aes-gcm-siv 0.12 made rand_core@0.10.1 reachable — a stated count invites
+# exactly that drift, so the count is gated rather than trusted (FR-153).
 #
 # The universe here is the feature-resolved graph, not Cargo.lock. The lock
 # also records optional dependencies nobody enables — serde_with's schemars
@@ -153,6 +153,7 @@ skip = [
   { crate = "rand@0.9.5", reason = "tauri-plugin-notification is on rand 0.9; our four crates declare ^0.8, and cron -> phf_generator 0.11 pins 0.8 independently, so unifying ours removes nothing. Reached via tauri-plugin-notification 2.3.3. Keeping rand 0.8.7." },
   { crate = "rand_chacha@0.9.0", reason = "follows rand. Reached via rand 0.9.5. Keeping rand_chacha 0.3.1." },
   { crate = "rand_core@0.9.5", reason = "follows rand. Reached via rand 0.9.5, rand_chacha 0.9.0. Keeping rand_core 0.6.4." },
+  { crate = "rand_core@0.10.1", reason = "follows the RustCrypto stack aes-gcm-siv 0.12 brings in. It was already in Cargo.lock — reachable only through optional dependencies nobody enabled — and the 0.12 upgrade made it real in the feature-resolved graph. Reached via chacha20 0.10.1, getrandom 0.4.3, rand 0.10.2, rand_pcg 0.10.2. Keeping rand_core 0.6.4." },
   { crate = "reqwest@0.13.4", reason = "Tauri 2.11 bundles reqwest 0.13; our four crates declare ^0.12. Reached via tauri 2.11.5. Keeping reqwest 0.12.28." },
   { crate = "serde_spanned@0.6.9", reason = "follows toml. Reached via toml 0.8.2, toml_edit 0.20.2. Keeping serde_spanned 1.1.1." },
   { crate = "sha2@0.10.9", reason = "Tauri's codegen and wry hash with sha2 0.10; our seven crates declare ^0.11. Reached via tauri-codegen 2.6.3, wry 0.55.1. Keeping sha2 0.11.0." },
