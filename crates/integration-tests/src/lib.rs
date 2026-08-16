@@ -98,7 +98,6 @@ fn event_to_proto(e: EventDto) -> Event {
     }
 }
 
-
 fn graph_debug_to_proto(bundle: TaskGraphDebugBundle) -> orchestrator_proto::TaskGraphDebugBundle {
     orchestrator_proto::TaskGraphDebugBundle {
         graph_run_id: bundle.graph_run_id,
@@ -1062,10 +1061,7 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
-    async fn apply(
-        &self,
-        _: Request<ApplyRequest>,
-    ) -> Result<Response<ApplyResponse>, Status> {
+    async fn apply(&self, _: Request<ApplyRequest>) -> Result<Response<ApplyResponse>, Status> {
         Err(Status::unimplemented(
             "no integration test drives this RPC; the production daemon owns it",
         ))
@@ -1139,10 +1135,7 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
-    async fn delete(
-        &self,
-        _: Request<DeleteRequest>,
-    ) -> Result<Response<DeleteResponse>, Status> {
+    async fn delete(&self, _: Request<DeleteRequest>) -> Result<Response<DeleteResponse>, Status> {
         Err(Status::unimplemented(
             "no integration test drives this RPC; the production daemon owns it",
         ))
@@ -1255,10 +1248,7 @@ impl OrchestratorService for TestOrchestratorServer {
         ))
     }
 
-    async fn check(
-        &self,
-        _: Request<CheckRequest>,
-    ) -> Result<Response<CheckResponse>, Status> {
+    async fn check(&self, _: Request<CheckRequest>) -> Result<Response<CheckResponse>, Status> {
         Err(Status::unimplemented(
             "no integration test drives this RPC; the production daemon owns it",
         ))
