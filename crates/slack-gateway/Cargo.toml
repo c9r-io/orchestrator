@@ -14,7 +14,7 @@ name = "orchestrator-slack-gateway"
 path = "src/main.rs"
 
 [dependencies]
-aes-gcm-siv = "0.11"
+aes-gcm-siv = "0.12"
 anyhow = "1.0"
 axum = "0.8"
 base64 = "0.23"

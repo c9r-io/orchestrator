@@ -1,11 +1,17 @@
 //! Encryption and digest primitives for gateway-owned credentials.
 
-use aes_gcm_siv::aead::{Aead, KeyInit as AeadKeyInit, OsRng, rand_core::RngCore};
+use aes_gcm_siv::aead::{Aead, KeyInit as AeadKeyInit};
+// aes-gcm-siv 0.12 stopped re-exporting `OsRng` and `rand_core` through `aead`.
+// The generator is taken from `rand` directly, which is what
+// orchestrator-security's secret_store_crypto.rs has always done — so the two
+// crypto call sites now name the same source of randomness instead of two.
 use aes_gcm_siv::{Aes256GcmSiv, Nonce};
 use anyhow::{Context, Result, bail};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use hmac::{Hmac, KeyInit as HmacKeyInit, Mac};
+use rand::RngCore;
+use rand::rngs::OsRng;
 use sha2::{Digest, Sha256};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -48,7 +54,7 @@ impl GatewayCrypto {
         bound.push(0);
         bound.extend_from_slice(plaintext.as_bytes());
         let ciphertext = cipher
-            .encrypt(Nonce::from_slice(&nonce), bound.as_ref())
+            .encrypt(&Nonce::from(nonce), bound.as_ref())
             .map_err(|_| anyhow::anyhow!("credential encryption failed"))?;
         let mut envelope = nonce.to_vec();
         envelope.extend_from_slice(&ciphertext);
@@ -66,7 +72,13 @@ impl GatewayCrypto {
         let cipher = <Aes256GcmSiv as AeadKeyInit>::new_from_slice(&self.key)
             .map_err(|_| anyhow::anyhow!("invalid encryption key"))?;
         let plaintext = cipher
-            .decrypt(Nonce::from_slice(&bytes[..NONCE_LEN]), &bytes[NONCE_LEN..])
+            .decrypt(
+                // Length is checked above: a shorter envelope bails as truncated.
+                // aes-gcm-siv 0.12 deprecates the panicking `from_slice`.
+                &Nonce::try_from(&bytes[..NONCE_LEN])
+                    .map_err(|_| anyhow::anyhow!("credential envelope nonce is malformed"))?,
+                &bytes[NONCE_LEN..],
+            )
             .map_err(|_| anyhow::anyhow!("credential decryption failed"))?;
         let prefix = [context.as_bytes(), &[0]].concat();
         if !plaintext.starts_with(&prefix) {
