@@ -360,17 +360,32 @@ echo ""
 # this file names exactly one case.
 
 echo "-- 19. the prose counts are derived, not trusted --"
+# Both victim numbers come from the live prose, for the reason 19c already
+# states below and these two did not follow: a literal from-string stops
+# matching the moment the real count moves, and the case then mutates nothing
+# while still reporting a pass. It moved on 2026-08-16, when aes-gcm-siv 0.12
+# made rand_core@0.10.1 reachable and took the copy count 71 -> 72; both cases
+# failed with "the mutation did not apply", which is fixture_mutate catching the
+# drift rather than the drift catching anyone out.
 reset_case
-if sub "19" "$POLICY" \
-    "# 48 crates resolve to more than one version; 71 extra copies are accepted here," \
-    "# 47 crates resolve to more than one version; 71 extra copies are accepted here,"; then
+current_crates="$(sed -n 's/^# \([0-9][0-9]*\) crates resolve to more than one version.*/\1/p' "$CASE/$POLICY")"
+current_crates="${current_crates%%$'\n'*}"
+current_copies="$(sed -n 's/.*more than one version; \([0-9][0-9]*\) extra copies.*/\1/p' "$CASE/$POLICY")"
+current_copies="${current_copies%%$'\n'*}"
+if [ -z "$current_crates" ] || [ -z "$current_copies" ]; then
+  fail "19: cannot derive the duplicate counts from the policy prose"
+elif sub "19" "$POLICY" \
+    "# $current_crates crates resolve to more than one version; $current_copies extra copies are accepted here," \
+    "# $((current_crates - 1)) crates resolve to more than one version; $current_copies extra copies are accepted here,"; then
   fires "19. a stale crate count in the header is a finding" "prose-counts-derived"
 fi
 reset_case
 # Rewording, not renumbering: the mutation the rule is least likely to catch is
 # the sentence disappearing, which a number comparison never sees.
-if sub "19b" "$POLICY" \
-    "resolve to more than one version; 71 extra copies" \
+if [ -z "$current_copies" ]; then
+  fail "19b: cannot derive the copy count from the policy prose"
+elif sub "19b" "$POLICY" \
+    "resolve to more than one version; $current_copies extra copies" \
     "resolve to more than one version; a number of extra copies"; then
   fires "19b. rewording the counts away is a finding, not a skip" "prose-counts-derived"
 fi

@@ -21,6 +21,22 @@ pub const SECRETSTORE_ENCRYPTION_SCHEME: &str = "secretstore.aead.v1";
 /// Redaction placeholder written when secret values must be hidden.
 pub const ENCRYPTED_PLACEHOLDER: &str = "[ENCRYPTED]";
 
+/// Build a nonce from bytes whose length the caller has already checked.
+///
+/// aes-gcm-siv 0.12 deprecates `Array::from_slice`, which panicked on a wrong
+/// length, in favour of `TryFrom`. Both decrypt paths validate the length
+/// against NONCE_SIZE_BYTES before reaching here and return a diagnostic that
+/// names the envelope; this keeps that error theirs rather than turning a
+/// malformed stored nonce into a panic inside the cipher.
+fn nonce_from(bytes: &[u8]) -> Result<aes_gcm_siv::Nonce> {
+    aes_gcm_siv::Nonce::try_from(bytes).map_err(|_| {
+        anyhow!(
+            "nonce must be {NONCE_SIZE_BYTES} bytes, got {}",
+            bytes.len()
+        )
+    })
+}
+
 #[derive(Debug, Clone)]
 /// In-memory handle for one loaded SecretStore encryption key.
 pub struct SecretKeyHandle {
@@ -95,11 +111,11 @@ impl SecretEncryption {
             .map_err(|_| anyhow!("failed to initialize secret store cipher"))?;
         let mut nonce_bytes = [0_u8; NONCE_SIZE_BYTES];
         rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = aes_gcm_siv::Nonce::from_slice(&nonce_bytes);
+        let nonce = aes_gcm_siv::Nonce::from(nonce_bytes);
         let aad_json = serde_json::to_vec(&aad).context("failed to serialize secret AAD")?;
         let ciphertext = cipher
             .encrypt(
-                nonce,
+                &nonce,
                 Payload {
                     msg: &plain,
                     aad: &aad_json,
@@ -160,7 +176,7 @@ impl SecretEncryption {
             serde_json::to_vec(&envelope.aad).context("failed to serialize envelope AAD")?;
         let plain = cipher
             .decrypt(
-                aes_gcm_siv::Nonce::from_slice(&nonce_bytes),
+                &nonce_from(&nonce_bytes)?,
                 Payload {
                     msg: &ciphertext,
                     aad: &aad_json,
@@ -197,7 +213,7 @@ impl SecretEncryption {
         let aad_json = serde_json::to_vec(&aad).context("failed to serialize credential AAD")?;
         let ciphertext = cipher
             .encrypt(
-                aes_gcm_siv::Nonce::from_slice(&nonce_bytes),
+                &aes_gcm_siv::Nonce::from(nonce_bytes),
                 Payload {
                     msg: credential.as_bytes(),
                     aad: &aad_json,
@@ -250,7 +266,7 @@ impl SecretEncryption {
             .map_err(|_| anyhow!("failed to initialize SourceConnection credential cipher"))?;
         let plain = cipher
             .decrypt(
-                aes_gcm_siv::Nonce::from_slice(&nonce_bytes),
+                &nonce_from(&nonce_bytes)?,
                 Payload {
                     msg: &ciphertext,
                     aad: &aad_json,
@@ -666,6 +682,60 @@ mod tests {
         assert_eq!(first.fingerprint(), second.fingerprint());
         assert!(secret_key_path(temp.path()).exists());
         assert!(secret_key_meta_path(temp.path()).exists());
+    }
+
+    /// A SecretStore envelope written by aes-gcm-siv **0.11**, frozen here.
+    ///
+    /// Every deployment has envelopes like this on disk. AES-GCM-SIV is RFC 8452
+    /// and its ciphertext is a function of key, nonce, plaintext and AAD rather
+    /// than of the crate that produced it — but "should be compatible" is the
+    /// claim a stored-data migration cannot afford to make without evidence, so
+    /// this is the evidence. Captured from this file's own encrypt path while the
+    /// dependency was 0.11.1, and asserted here to still decrypt under 0.12.
+    ///
+    /// If this ever fails, the upgrade is not a version bump: it is a format
+    /// change, and every SecretStore in the field needs a re-encryption path
+    /// before the new binary ships.
+    const ENVELOPE_WRITTEN_BY_0_11: &str = r#"{"_encrypted":true,"scheme":"secretstore.aead.v1","key_id":"primary","nonce":"iNXVhWOli313JYJl","ciphertext":"yEjYBK/HhmlNJ4wsCyV/II1JQZmbOSNVhlXMjmgIpUWA9YF2k4wgpp6723QNqAW+yIVod2RNx+k=","aad":{"kind":"SecretStore","project":"default","name":"api-keys"}}"#;
+
+    fn fixture_key() -> SecretKeyHandle {
+        SecretKeyHandle {
+            key_bytes: [7_u8; KEY_SIZE_BYTES],
+            key_id: KEY_ID_PRIMARY.to_string(),
+            fingerprint: "fixture".to_string(),
+            path: PathBuf::from("/dev/null"),
+        }
+    }
+
+    #[test]
+    fn an_envelope_written_by_the_previous_crate_version_still_decrypts() {
+        let encryption = SecretEncryption::from_key(fixture_key());
+        let plain = encryption
+            .decrypt_secret_store_spec("default", "api-keys", ENVELOPE_WRITTEN_BY_0_11)
+            .expect("an envelope on disk from the previous release must still decrypt");
+        assert_eq!(
+            plain,
+            serde_json::json!({"data": {"API_KEY": "sk-fixture-0dot11"}})
+        );
+    }
+
+    /// The AAD is authenticated, so a stored envelope cannot be replayed under a
+    /// different resource identity. Asserted on the same frozen bytes, because a
+    /// compatibility fixture that only proved "it decrypts" would still pass if
+    /// the upgrade quietly stopped binding the AAD.
+    #[test]
+    fn the_frozen_envelope_refuses_a_different_identity() {
+        let encryption = SecretEncryption::from_key(fixture_key());
+        assert!(
+            encryption
+                .decrypt_secret_store_spec("other-project", "api-keys", ENVELOPE_WRITTEN_BY_0_11)
+                .is_err()
+        );
+        assert!(
+            encryption
+                .decrypt_secret_store_spec("default", "other-name", ENVELOPE_WRITTEN_BY_0_11)
+                .is_err()
+        );
     }
 
     #[test]

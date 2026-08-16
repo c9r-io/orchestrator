@@ -11,7 +11,7 @@ rust-version.workspace = true
 
 [dependencies]
 orchestrator-config = { path = "../orchestrator-config", version = "0.6.0" }
-aes-gcm-siv = "0.11"
+aes-gcm-siv = "0.12"
 anyhow = "1.0"
 base64 = "0.23"
 chrono = { version = "0.4", features = ["serde"] }
