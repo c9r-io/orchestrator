@@ -181,7 +181,13 @@ export default function HandoffPanel({
     }
   };
 
-  const openResume = useCallback(async (source?: HTMLElement | null) => {
+  /// Returns whether the dialog actually opened.
+  ///
+  /// The caller needs that answer: an open can be abandoned after its await —
+  /// the component unmounted, or a newer open superseded this one — and a
+  /// caller that assumed success would record a request as handled that never
+  /// produced a dialog.
+  const openResume = useCallback(async (source?: HTMLElement | null): Promise<boolean> => {
     const request = ++openRequestRef.current;
     const focusCandidate = source ?? null;
     returnFocusRef.current = isFocusableTarget(focusCandidate)
@@ -191,14 +197,16 @@ export default function HandoffPanel({
     setError(null);
     try {
       const values = await invoke<ResumeBoundary[]>("resume_boundary_list", { task_id: taskId });
-      if (!mountedRef.current || request !== openRequestRef.current) return;
+      if (!mountedRef.current || request !== openRequestRef.current) return false;
       setBoundaries(values);
       setBoundaryId(values[0]?.id ?? "");
       setPlan(null);
       setResult(null);
       setDialogOpen(true);
+      return true;
     } catch (value) {
       if (mountedRef.current && request === openRequestRef.current) setError(String(value));
+      return false;
     } finally {
       if (mountedRef.current && request === openRequestRef.current) setBusy(false);
     }
@@ -206,8 +214,21 @@ export default function HandoffPanel({
 
   useEffect(() => {
     if (reviewRequest <= handledReviewRequestRef.current || !canExecute) return;
-    handledReviewRequestRef.current = reviewRequest;
-    void openResume(reviewReturnTargetRef?.current ?? resumeButtonRef.current);
+    // Recorded on success, not on dispatch. Marking it here would be marking a
+    // request handled that may never open a dialog: this effect's cleanup sets
+    // mountedRef false and bumps openRequestRef, so an open still awaiting
+    // `resume_boundary_list` is abandoned — and with the request already
+    // recorded, nothing retries it. StrictMode's mount/cleanup/mount makes that
+    // sequence certain rather than occasional, which is how it surfaced: under
+    // React 19 the one-click safe resume opened nothing at all. The same race is
+    // reachable in production whenever that call is slower than a re-render.
+    let superseded = false;
+    void openResume(reviewReturnTargetRef?.current ?? resumeButtonRef.current).then((opened) => {
+      if (opened && !superseded) handledReviewRequestRef.current = reviewRequest;
+    });
+    return () => {
+      superseded = true;
+    };
   }, [canExecute, openResume, reviewRequest, reviewReturnTargetRef]);
 
   const preview = async () => {

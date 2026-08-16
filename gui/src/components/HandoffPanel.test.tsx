@@ -272,4 +272,64 @@ describe("HandoffPanel", () => {
     expect(screen.queryByRole("button", { name: "Preview resume" })).not.toBeInTheDocument();
     expect(screen.getByText(/Read-only access/)).toBeVisible();
   });
+
+  /// An auto-open that gets superseded before it finishes must not count as
+  /// handled — otherwise nothing ever opens the dialog.
+  ///
+  /// `openResume` awaits `resume_boundary_list`, and this effect's cleanup bumps
+  /// `openRequestRef`, which abandons any open still in flight. The request used
+  /// to be recorded as handled at dispatch, so once that happened the guard
+  /// refused every retry and the operator got no dialog at all. React 19's
+  /// StrictMode mount/cleanup/mount makes the sequence certain — that is how it
+  /// was found, with the one-click safe resume opening nothing — but the race is
+  /// reachable on any version whenever the boundary list is slower than a
+  /// re-render, which is what this fixture arranges.
+  it("re-opens after an in-flight auto-open is superseded", async () => {
+    const releases: Array<() => void> = [];
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "resume_boundary_list") {
+        return new Promise((resolve) => {
+          releases.push(() => resolve([boundary]));
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    const first = { current: null } as React.RefObject<HTMLElement | null>;
+    const second = { current: null } as React.RefObject<HTMLElement | null>;
+    const view = render(
+      <HandoffPanel
+        taskId="task-1"
+        canGenerate
+        canExecute
+        reviewRequest={1}
+        reviewReturnTargetRef={first}
+        onExecuted={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(releases.length).toBe(1));
+
+    // A dependency change re-runs the effect: its cleanup abandons the open that
+    // is still awaiting the boundary list.
+    view.rerender(
+      <HandoffPanel
+        taskId="task-1"
+        canGenerate
+        canExecute
+        reviewRequest={1}
+        reviewReturnTargetRef={second}
+        onExecuted={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(releases.length).toBe(2));
+
+    await act(async () => {
+      releases.forEach((release) => release());
+      await Promise.resolve();
+    });
+
+    expect(
+      await screen.findByRole("dialog", { name: "Resume consequence preview" }),
+    ).toBeVisible();
+  });
 });
