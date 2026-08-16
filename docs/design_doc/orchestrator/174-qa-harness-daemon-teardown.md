@@ -111,6 +111,49 @@ QA 211：库先行并单独验证；每门禁前后残留清点（净增长即�
   `~/.orchestratord`（ticket `20260811-webhook-gates-write-real-data-dir`）；
   QA 211 的"残留为零"声明限定在其扫描面内，这个面不含用户家目录——又一次
   范围谓词是关于扫描的事实、不是关于世界的事实。
+- **本 FR 修好的形状，在 agent 自己的临时脚本里原样活着，而 check 16 看不见那里。**
+  2026-08-13 的 FR-168 认证期间清点到两个 `orchestratord`（PID 37254/37273），
+  已存活 22h34m，PPID 均为 1，PGID 37132 的组长早已不存在，数据目录
+  `$TMPDIR/t1-archive.sM2A1X/{a,b}/` 已从磁盘消失而它们仍攥着 unlink 后的 inode。
+  二者都未持有 `~/.orchestratord/agent_orchestrator.db`。
+
+  **来源已逐级坐实，非推断**：Claude Code 后台作业 `9883500f`（会话
+  `2f2ca424-…`）于 `2026-08-12T15:53:14Z` 写出
+  `~/.claude/jobs/9883500f/tmp/t1-archive-check.sh`，`15:53:19Z` 执行，
+  `15:53:35Z` 干净退出（未被中断，两例均报 `archive_size_bytes: 300`）。
+  脚本内 `mktemp -d "${TMPDIR:-/tmp}/t1-archive.XXXXXX"` 正是 `t1-archive.sM2A1X`
+  的来源。它不在仓库里、也不在 git 历史里，因为它根本不是仓库的文件。
+
+  **机制已复现**，不是推测。脚本的启动形状是
+
+      ( cd "$WORK" && "$ORCHD" … > "$WORK/$label.log" 2>&1 & echo $! > "$pidfile" )
+
+  `&` 作用于整个 `cd && ORCHD` 与列表，bash 在这个形状下**不会** exec 末命令，
+  于是 `$!` 记下的是那个 fork 出来的包装 shell，不是守护进程。随后的
+  `pkill -F "$pidfile" 2>/dev/null` 杀掉包装 shell 并**返回 0**——报告成功，
+  守护进程被 reparent 到 init 存活下来；EXIT trap 的 `rm -rf "$WORK"` 接着把
+  数据目录从仍在运行的写者脚下删掉。用 `/bin/sleep` 逐字复现：记录到的 PID 是
+  `bash <script>`，真命令是它的子进程，`pkill -F` exit=0，幸存者
+  `PPID 1`、PGID 保持不变——与观测到的两个守护进程状态逐项吻合。
+
+  **这正是本 FR 存在的理由的那个缺陷**：teardown 打在错的 PID 上、并报告成功。
+  同一形状在 `~/.claude/jobs/9883500f/tmp/` 下另有两处
+  （`matrix-survey.sh:20`、`cpu-repro.sh:18`）。而最刺眼的一点是：**本 FR 自己的
+  工作副本 `backup/gd.sh` 开头就把这个形状写清楚了**——"守护进程若起于子壳，
+  它就不是调用壳的子进程"。知识当时就在那台机器上、在同一个作业目录里，
+  没有传递到同一套工具随后写的临时脚本里。
+
+  **机器侧的一半已由 FR-169 闭环**（[DD-185](185-daemon-data-dir-vanish-self-termination.md)）：
+  守护进程现在会自己发现数据目录已消失并在约 15s 内经由既有关停序列退出，故本条
+  记录的那种残骸不再能积累 22 小时。调用方侧仍无门禁可及，两者不互相替代。
+
+  故残余不是"ad-hoc 启动的守护进程无人回收"这么中性的一句：`scripts/**` 被
+  check 16 守住了，而**同一套 agent 工具在 `~/.claude/jobs/**` 下写的脚本是一个
+  完全不受治理的第二产地**，它启动同样的守护进程、犯同样的错、把残骸留在开发者
+  的机器上（本例 22 小时，且只因有人去看才被发现）。这个产地在仓库之外，本 FR
+  的派生集合与扫描范围按构造都够不到它——§4.4 shape 2 的又一种形态：范围谓词
+  是关于**仓库**的事实，而进程是关于**机器**的事实。
+
 - **`scripts/**` 之外仍有旧形状**，具名而非吸收：`docs/qa/script/test-worker-throughput.sh`
   （文档树里的性能辅助脚本）与 QA 58 散文步骤里的八处 kill+wait 片段。两者都在
   本 FR 的派生集合（`git ls-files 'scripts/**/*.sh'`）与 check 16 的扫描范围之外；

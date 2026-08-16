@@ -24,17 +24,13 @@ const zh = {
     error: "错误",
   },
 
+  // FR-166: only `mainNav` is read. The nine labels and shortcut hints that used to
+  // sit here named a four-item navigation (Attention Inbox / 许愿池 / 进度观察 / 来源)
+  // that the console stopped having; App.tsx owns the live five-item nav and its
+  // labels. They are removed rather than reworded because a dead string table is a
+  // third vocabulary, and the next reader has no way to tell it is not authoritative.
   nav: {
-    attention: "Attention Inbox",
-    wishPool: "许愿池",
-    progress: "进度观察",
-    sources: "来源",
     mainNav: "主导航",
-    attentionShortcut: "Attention Inbox (Cmd+1)",
-    wishPoolShortcut: "许愿池 (Cmd+2)",
-    progressShortcut: "进度观察 (Cmd+3)",
-    sourcesShortcut: "来源 (Cmd+4)",
-    currentRole: (role: string) => `当前角色: ${role}`,
   },
 
   attention: {
@@ -49,7 +45,7 @@ const zh = {
     claim: "认领",
     snooze: "稍后处理",
     resolve: "已处理",
-    timeline: "查看进程时间线",
+    timeline: "查看任务时间线",
     occurrences: (count: number) => `发生 ${count} 次`,
     readOnly: "当前为只读角色，不能执行变更操作",
     keyboard: "J/K 选择 · C 认领 · R 确认处理 · Enter 查看时间线",
@@ -61,10 +57,10 @@ const zh = {
     empty: "尚未接收到外部来源事件",
     allStates: "全部路由状态",
     replay: "重新路由",
-    openProcess: "打开进程",
+    openProcess: "打开任务",
     openSlack: "打开 Slack 消息",
     taskBindings: "外部来源关联",
-    noBindings: "当前进程没有外部来源关联",
+    noBindings: "当前任务没有外部来源关联",
   },
 
   theme: {
@@ -72,16 +68,20 @@ const zh = {
     toggleDark: "切换到深色模式",
   },
 
+  // FR-166: "Wish" was a fourth noun for a thing the rest of the system calls a task.
+  // It had no definition anywhere in docs/guide, and its own route already reads
+  // `new-task`. These strings now say draft; the `wish-pool` project id they operate
+  // on is a wire value and deliberately unchanged.
   wishPool: {
-    title: "许愿池",
+    title: "任务草稿",
     placeholder: "描述你想要实现的功能，比如：我想让用户能通过邮箱注册账号...",
     inputLabel: "需求描述",
-    submitLabel: "提交许愿",
+    submitLabel: "提交草稿",
     submitting: "提交中...",
-    submit: "许愿",
-    emptyFirst: "还没有许过愿，在上方输入你的第一个需求吧",
-    emptyFiltered: "没有匹配的许愿",
-    wishLabel: (name: string) => `许愿: ${name}`,
+    submit: "创建草稿",
+    emptyFirst: "还没有草稿，在上方输入你的第一个需求吧",
+    emptyFiltered: "没有匹配的草稿",
+    wishLabel: (name: string) => `任务草稿: ${name}`,
     filterAll: "全部",
     filterDrafting: "草稿中",
     filterPendingConfirm: "待确认",
@@ -98,7 +98,7 @@ const zh = {
   },
 
   wishDetail: {
-    backToPool: "\u2190 返回许愿池",
+    backToPool: "\u2190 返回任务草稿",
     originalWish: "原始需求",
     noDescription: "(无描述)",
     frDraftPreview: "FR 草稿预览",
@@ -106,8 +106,8 @@ const zh = {
     confirmDev: "确认开发",
     modifyWish: "修改需求",
     cancelWish: "取消",
-    cancelTitle: "取消许愿",
-    cancelMessage: "确定要取消这个许愿吗？此操作不可撤销。",
+    cancelTitle: "取消草稿",
+    cancelMessage: "确定要取消这个任务草稿吗？此操作不可撤销。",
     cancelConfirm: "确认取消",
     phaseUnderstanding: "正在理解你的需求...",
     phaseDesigning: "正在设计功能方案...",
@@ -142,10 +142,10 @@ const zh = {
     deleteLabel: "删除任务",
     stepProgress: "步骤进度",
     liveLog: "实时日志",
-    timeline: "进程时间线",
+    timeline: "任务时间线",
     timelineHint: "目标、执行、测试证据、失败原因与状态转换",
     timelineEmpty: "尚无可展示的时间线条目。",
-    timelineLabel: "任务进程时间线",
+    timelineLabel: "任务时间线",
     evidenceLabel: "证据引用",
     loadMore: "加载更多记录",
     viewLabel: "任务详情视图",

@@ -121,21 +121,21 @@ describe("WishPool", () => {
     const onSelectWish = vi.fn();
     renderAs("operator", <WishPool onSelectWish={onSelectWish} />);
 
-    const wishes = await screen.findAllByRole("button", { name: /许愿:/ });
+    const wishes = await screen.findAllByRole("button", { name: /任务草稿:/ });
     expect(wishes.map((item) => item.getAttribute("aria-label"))).toEqual([
-      "许愿: new",
-      "许愿: cancelled",
-      "许愿: old",
+      "任务草稿: new",
+      "任务草稿: cancelled",
+      "任务草稿: old",
     ]);
     fireEvent.click(wishes[0]);
     fireEvent.keyDown(wishes[1], { key: "Enter" });
     expect(onSelectWish.mock.calls).toEqual([["new"], ["cancelled"]]);
 
     fireEvent.click(screen.getByRole("button", { name: "待确认" }));
-    expect(screen.getByRole("button", { name: "许愿: old" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "许愿: new" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "任务草稿: old" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "任务草稿: new" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "已确认" }));
-    expect(screen.getByText("没有匹配的许愿")).toBeVisible();
+    expect(screen.getByText("没有匹配的草稿")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "刷新" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
   });
@@ -146,11 +146,11 @@ describe("WishPool", () => {
       .mockResolvedValueOnce({ task_id: "draft-2", status: "pending", message: "created" });
     const onSelectWish = vi.fn();
     const view = renderAs("operator", <WishPool onSelectWish={onSelectWish} />);
-    expect(await screen.findByText("还没有许过愿，在上方输入你的第一个需求吧")).toBeVisible();
+    expect(await screen.findByText("还没有草稿，在上方输入你的第一个需求吧")).toBeVisible();
 
     const input = screen.getByRole("textbox", { name: "需求描述" });
     fireEvent.change(input, { target: { value: "  automate Slack  " } });
-    fireEvent.click(screen.getByRole("button", { name: "提交许愿" }));
+    fireEvent.click(screen.getByRole("button", { name: "提交草稿" }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("task_create", {
       goal: "automate Slack",
       project_id: "wish-pool",
@@ -227,7 +227,7 @@ describe("WishDetail", () => {
     fireEvent.click(screen.getByRole("button", { name: "修改需求" }));
     expect(onBack).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    const dialog = screen.getByRole("dialog", { name: "取消许愿" });
+    const dialog = screen.getByRole("dialog", { name: "取消草稿" });
     fireEvent.click(within(dialog).getByRole("button", { name: "确认取消" }));
     expect(await screen.findByText("delete denied")).toBeVisible();
     expect(invoke).toHaveBeenCalledWith("task_delete", { task_id: "wish-1", force: true });

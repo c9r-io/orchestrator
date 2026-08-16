@@ -79,7 +79,9 @@ SELECTED_COUNT=0
 cleanup() {
   gate_daemon_stop "$DAEMON_PID" || true
   DAEMON_PID=""
-  if [[ "$FAIL_COUNT" -gt 0 || "${KEEP_WP05_QA:-0}" == "1" ]]; then
+  # gate_scratch_has_evidence: a retained root that holds nothing is
+  # indistinguishable from a gate that ran and produced no findings.
+  if [[ "$FAIL_COUNT" -gt 0 || "${KEEP_WP05_QA:-0}" == "1" ]] && gate_scratch_has_evidence "$QA_ROOT"; then
     echo "[wp05] retained at QA_ROOT=$QA_ROOT" >&2
   else
     rm -rf "$QA_ROOT"

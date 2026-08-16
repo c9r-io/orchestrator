@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files named test*.rs; the driver token is counted on the lexically masked source, so a comment or doc comment naming it is not a reference, while SQL statements are counted on the unmasked source because the pattern anchors inside a string literal",
+  "scope": "every workspace member listed in the root Cargo.toml, its Cargo.toml parsed by dependency section, and its non-test Rust source outside core — its src tree and its Cargo build script — excluding inline cfg(test) modules, files under a tests directory, and files whose basename contains test that are also confirmed test-only — their mod declaration is gated on cfg(test) or a test-only feature, or nothing but comments survives stripping their cfg(test) modules; the driver token is counted on the lexically masked source, so a comment or doc comment naming it is not a reference, while SQL statements are counted on the unmasked source because the pattern anchors inside a string literal",
   "scanRoots": [
     "crates/cli/build.rs",
     "crates/cli/src",
@@ -323,12 +323,12 @@
     "crates/orchestrator-persistence/src/task_repository/items.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 2,
-      "sql": 11,
+      "sql": 13,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/mod.rs": {
       "crate": "crates/orchestrator-persistence",
-      "rusqlite": 46,
+      "rusqlite": 50,
       "sql": 0,
       "category": "persistence-layer"
     },
@@ -336,6 +336,12 @@
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 4,
       "sql": 28,
+      "category": "persistence-layer"
+    },
+    "crates/orchestrator-persistence/src/task_repository/references.rs": {
+      "crate": "crates/orchestrator-persistence",
+      "rusqlite": 1,
+      "sql": 2,
       "category": "persistence-layer"
     },
     "crates/orchestrator-persistence/src/task_repository/state.rs": {
@@ -359,7 +365,7 @@
     "crates/orchestrator-persistence/src/trigger_state.rs": {
       "crate": "crates/orchestrator-persistence",
       "rusqlite": 7,
-      "sql": 8,
+      "sql": 6,
       "category": "persistence-layer"
     },
     "crates/orchestrator-security/src/lib.rs": {
@@ -401,8 +407,8 @@
   },
   "totals": {
     "members": 14,
-    "referencedFiles": 39,
-    "rusqlite": 207,
-    "sql": 601
+    "referencedFiles": 40,
+    "rusqlite": 212,
+    "sql": 603
   }
 }

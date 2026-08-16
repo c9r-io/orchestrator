@@ -23,12 +23,40 @@ mod webhook;
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use futures::FutureExt;
 use tonic::transport::Server;
 use tracing::{error, info};
+
+/// How often the data directory's identity is re-checked (FR-169).
+///
+/// A constant rather than a flag, deliberately. The only argument for making it
+/// configurable is that some filesystem might need a different value, which is a
+/// guess until a real case appears; a parameter is permanent surface, while a
+/// constant can become one at any time. Concept budget: zero.
+const DATA_DIR_CHECK_PERIOD: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Consecutive confirmations before the daemon acts on a vanished data directory.
+///
+/// Three tolerates two transient failures. With the period above, detection lands
+/// within ~15s: far below any human or supervisor reaction time, and long enough
+/// that a paused VM or one slow network round-trip does not end a healthy daemon.
+/// Chosen by argument, not by measurement — there is no population to sample here,
+/// since `stat` on a live local directory does not fail transiently, and demanding
+/// a distribution would have manufactured one.
+const DATA_DIR_CHECK_CONFIRMATIONS: u32 = 3;
+
+/// Set when the vanish watcher initiated shutdown, so `shutdown_reason` can name
+/// the cause instead of reporting the generic one.
+static DATA_DIR_VANISHED: AtomicBool = AtomicBool::new(false);
+
+/// Records that the data directory vanished, for `shutdown_reason`.
+fn set_data_dir_vanished() {
+    DATA_DIR_VANISHED.store(true, Ordering::SeqCst);
+}
 
 use agent_orchestrator::events::insert_event;
 use agent_orchestrator::service::system::{clear_worker_stop_signal, worker_stop_signal_path};
@@ -277,6 +305,12 @@ fn main() -> Result<()> {
         .context("failed to initialize orchestrator state")?;
         let inner = state.inner.clone();
         inner.daemon_runtime.set_configured_workers(args.workers);
+        // Both the cleanup sweep below and the EventCleanup RPC and `db status`
+        // read this back through resolved_event_archive_dir, so the flag is
+        // honoured everywhere the archive directory is named.
+        inner
+            .daemon_runtime
+            .set_event_archive_dir(args.event_archive_dir.clone());
         let slack_gateway = match (
             args.slack_gateway_url.as_deref(),
             args.slack_gateway_enrollment_key.clone(),
@@ -637,10 +671,9 @@ fn main() -> Result<()> {
             let mut cleanup_shutdown = shutdown_rx.clone();
             let retention_days = args.event_retention_days;
             let archive_enabled = args.event_archive_enabled;
-            let archive_dir = args
-                .event_archive_dir
-                .clone()
-                .unwrap_or_else(|| inner.data_dir.join("archive/events"));
+            let archive_dir = inner
+                .daemon_runtime
+                .resolved_event_archive_dir(&inner.data_dir);
             let interval_secs = args.event_cleanup_interval_secs;
             info!(
                 retention_days,
@@ -867,6 +900,79 @@ fn main() -> Result<()> {
         // Phase 3a: warn if data_dir has overly permissive permissions.
         check_data_dir_permissions(&inner.data_dir);
 
+        // FR-169: stop being a process that cannot serve anyone.
+        //
+        // A daemon whose data directory is removed underneath it keeps running
+        // indefinitely: its socket went with the directory, so no client can
+        // reach it, and it holds the database open on an unlinked inode. Measured
+        // before this existed — 22h34m in the field, and in an isolated repro it
+        // stayed alive at t+2/5/10/20/30s while writing zero bytes of log.
+        //
+        // The check holds the directory open rather than re-stat'ing the path,
+        // because delete-and-recreate is the worse half: the path reads healthy
+        // while the old daemon writes an orphaned inode and a second daemon takes
+        // the name — and comparing the path's inode number does not separate the
+        // two on Linux, which hands the freed number straight back. See
+        // lifecycle::DataDirHandle.
+        //
+        // This does not add an exit path. It triggers `shutdown_notify`, the same
+        // handle the RPC shutdown uses, so there is one shutdown sequence and not
+        // a second one that has to be kept in agreement with it.
+        if let Ok(data_dir_handle) = lifecycle::DataDirHandle::open(&inner.data_dir) {
+            let expected_identity = data_dir_handle.identity();
+            let watcher_notify = shutdown_notify.clone();
+            let watcher_state = inner.clone();
+            let mut watcher_shutdown = shutdown_rx.clone();
+            let data_dir = inner.data_dir.clone();
+            tokio::spawn(async move {
+                let mut interval =
+                    tokio::time::interval(DATA_DIR_CHECK_PERIOD);
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                // Consecutive confirmations. Reset on any match, so a single
+                // transient stat failure cannot end the daemon.
+                let mut confirmations = 0u32;
+                loop {
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            let current = data_dir_handle.observe(&data_dir);
+                            if !lifecycle::observe_data_dir(
+                                expected_identity,
+                                current,
+                                &mut confirmations,
+                                DATA_DIR_CHECK_CONFIRMATIONS,
+                            ) {
+                                continue;
+                            }
+                            // The one line that makes this answerable afterwards.
+                            // Before FR-169 this event produced no output at all.
+                            tracing::error!(
+                                data_dir = %data_dir.display(),
+                                expected_dev = expected_identity.0,
+                                expected_ino = expected_identity.1,
+                                observed = ?current,
+                                confirmations,
+                                "data directory is gone; this daemon can no longer serve \
+                                 anyone and is shutting down"
+                            );
+                            watcher_state.daemon_runtime.request_shutdown();
+                            set_data_dir_vanished();
+                            watcher_notify.notify_waiters();
+                            return;
+                        }
+                        _ = watcher_shutdown.changed() => return,
+                    }
+                }
+            });
+        } else {
+            // Startup already requires the directory; if it cannot be opened here
+            // something is wrong enough to say so rather than silently skip the
+            // watcher for the rest of the process's life.
+            tracing::warn!(
+                data_dir = %inner.data_dir.display(),
+                "cannot open the data directory; the vanish watcher is not armed"
+            );
+        }
+
         let uds_policy = uds_security::load_uds_policy(
             &inner.data_dir,
             args.control_plane_dir.as_deref(),
@@ -928,6 +1034,11 @@ fn main() -> Result<()> {
             }
         };
 
+        // Proof that this daemon bound the socket, so teardown can tell its own
+        // socket from a successor's at the same path (FR-170). Stays `None` on
+        // both TCP paths, which bind no socket file and so have none to remove.
+        let mut socket_ownership: Option<lifecycle::SocketOwnership> = None;
+
         // Determine bind address: UDS by default, secure TCP if --bind provided
         if let Some(addr) = args.bind.as_deref() {
             let addr = addr.parse().context("invalid bind address")?;
@@ -987,8 +1098,26 @@ fn main() -> Result<()> {
                 // UDS transport
                 use tokio::net::UnixListener;
 
-                // Remove stale socket
-                let _ = std::fs::remove_file(&socket_path);
+                // Remove a stale socket left by a previous daemon.
+                //
+                // This stays unconditional on purpose, re-argued rather than
+                // inherited (FR-170). Reaching here means the pidfile guard
+                // above found no live daemon, and a socket left behind by a
+                // SIGKILL must be removable or the daemon could never restart —
+                // a state orchestrator-client's connect.rs already explains to
+                // users. What is no longer inherited is discarding the error: a
+                // failure that is not "it was not there" is a real obstacle, and
+                // reporting it as `failed to bind UDS` names the wrong file.
+                match std::fs::remove_file(&socket_path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => {
+                        return Err(anyhow::Error::new(e).context(format!(
+                            "failed to remove existing socket at {}",
+                            socket_path.display()
+                        )));
+                    }
+                }
                 let uds = UnixListener::bind(&socket_path).context("failed to bind UDS")?;
 
                 // Harden socket permissions to owner-only regardless of umask.
@@ -1000,6 +1129,14 @@ fn main() -> Result<()> {
                     )
                     .context("failed to set UDS socket permissions to 0600")?;
                 }
+
+                // Written after bind, so the token only ever names a socket this
+                // process is actually listening on. Teardown removes the socket
+                // only while that token is still ours (FR-170).
+                socket_ownership = Some(
+                    lifecycle::claim_socket(&socket_path)
+                        .context("failed to record socket ownership")?,
+                );
 
                 // Wrap accepted connections with peer-credential validation.
                 // Connections from a different UID are dropped before entering
@@ -1110,6 +1247,19 @@ fn main() -> Result<()> {
                     .await;
                 }
                 Ok(_) => {}
+                Err(error) if DATA_DIR_VANISHED.load(Ordering::SeqCst) => {
+                    // The database went with the data directory, so this query
+                    // cannot succeed and its failure carries no new information —
+                    // the watcher already said what happened, at error level. Left
+                    // at warn rather than silenced: "the drain did not run" is
+                    // still a fact about this shutdown. Raising it to error here
+                    // would train readers to skip an error line that is expected
+                    // on the one path where it is guaranteed.
+                    tracing::warn!(
+                        %error,
+                        "skipping the interactive-session drain: the data directory is gone"
+                    );
+                }
                 Err(error) => {
                     error!(%error, "failed to enumerate interactive sessions for shutdown drain");
                 }
@@ -1167,7 +1317,7 @@ fn main() -> Result<()> {
 
         // Normal shutdown
         inner.daemon_runtime.mark_stopped();
-        lifecycle::cleanup(&socket_path, &pid_path);
+        lifecycle::cleanup(&socket_path, socket_ownership.as_ref(), &pid_path);
         emit_daemon_event(&inner, "daemon_shutdown_completed", serde_json::json!({
             "reason": shutdown_reason(&inner, restart_rx.borrow().as_ref()),
         }))
@@ -1674,7 +1824,13 @@ fn shutdown_reason(
     state: &InnerState,
     restart_binary: Option<&std::path::PathBuf>,
 ) -> &'static str {
-    if restart_binary.is_some() {
+    if DATA_DIR_VANISHED.load(Ordering::SeqCst) {
+        // Ahead of the other arms on purpose: once the data directory is gone,
+        // `worker_stop_signal_path(state).exists()` is false because the path it
+        // reads is inside that directory, and `shutdown_requested` is true because
+        // the watcher set it. Both of those would name the wrong cause.
+        "data_dir_vanished"
+    } else if restart_binary.is_some() {
         "restart"
     } else if worker_stop_signal_path(state).exists() {
         "external_stop_signal"

@@ -1,6 +1,15 @@
 /// K8s-style YAML types for declarative resource management via `apply` command.
 /// Resources follow Kubernetes manifest conventions: apiVersion, kind, metadata, spec.
 use crate::config::PromptDelivery;
+// `RunnerSpec` below describes the manifest form of the same five runner
+// defaults that `RunnerConfig` carries, so the definitions live once in
+// crate::config::runner and are imported here. They were duplicated verbatim
+// until a fixture-drift audit found that a change to one copy would silently
+// miss the other.
+use crate::config::runner::{
+    default_allowed_shell_args, default_allowed_shells, default_env_allowlist,
+    default_redaction_patterns, default_shell_arg,
+};
 use crate::selection::{SelectionStrategy, SelectionWeights};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -305,48 +314,15 @@ pub struct RunnerSpec {
     pub redaction_patterns: Vec<String>,
 }
 
-fn default_shell_arg() -> String {
-    "-lc".to_string()
-}
-
+// `policy` and `executor` have no RunnerConfig counterpart — the config type
+// models policy as the RunnerPolicy enum and has no executor field — so these
+// two defaults stay local to the manifest surface.
 fn default_runner_policy() -> String {
     "allowlist".to_string()
 }
 
 fn default_runner_executor() -> String {
     "shell".to_string()
-}
-
-fn default_allowed_shells() -> Vec<String> {
-    vec![
-        "/bin/bash".to_string(),
-        "/bin/zsh".to_string(),
-        "/bin/sh".to_string(),
-    ]
-}
-
-fn default_allowed_shell_args() -> Vec<String> {
-    vec!["-lc".to_string(), "-c".to_string()]
-}
-
-fn default_env_allowlist() -> Vec<String> {
-    vec![
-        "PATH".to_string(),
-        "HOME".to_string(),
-        "USER".to_string(),
-        "LANG".to_string(),
-        "TERM".to_string(),
-    ]
-}
-
-fn default_redaction_patterns() -> Vec<String> {
-    vec![
-        "token".to_string(),
-        "password".to_string(),
-        "secret".to_string(),
-        "api_key".to_string(),
-        "authorization".to_string(),
-    ]
 }
 
 /// Resume-policy manifest payload.

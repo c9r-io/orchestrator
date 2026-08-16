@@ -708,6 +708,40 @@ orchestrator audit list --project demo --target-type workflow
 过滤不会返回它们——需要完整序列时请不加 `--action` 列出。bundle 不携带逐文档
 kind 清单；如需还原其触及的资源，请按时间戳关联 `resource_versions`。
 
+### Delete 动作名
+
+每次非 dry-run 的 `delete` 都会记录一行，条件与 `apply` 相同：未携带信封的客户端以
+`reason_code` `legacy_client` 记录；dry-run 不记录；`action_audit_mode: enforced`
+下无信封的删除在移除任何东西之前即被拒绝。
+
+```bash
+orchestrator audit list --project demo --action resource.secret_store.delete
+orchestrator audit list --project demo --target-type secret_store
+```
+
+删除动作名与应用动作名逐 kind 对应——十个常规 kind 为 `resource.<kind>.delete`，
+SourceTaskTemplate 为 `source.template.delete`，SourceTaskBinding 为
+`source.binding.delete`——因此同一个前缀可同时取回一个对象的两种动作。两者的
+`target_type` 取值相同。
+
+有两个名字不遵循该规律：
+
+- **`delete_references`**：使用 `--force-references` 时记录此名而非按 kind 的名字。
+  它是跨资源清理——会移除命令中从未点名的 SourceTaskBinding——因此它不是其目标的
+  删除动作，按 kind 的那一行也刻意不会同时写入。
+- **`resource.delete`**（`target_type` 为 `resource_manifest`）：覆盖没有内建 kind 的
+  目标，即 CRD、CRD 定义的自定义资源，以及解析不出 kind 的字符串。与 apply 侧的
+  同类行不同，这些行仍携带被删除的 `target_id`，因此彼此可区分，尽管 `--action`
+  无法把它们分开。
+
+删除行记录的是"某资源被谁移除了"，而非它的内容。`resource_versions` 中的墓碑行以
+`"deleted"` 取代 spec，因此要还原被删内容，需读取同一 kind/project/name 的上一条
+`resource_versions` 行。
+
+失败的删除同样会被记录，因为信封在尝试移除之前即已预留。最常遇到的是
+`orchestrator delete runtimepolicy/default`：RuntimePolicy 不可删除，该拒绝会表现为
+一行 `status` 为 `failed` 的 `resource.runtime_policy.delete`。
+
 ## 触发器生命周期
 
 ```bash

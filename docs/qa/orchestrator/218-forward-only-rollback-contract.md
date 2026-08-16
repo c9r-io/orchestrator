@@ -231,3 +231,14 @@ runs here cannot be squared with by assertion. And this was filed as a new ticke
 when one already existed for it; the duplicate is deleted and its evidence folded
 into the older one, whose leading hypothesis — BSD awk invoked once per file — the
 bash-side bisection here never tested.
+
+**Resolved 2026-08-14.** That leading hypothesis was finally tested, and it is
+**false**: the gate's own awk program over the same 671 files, with every bash-side
+construct removed, completes cleanly in 3 runs. The trigger is the loop shape — a
+shell function forking one process substitution per iteration, which bash 3.2 cannot
+survive past ~251 — and it is positional, not content-dependent: reversing the file
+order moves the crash to a different file at the same iteration. That also settles
+the clean-worktree disagreement recorded above, since the shell's state, not the
+tree, is what differed. Fixed and ticket closed; see
+[DD-187](../../design_doc/orchestrator/187-markdown-link-gate-process-substitution-crash.md)
+and [QA 225](225-markdown-link-gate-loop-shape.md).

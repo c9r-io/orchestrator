@@ -348,7 +348,7 @@ fn quickstart_bundle_applies_without_warnings() {
 /// Extracts complete YAML fences from a Markdown document. A dangling fence
 /// is a hard failure because accepting a truncated onboarding example would
 /// make the behavior check vacuous.
-fn fenced_yaml_blocks(markdown: &str) -> Vec<String> {
+fn fenced_yaml_blocks_of(source: &str, markdown: &str) -> Vec<String> {
     let mut blocks = Vec::new();
     let mut current: Option<Vec<&str>> = None;
     for line in markdown.lines() {
@@ -358,7 +358,7 @@ fn fenced_yaml_blocks(markdown: &str) -> Vec<String> {
                 let block = current.take().expect("matched open YAML fence").join("\n");
                 assert!(
                     !block.trim().is_empty(),
-                    "AGENTS.md contains an empty YAML fence"
+                    "{source} contains an empty YAML fence"
                 );
                 blocks.push(block);
             }
@@ -368,9 +368,79 @@ fn fenced_yaml_blocks(markdown: &str) -> Vec<String> {
     }
     assert!(
         current.is_none(),
-        "AGENTS.md contains an unclosed YAML fence"
+        "{source} contains an unclosed YAML fence"
     );
     blocks
+}
+
+fn fenced_yaml_blocks(markdown: &str) -> Vec<String> {
+    fenced_yaml_blocks_of("AGENTS.md", markdown)
+}
+
+/// FR-166: the resource-model chapter documented two of a Trigger's four jobs.
+/// The webhook and filesystem examples added for the other two are parsed out of
+/// the chapter itself rather than restated here, because a copy in a test proves
+/// the copy parses. `TriggerSpec` and its children declare `deny_unknown_fields`,
+/// so a field the guide spells wrong is a rejection rather than a silent no-op --
+/// which is what makes this worth asserting: `debounce_ms` is snake_case while
+/// every webhook field beside it is camelCase, and nothing about the surrounding
+/// YAML would tell an author that.
+#[test]
+fn guide_trigger_examples_deserialize_as_written() {
+    use orchestrator_config::cli_types::TriggerSpec;
+
+    let path = "docs/guide/02-resource-model.md";
+    let content = std::fs::read_to_string(repo_root().join(path))
+        .unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+
+    // Derived from the chapter, not listed: any future `source:` example under a
+    // `spec:` fence joins this set without anyone remembering to add it.
+    let specs: Vec<String> = fenced_yaml_blocks_of(path, &content)
+        .into_iter()
+        .filter(|block| block.starts_with("spec:") && block.contains("  event:"))
+        .collect();
+    assert!(
+        specs.len() >= 3,
+        "{path} should document the lifecycle, webhook and filesystem event triggers; found {} spec fences",
+        specs.len()
+    );
+
+    let mut sources = Vec::new();
+    for block in &specs {
+        let wrapper: serde_yaml::Value = serde_yaml::from_str(block)
+            .unwrap_or_else(|error| panic!("{path} event example is not YAML: {error}\n{block}"));
+        let spec = wrapper
+            .get("spec")
+            .expect("filtered on a spec: fence")
+            .clone();
+        let parsed: TriggerSpec = serde_yaml::from_value(spec).unwrap_or_else(|error| {
+            panic!("{path} documents a Trigger field the product rejects: {error}\n{block}")
+        });
+        let event = parsed.event.expect("filtered on an event: key");
+        sources.push(event.source.clone());
+        match event.source.as_str() {
+            "webhook" => assert!(
+                event.webhook.is_some(),
+                "the webhook example parsed without a webhook block, so it proves nothing"
+            ),
+            "filesystem" => {
+                let fs = event
+                    .filesystem
+                    .expect("the filesystem example parsed without a filesystem block");
+                assert_eq!(
+                    fs.debounce_ms, 500,
+                    "the documented debounce key did not reach the field"
+                );
+            }
+            _ => {}
+        }
+    }
+    for required in ["task_completed", "webhook", "filesystem"] {
+        assert!(
+            sources.iter().any(|source| source == required),
+            "{path} no longer documents the {required} trigger; found {sources:?}"
+        );
+    }
 }
 
 /// FR-155: the repository's primary agent onboarding document must teach a

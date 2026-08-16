@@ -35,7 +35,8 @@ pub use env_store::EnvStoreResource;
 pub use execution_profile::ExecutionProfileResource;
 pub use export::{export_crd_documents, export_manifest_documents, export_manifest_resources};
 pub use parse::{
-    delete_resource_by_kind, kind_as_str, parse_manifests_from_yaml, parse_resources_from_yaml,
+    ALL_RESOURCE_KINDS, delete_resource_by_kind, kind_aliases, kind_as_str, kind_canonical_name,
+    parse_manifests_from_yaml, parse_resources_from_yaml, resource_kind_from_alias,
 };
 pub use project::ProjectResource;
 pub use runtime_policy::RuntimePolicyResource;

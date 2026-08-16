@@ -14,7 +14,11 @@ COMPLETED=()
 FAILED=0
 
 cleanup() {
-  if [[ "$FAILED" == "1" || "${KEEP_FR114_QA:-0}" == "1" ]]; then
+  # gate_scratch_has_evidence: $LOG_ROOT is allocated above the command preamble
+  # and above the clean-worktree check, so an exit at either sets FAILED=1 over a
+  # directory nothing has written to. Announcing that reads exactly like a real
+  # failure with logs in it.
+  if [[ "$FAILED" == "1" || "${KEEP_FR114_QA:-0}" == "1" ]] && gate_scratch_has_evidence "$LOG_ROOT"; then
     echo "FR-114 QA logs retained at: $LOG_ROOT" >&2
   else
     rm -rf "$LOG_ROOT"

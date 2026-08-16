@@ -723,6 +723,46 @@ action name will not return them — list without `--action` when you need the
 whole sequence. A bundle carries no per-document kind list; correlate
 `resource_versions` by timestamp to recover what it touched.
 
+### Delete Action Names
+
+Every non-dry-run `delete` records one row, on the same terms as `apply`: an
+envelope-less client is recorded with `reason_code` `legacy_client`, a dry run
+records nothing, and under `action_audit_mode: enforced` a delete without an
+envelope is rejected before anything is removed.
+
+```bash
+orchestrator audit list --project demo --action resource.secret_store.delete
+orchestrator audit list --project demo --target-type secret_store
+```
+
+The delete names mirror the apply names kind for kind — `resource.<kind>.delete`
+for the ten regular kinds, `source.template.delete` for SourceTaskTemplate and
+`source.binding.delete` for SourceTaskBinding — so one prefix returns both verbs
+for the same object. `target_type` is the same value in both cases.
+
+Two names do not follow the pattern:
+
+- **`delete_references`** is recorded instead of the per-kind name when
+  `--force-references` is used. It is a cross-resource cleanup — it removes
+  SourceTaskBindings the command never named — so it is not the delete of its
+  target, and the per-kind row is deliberately not also written.
+- **`resource.delete`** against `target_type` `resource_manifest` covers targets
+  with no built-in kind: a CRD, a CRD-defined custom resource, or a kind string
+  that resolves to nothing. Unlike the apply equivalent these rows still carry
+  the `target_id` that was deleted, so they are distinguishable from each other
+  even though `--action` cannot separate them.
+
+A delete row records *that* a resource was removed and by whom, not what it
+contained. The tombstone in `resource_versions` stores `"deleted"` in place of the
+spec, so recovering the deleted content means reading the previous
+`resource_versions` row for the same kind, project and name.
+
+An attempted delete is recorded even when it fails, because the envelope is
+reserved before the removal is attempted. `orchestrator delete runtimepolicy/default`
+is the case you are most likely to meet: a RuntimePolicy cannot be deleted, and
+the refusal appears as a `resource.runtime_policy.delete` row with
+`status` `failed`.
+
 ## Trigger Lifecycle
 
 ```bash

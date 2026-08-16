@@ -190,7 +190,14 @@ pub async fn resource_delete(
             project: None,
             dry_run: false,
             force_references: false,
-            audit: None,
+            // Mirrors `resource_apply` above. Before FR-167 the daemon discarded
+            // this envelope on an ordinary delete, so sending none cost nothing;
+            // now an absent one is what `action_audit_mode: enforced` refuses.
+            audit: Some(orchestrator_proto::ActionAuditContext {
+                reason_code: "operator_resource_delete".into(),
+                operator_reason: None,
+                idempotency_key: None,
+            }),
         })
         .await
         .map_err(|e| crate::errors::humanize_grpc_error(&e))?;

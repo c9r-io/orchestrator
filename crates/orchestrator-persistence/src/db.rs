@@ -148,11 +148,6 @@ pub(crate) fn open_conn(db_path: &Path) -> Result<Connection> {
     crate::sqlite::open_conn(db_path)
 }
 
-/// Applies the standard busy timeout and pragma configuration to a connection.
-pub(crate) fn configure_conn(conn: &Connection) -> Result<()> {
-    crate::sqlite::configure_conn(conn)
-}
-
 /// Ensures the persistence schema exists and is migrated to the current version.
 pub fn init_schema(db_path: &Path) -> Result<()> {
     crate::schema::PersistenceBootstrap::ensure_current(db_path)?;

@@ -79,7 +79,7 @@ Verify Attention transfers the operator into reviewed safe resume without perfor
 ### Expected
 
 - Navigation uses the exact `review=safe-resume` intent.
-- The dialog opens once and the canonical URL returns to `#/processes/{taskId}`.
+- The dialog opens once and the canonical URL returns to `#/tasks/{taskId}`.
 - No `attention_execute_action`, retry, or resume mutation is invoked by navigation.
 - Close returns to the stable "Preview resume" control rather than `body`.
 - Rerendering does not reopen the consumed intent.

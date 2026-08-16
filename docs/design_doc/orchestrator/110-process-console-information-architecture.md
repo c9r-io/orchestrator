@@ -45,11 +45,11 @@ The shell uses one stable left navigation. The route parser defaults unknown or 
 | Product destination | Hash route | Primary responsibility |
 |---|---|---|
 | Attention | `#/attention[/<attention-id>]` | Human decisions, approvals, failures, and blockers only |
-| Processes | `#/processes[/<task-id>]` | Process list and integrated process workspace |
+| Tasks | `#/tasks[/<task-id>]` | Task list and integrated task workspace. FR-166 renamed the label and the canonical path; `#/processes[/<task-id>]` still parses |
 | Sessions | `#/sessions[/<session-id>]` | Cross-process session inventory and inspector |
 | Sources | `#/sources[/<task-id>]` | Source routing plus process provenance |
 | System | `#/system[/<section>]` | Agents, resources, triggers, stores, secrets, and runtime |
-| New Process | `#/new-process[/<draft-id>]` | Existing wish/draft creation flow as a primary action |
+| New task | `#/new-task[/<draft-id>]` | Existing draft creation flow as a primary action. FR-166 renamed the label and the canonical path; `#/new-process[/<draft-id>]` still parses |
 
 `Cmd/Ctrl+1..5` selects the five stable destinations; `Cmd/Ctrl+N` opens New Process. Hash navigation preserves browser back/forward behavior and supports copyable local deep links without introducing a web-server routing dependency.
 

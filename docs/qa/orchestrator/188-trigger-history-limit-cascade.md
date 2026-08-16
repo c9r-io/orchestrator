@@ -23,20 +23,22 @@ time, and the failure was logged at `debug!` under a default filter of `info`. N
 shrinking table. See DD-150.
 
 Each candidate now goes through `task_repository`'s existing cascade. Of the ten tables referencing
-`tasks(id)`, two cascade and are removed by SQLite, that cascade clears `task_items` with its
-command runs and events, and the remaining seven still refuse — those tasks are skipped whole and
-named.
+`tasks(id)`, two cascade and are removed by SQLite, and that cascade clears `task_items` with its
+command runs and events.
 
-**Known limitation, shared with the explicit operator path.** Being skipped and named is what
-*retention* does with those seven; `orchestrator task delete` has no such handling. It routes
-through the same `items.rs` cascade and simply propagates `FOREIGN KEY constraint failed`, without
-naming the table that held the task, even though `blocking_references()` in `trigger_state.rs`
-already computes exactly that attribution for this document's scenarios. So a task with a handoff,
-a resume plan, or source ingest cannot be deleted by either path today. DD-150 records this as a
-known limit and does not fix it; deciding what an operator's delete may destroy per table is now
-[FR-168](../../feature_request/FR-168-task-delete-reference-policy.md). The scenarios below stay
-valid regardless of that decision — they assert the retention behaviour, which FR-168 must not
-regress (see its acceptance criteria).
+**The known limitation recorded here is closed** (FR-168,
+[DD-184](../../design_doc/orchestrator/184-task-delete-reference-disposition.md)). It read: the
+remaining seven tables still refuse, retention skips and names them, and `orchestrator task delete`
+propagates a bare `FOREIGN KEY constraint failed` naming nothing. All seven now carry a recorded
+disposition applied inside the cascade itself, so both paths dispose of them identically — three
+are deleted with the task, four keep their row with a null reference. The attribution moved with
+it: `blocking_references()` and `references_holding()` are no longer local to `trigger_state.rs`
+and the sweep no longer recomputes what the cascade already decided; it consumes a typed
+`TaskDeleteBlocked`.
+
+What survives is the *mechanism*, now reached only by a reference nobody has ruled on: skip whole,
+name the cause, continue. Scenario 2 below is written against that, and had to change — it used to
+pin a task with `resume_plans`, which no longer refuses anything.
 
 Everything here runs against temporary SQLite files created by the test harness under `$TMPDIR`.
 No scenario starts a daemon, writes to `~/.orchestratord/agent_orchestrator.db`, or invokes a
@@ -94,14 +96,19 @@ cargo test -p orchestrator-persistence --test round_trip \
   a_task_the_history_limit_cannot_remove_is_left_whole_and_named
 ```
 
-Seeds a task with one item, one command run, two events, a `resume_plans` row (one of the seven
-references the cascade does not clear) and a `task_graph_runs` row (which cascades, so it must
-*not* be reported).
+Seeds a task with one item, one command run, two events, a row in a table created by the test that
+references `tasks(id)` without a cascade and carries no recorded disposition, and a
+`task_graph_runs` row (which cascades, so it must *not* be reported).
+
+The pin used to be a `resume_plans` row. FR-168 ruled that table delete-with-task, so it stopped
+refusing anything and could no longer drive this path. Creating the table in the test is the
+stronger fixture anyway: it also proves the blocking set is derived from the schema at runtime,
+because the table did not exist when the sweep was written.
 
 **Expected result**
 
 Passes. `deleted == 0`; `skipped` is exactly one entry whose `blocked_by` is
-`["resume_plans.task_id"]` and nothing else; `log_paths` is empty.
+`["later_addition.task_id"]` and nothing else; `log_paths` is empty.
 
 Then every seeded count is unchanged: 1 task, 1 item, 2 events, 1 command run. This is the
 rollback assertion. The failure it guards against is not the task surviving — it is the task
@@ -136,8 +143,9 @@ cargo test -p agent-orchestrator --lib history_cleanup_visibility
 ```
 
 Three completed runs of one trigger, keeping one; of the two beyond retention the older is
-deletable and the newer is pinned by a `resume_plans` row, so a single sweep produces both a delete
-and a skip. `cleanup_history` runs under a `tracing` subscriber whose filter is
+deletable and the newer is pinned by a reference nobody has ruled on (a table the test creates), so
+a single sweep produces both a delete and a skip. `cleanup_history` runs under a `tracing`
+subscriber whose filter is
 `EnvFilter::new("info")` — the exact fallback `crates/daemon/src/main.rs` uses when neither
 `ORCHESTRATOR_LOG` nor `RUST_LOG` is set — and the emitted bytes are captured.
 
@@ -145,7 +153,8 @@ and a skip. `cleanup_history` runs under a `tracing` subscriber whose filter is
 
 The deletable task is gone from `tasks`, and the captured log contains `trigger history cleanup`
 with `deleted=1`, the line `history limit skipped a task still referenced elsewhere`, and the
-string `resume_plans.task_id`.
+string `later_addition.task_id`. The pinned task also keeps its item, so a sweep that stripped a
+task it refused to delete fails here too.
 
 This is the half a correctness assertion cannot reach. A sweep can compute the right answer and
 still be silent, and silence is what the FR existed to end: the original failure was logged at
@@ -186,8 +195,8 @@ verified byte-identical with `diff -q` before the next one.
 | Mutation | Assertion that failed | Observed |
 |---|---|---|
 | `items.rs`: replace `conn.unchecked_transaction()` with the bare connection and drop the commit | Scenario 2 | `the refused sweep changed the items of a task it did not delete: left 0, right 1` — the half-emptied task, exactly the state the transaction prevents |
-| `trigger_state.rs`: drop `AND UPPER(COALESCE(f.on_delete,'')) <> 'CASCADE'` | Scenario 2 | `blocked_by` became `["resume_plans.task_id", "task_graph_runs.task_id"]`, naming a table that never refused anything |
-| `trigger_state.rs`: replace `if blocked_by.is_empty()` with `if false`, filing every failure as a skip | Scenario 3 | `a missing task was absorbed as a skip: SkippedTask { task_id: "no-such-task", blocked_by: [] }` |
+| `references.rs`: drop `AND UPPER(COALESCE(f.on_delete,'')) <> 'CASCADE'` | Scenario 2 | `blocked_by` became `["later_addition.task_id", "task_graph_runs.task_id"]`, naming a table that never refused anything |
+| `trigger_state.rs`: treat every error as a skip rather than only a `TaskDeleteBlocked` | Scenario 3 | `a missing task was absorbed as a skip: SkippedTask { task_id: "no-such-task", blocked_by: [] }` |
 
 | `trigger_engine.rs`: regress the skip `warn!` and the summary `info!` back to `debug!` | Scenario 4 | the captured log came back **empty** — the original defect, reproduced exactly |
 
@@ -203,7 +212,7 @@ that finds such a gap is worth more than the fixture it produces.
 
 - [ ] Scenario 1: a task with items, a command run and events is deleted, and the log paths come back
 - [ ] Scenario 1: a bare `DELETE FROM tasks` still fails with `FOREIGN KEY constraint failed`
-- [ ] Scenario 2: a task pinned by `resume_plans` is skipped, named, and left with every row intact
+- [ ] Scenario 2: a task pinned by an unruled reference is skipped, named, and left with every row intact
 - [ ] Scenario 2: a cascading `task_graph_runs` row is not reported as a blocker
 - [ ] Scenario 3: a missing task surfaces as an error, not as a skip
 - [ ] Scenario 4: a sweep prints its summary and its skip cause at an `info` filter

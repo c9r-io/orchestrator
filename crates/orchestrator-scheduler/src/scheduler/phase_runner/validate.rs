@@ -132,7 +132,9 @@ pub(super) async fn validate_driver_events_stage(
                     .saturating_add(counts.input.unwrap_or(0))
                     .saturating_add(counts.output.unwrap_or(0));
             }
-            DriverEvent::Finished { outcome, exit_code } => {
+            DriverEvent::Finished {
+                outcome, exit_code, ..
+            } => {
                 terminal = Some((*outcome, *exit_code));
                 artifacts.push(
                     Artifact::new(ArtifactKind::Data {
@@ -243,6 +245,7 @@ mod driver_tests {
         DriverEvent::Finished {
             outcome: DriverOutcome::Success,
             exit_code: 0,
+            exit_signal: None,
         }
     }
 
@@ -258,6 +261,7 @@ mod driver_tests {
             DriverEvent::Finished {
                 outcome: DriverOutcome::Success,
                 exit_code: 0,
+                exit_signal: None,
             },
         ];
 
@@ -289,6 +293,7 @@ mod driver_tests {
         let events = vec![DriverEvent::Finished {
             outcome: DriverOutcome::Failed,
             exit_code: 1,
+            exit_signal: None,
         }];
 
         let validated = validate_driver_events_stage(

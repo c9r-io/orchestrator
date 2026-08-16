@@ -18,7 +18,10 @@ vi.mock("./hooks/useConnectionState", () => ({ useConnectionState: vi.fn() }));
 vi.mock("./hooks/useTheme", () => ({ useTheme: vi.fn() }));
 vi.mock("./hooks/useTransparency", () => ({ useTransparency: vi.fn() }));
 vi.mock("./lib/features", () => ({ featureEnabled: vi.fn() }));
-vi.mock("./lib/routes", () => ({ useConsoleRoute: vi.fn() }));
+vi.mock("./lib/routes", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./lib/routes")>()),
+  useConsoleRoute: vi.fn(),
+}));
 vi.mock("./lib/telemetry", () => ({ recordUiMetric: vi.fn() }));
 vi.mock("./components/ConnectionBanner", () => ({ default: ({ state }: { state: { kind: string } }) => <div>banner {state.kind}</div> }));
 vi.mock("./pages/ConnectionStatus", () => ({ default: ({ state }: { state: { kind: string } }) => <div>connection {state.kind}</div> }));
@@ -126,9 +129,26 @@ describe("App shell", () => {
     render(<App />);
     expect(screen.getByRole("heading", { name: "Feature unavailable" })).toBeVisible();
     await waitFor(() => expect(notificationAction).toBeTypeOf("function"));
-    notificationAction?.({ extra: { deep_link: "#/processes/task-1" } });
-    expect(window.location.hash).toBe("#/processes/task-1");
+    notificationAction?.({ extra: { deep_link: "#/tasks/task-1" } });
+    expect(window.location.hash).toBe("#/tasks/task-1");
     notificationAction?.({ extra: { deep_link: "https://malicious.example" } });
-    expect(window.location.hash).toBe("#/processes/task-1");
+    expect(window.location.hash).toBe("#/tasks/task-1");
+    // A notification minted before FR-166 still opens its page. This is the assertion
+    // the rename is most likely to break silently: the regex gates which deep links are
+    // honoured at all, so dropping `processes` from it makes old notifications no-ops.
+    notificationAction?.({ extra: { deep_link: "#/processes/task-2" } });
+    expect(window.location.hash).toBe("#/processes/task-2");
+  });
+
+  // FR-166. The console said Processes while every other surface said Task. Asserting
+  // the label alone would pass with the nav still linking #/processes, and asserting
+  // the href alone would pass with the label unchanged, so both are read from the same
+  // rendered element.
+  it("names the task surface Tasks and links it at the task path", () => {
+    render(<App />);
+    const link = screen.getByRole("link", { name: /Tasks/ });
+    expect(link).toHaveAttribute("href", "#/tasks");
+    expect(screen.queryByRole("link", { name: /Processes/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /New task/ })).toBeVisible();
   });
 });

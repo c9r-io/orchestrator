@@ -1119,8 +1119,17 @@ mod history_cleanup_visibility_tests {
             .expect("open database");
 
         // Three completed runs of one trigger. Keeping one leaves two beyond
-        // retention: the older is deletable, the newer is pinned by a resume
-        // plan, so one sweep produces both a delete and a skip.
+        // retention: the older is deletable, the newer is pinned by a reference
+        // with no recorded disposition, so one sweep produces both a delete and
+        // a skip.
+        //
+        // The pin used to be a `resume_plans` row. FR-168 ruled that table
+        // delete-with-task, so it no longer refuses anything and could no
+        // longer drive this path. The replacement is a table created here and
+        // deliberately absent from the disposition map — which is a stronger
+        // fixture than the original, because it also proves the blocking set is
+        // derived from the schema at runtime rather than listed anywhere: this
+        // table did not exist when the code under test was written.
         let name = trigger_task_name("nightly");
         for (id, day) in [
             ("hist-old", "01"),
@@ -1129,17 +1138,15 @@ mod history_cleanup_visibility_tests {
         ] {
             seed(&conn, id, &name, &format!("2026-01-{day}T00:00:00+00:00"));
         }
-        conn.execute(
-            "INSERT INTO resume_plans (id, project_id, task_id, boundary_id, mode,
-                 expected_state_version, side_effect_class, replay_safe,
-                 elevated_confirmation_required, consequence_json, status, expires_at,
-                 created_by, created_at)
-             VALUES ('plan-vis', 'default', 'hist-pinned', 'b', 'resume', 'v1', 'none', 1, 0,
-                     '{}', 'pending', '2026-02-01T00:00:00+00:00', 'operator',
-                     '2026-01-02T00:00:00+00:00')",
-            [],
+        conn.execute_batch(
+            "CREATE TABLE later_addition (
+                 id TEXT PRIMARY KEY,
+                 task_id TEXT NOT NULL,
+                 FOREIGN KEY(task_id) REFERENCES tasks(id)
+             );
+             INSERT INTO later_addition (id, task_id) VALUES ('row-1', 'hist-pinned');",
         )
-        .expect("pin one of the two");
+        .expect("pin one of the two with an undisposed reference");
 
         let captured = Captured::default();
         let subscriber = tracing_subscriber::fmt()
@@ -1186,8 +1193,21 @@ mod history_cleanup_visibility_tests {
             "a skipped task was not reported at all. log:\n{log}"
         );
         assert!(
-            log.contains("resume_plans.task_id"),
+            log.contains("later_addition.task_id"),
             "the skip was reported as a bare count with no cause to act on. log:\n{log}"
+        );
+
+        // The pinned task kept every row, rather than being stripped of its
+        // items and left standing. DD-150's "skip whole rather than strip".
+        assert_eq!(
+            conn.query_row(
+                "SELECT COUNT(*) FROM task_items WHERE task_id = 'hist-pinned'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .expect("count the pinned task's items"),
+            1,
+            "the refused sweep stripped the items off a task it did not delete"
         );
     }
 }

@@ -142,7 +142,7 @@ orchestrator task create \
 
 Do not pass `--target-file` for a task Workspace.
 
-In Process Console, open “Processes” and select the task. The overview displays “Workspace type: Task”; the Expert workflow uses the generic “Task” label. Timeline, evidence, Attention, handoff, and Session controls work the same way as for code processes.
+In Process Console, open “Tasks” and select the task. The overview displays “Workspace type: Task”; the Expert workflow uses the generic “Task” label. Timeline, evidence, Attention, handoff, and Session controls work the same way as for code processes.
 
 ## Slack Badge Example
 

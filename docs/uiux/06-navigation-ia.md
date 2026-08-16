@@ -30,9 +30,9 @@ Verify sidebar/top-nav active state is accurate so users do not get lost.
 
 ### Steps
 1. Launch the Orchestrator desktop GUI and confirm "Attention" is the active default destination.
-2. Visit "Processes", "Sessions", "Sources", "System", and a process-workspace deep link from an Attention or routed Source card; open "New process" separately.
+2. Visit "Tasks", "Sessions", "Sources", "System", and a process-workspace deep link from an Attention or routed Source card; open "New task" separately.
 3. Confirm the corresponding navigation item is highlighted and no second item appears active.
-4. Verify `Cmd/Ctrl+1..5` activate Attention, Processes, Sessions, Sources, and System; verify `Cmd/Ctrl+N` opens New Process.
+4. Verify `Cmd/Ctrl+1..5` activate Attention, Tasks, Sessions, Sources, and System; verify `Cmd/Ctrl+N` opens New task.
 
 ### Expected
 - Active styling is clear and matches the design system (color/background/indicator).

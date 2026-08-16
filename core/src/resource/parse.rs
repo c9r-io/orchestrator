@@ -113,6 +113,105 @@ pub fn delete_resource_by_kind(
     }
 }
 
+/// Every `ResourceKind` variant, listed once.
+///
+/// The compiler is what keeps this honest: [`kind_aliases`] and
+/// [`kind_canonical_name`] are wildcard-free matches, so a thirteenth variant
+/// fails to compile there, and `all_resource_kinds_covers_every_variant` fails
+/// until it is added here too.
+pub const ALL_RESOURCE_KINDS: [ResourceKind; 12] = [
+    ResourceKind::Workspace,
+    ResourceKind::Agent,
+    ResourceKind::Workflow,
+    ResourceKind::Project,
+    ResourceKind::RuntimePolicy,
+    ResourceKind::StepTemplate,
+    ResourceKind::SourceTaskTemplate,
+    ResourceKind::SourceTaskBinding,
+    ResourceKind::ExecutionProfile,
+    ResourceKind::EnvStore,
+    ResourceKind::SecretStore,
+    ResourceKind::Trigger,
+];
+
+/// Every CLI kind string accepted for a `ResourceKind`, one arm per variant.
+///
+/// This is the single alias table the delete path reads. Before FR-167 the same
+/// aliases were written out four times — here in [`delete_resource_by_kind`], in
+/// `service::resource::delete::canonical_project_kind`, in
+/// `delete_resource_from_project`, and in the daemon's `describe_summary` — and
+/// the copies had already diverged (`runtime_policy` was accepted by none of
+/// them, `stt`/`stb` by only some). Independent tables are not a style problem
+/// here: an alias added to the deletion side but not to the naming side makes a
+/// delete succeed while the audit layer resolves no kind and records the generic
+/// action, silently and with nothing in any log. `canonical_project_kind` now
+/// delegates to [`resource_kind_from_alias`], which makes that unrepresentable.
+///
+/// Plural forms are deliberately absent: `crd::resolve::is_builtin_alias` carries
+/// them because its question is "may a CRD claim this name", which is a wider set
+/// than "may a user type this after `orchestrator delete`".
+pub fn kind_aliases(kind: ResourceKind) -> &'static [&'static str] {
+    match kind {
+        ResourceKind::Workspace => &["ws", "workspace"],
+        ResourceKind::Agent => &["agent"],
+        ResourceKind::Workflow => &["wf", "workflow"],
+        ResourceKind::Project => &["project"],
+        ResourceKind::RuntimePolicy => &["runtimepolicy", "runtime-policy", "runtime_policy"],
+        ResourceKind::StepTemplate => &["steptemplate", "step-template", "step_template"],
+        ResourceKind::SourceTaskTemplate => &[
+            "sourcetasktemplate",
+            "source-task-template",
+            "source_task_template",
+            "stt",
+        ],
+        ResourceKind::SourceTaskBinding => &[
+            "sourcetaskbinding",
+            "source-task-binding",
+            "source_task_binding",
+            "stb",
+        ],
+        ResourceKind::ExecutionProfile => {
+            &["executionprofile", "execution-profile", "execution_profile"]
+        }
+        ResourceKind::EnvStore => &["envstore", "env-store", "env_store"],
+        ResourceKind::SecretStore => &["secretstore", "secret-store", "secret_store"],
+        ResourceKind::Trigger => &["trigger", "tg"],
+    }
+}
+
+/// Resolves a CLI kind string to its `ResourceKind`, or `None`.
+///
+/// `None` is a real answer, not a failure: `crd`, `customresourcedefinition` and
+/// every CRD-defined custom kind are deletable and have no `ResourceKind`. The
+/// daemon records those under the generic `resource.delete`, mirroring how an
+/// apply that resolves to no single builtin manifest records `resource.apply`.
+pub fn resource_kind_from_alias(input: &str) -> Option<ResourceKind> {
+    ALL_RESOURCE_KINDS
+        .into_iter()
+        .find(|kind| kind_aliases(*kind).contains(&input))
+}
+
+/// Returns the canonical PascalCase manifest name for a `ResourceKind`.
+///
+/// Pinned against the derived `Debug` spelling by
+/// `kind_canonical_name_matches_debug`, so the two cannot drift.
+pub fn kind_canonical_name(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Workspace => "Workspace",
+        ResourceKind::Agent => "Agent",
+        ResourceKind::Workflow => "Workflow",
+        ResourceKind::Project => "Project",
+        ResourceKind::RuntimePolicy => "RuntimePolicy",
+        ResourceKind::StepTemplate => "StepTemplate",
+        ResourceKind::SourceTaskTemplate => "SourceTaskTemplate",
+        ResourceKind::SourceTaskBinding => "SourceTaskBinding",
+        ResourceKind::ExecutionProfile => "ExecutionProfile",
+        ResourceKind::EnvStore => "EnvStore",
+        ResourceKind::SecretStore => "SecretStore",
+        ResourceKind::Trigger => "Trigger",
+    }
+}
+
 /// Returns the canonical CLI string for a `ResourceKind`.
 pub fn kind_as_str(kind: ResourceKind) -> &'static str {
     match kind {
@@ -139,6 +238,104 @@ mod tests {
     use super::super::test_fixtures::{
         agent_manifest, make_config, project_manifest, workflow_manifest, workspace_manifest,
     };
+
+    // ── alias table tests ───────────────────────────────────────────
+
+    /// Fails if a variant is added to `ResourceKind` without being added to
+    /// `ALL_RESOURCE_KINDS`. The index match is exhaustive and wildcard-free on
+    /// purpose: it is the compiler, not the assertion, that notices.
+    #[test]
+    fn all_resource_kinds_covers_every_variant() {
+        fn discriminant_index(kind: ResourceKind) -> usize {
+            match kind {
+                ResourceKind::Workspace => 0,
+                ResourceKind::Agent => 1,
+                ResourceKind::Workflow => 2,
+                ResourceKind::Project => 3,
+                ResourceKind::RuntimePolicy => 4,
+                ResourceKind::StepTemplate => 5,
+                ResourceKind::SourceTaskTemplate => 6,
+                ResourceKind::SourceTaskBinding => 7,
+                ResourceKind::ExecutionProfile => 8,
+                ResourceKind::EnvStore => 9,
+                ResourceKind::SecretStore => 10,
+                ResourceKind::Trigger => 11,
+            }
+        }
+        let mut seen = [false; 12];
+        for kind in ALL_RESOURCE_KINDS {
+            seen[discriminant_index(kind)] = true;
+        }
+        assert!(
+            seen.iter().all(|entry| *entry),
+            "ALL_RESOURCE_KINDS is missing a ResourceKind variant"
+        );
+    }
+
+    /// Every alias resolves back to the kind that declared it, and no alias is
+    /// claimed by two kinds. Round-tripping is what makes the table usable as a
+    /// resolver; distinctness is what stops one kind shadowing another's delete.
+    #[test]
+    fn every_alias_round_trips_and_is_unique() {
+        let mut seen: Vec<&'static str> = Vec::new();
+        for kind in ALL_RESOURCE_KINDS {
+            let aliases = kind_aliases(kind);
+            assert!(
+                !aliases.is_empty(),
+                "{kind:?} declares no CLI alias, so it can never be named"
+            );
+            for alias in aliases {
+                assert_eq!(
+                    resource_kind_from_alias(alias),
+                    Some(kind),
+                    "alias {alias} does not resolve back to {kind:?}"
+                );
+                assert!(
+                    !seen.contains(alias),
+                    "alias {alias} is claimed by two kinds"
+                );
+                seen.push(alias);
+            }
+            assert!(
+                aliases.contains(&kind_as_str(kind)),
+                "{kind:?} canonical CLI string {} is not among its aliases",
+                kind_as_str(kind)
+            );
+        }
+    }
+
+    /// `None` is the answer for kinds outside the enum, not an error. CRDs and
+    /// custom resources are deletable and live here.
+    #[test]
+    fn unresolvable_kinds_return_none() {
+        for input in [
+            "crd",
+            "customresourcedefinition",
+            "PromptLibrary",
+            "",
+            "workspaces",
+            "Workspace",
+        ] {
+            assert_eq!(
+                resource_kind_from_alias(input),
+                None,
+                "{input} must not resolve to a builtin ResourceKind"
+            );
+        }
+    }
+
+    /// The hand-written PascalCase table cannot drift from the derived `Debug`
+    /// spelling that `is_builtin_kind` and the apply path both rely on.
+    #[test]
+    fn kind_canonical_name_matches_debug() {
+        for kind in ALL_RESOURCE_KINDS {
+            assert_eq!(kind_canonical_name(kind), format!("{kind:?}"));
+            assert!(
+                crate::crd::resolve::is_builtin_kind(kind_canonical_name(kind)),
+                "{kind:?} canonical name is not recognised as a builtin kind"
+            );
+        }
+    }
 
     // ── kind_as_str tests ───────────────────────────────────────────
 

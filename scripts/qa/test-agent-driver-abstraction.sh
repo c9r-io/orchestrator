@@ -25,7 +25,11 @@ fail() { echo "  FAIL: $1" >&2; FAIL=$((FAIL + 1)); }
 cleanup() {
   gate_daemon_stop "$DAEMON_PID" || true
   DAEMON_PID=""
-  if [[ "$FAIL" -gt 0 || "${KEEP_FR116_QA:-0}" == "1" ]]; then
+  # gate_scratch_has_evidence: a retained root that holds nothing is
+  # indistinguishable from a gate that ran and produced no findings. Either root
+  # holding something retains both, because the line below names both.
+  if [[ "$FAIL" -gt 0 || "${KEEP_FR116_QA:-0}" == "1" ]] &&
+    { gate_scratch_has_evidence "$QA_ROOT" || gate_scratch_has_evidence "$QA_HOME"; }; then
     echo "FR-116 QA retained at QA_ROOT=$QA_ROOT QA_HOME=$QA_HOME" >&2
   else
     rm -rf "$QA_ROOT" "$QA_HOME"

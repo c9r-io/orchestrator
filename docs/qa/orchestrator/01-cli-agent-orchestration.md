@@ -336,23 +336,26 @@ Validate task deletion requires --force flag.
 - With --force, task is deleted
 - Deleted task no longer appears in list
 
-### Known limitation — this scenario passes only because the task is empty
+### This scenario no longer depends on the task being empty
 
-Step 1 creates the task with `--no-start`, so it holds none of the seven tables
-that reference `tasks(id)` without a cascade. A task that used a handoff, a
-resume plan, or source ingest **fails this scenario today**, with a bare
-`FOREIGN KEY constraint failed` and no indication of which table held it: the
-cascade in `task_repository/items.rs` clears one of the eight blocking
-references (`task_items`, with its command runs and events). Do not file that
-failure as a new ticket — it is a design gap, not a test error, tracked by
-[FR-168](../../feature_request/FR-168-task-delete-reference-policy.md), which
-must decide per table whether an operator's delete may destroy it. The
-retention half of the same limit is recorded in
-[QA 188](188-trigger-history-limit-cascade.md).
+It used to. Step 1 creates the task with `--no-start`, and the note here
+recorded that a task which had used a handoff, a resume plan or source ingest
+would **fail** this scenario with a bare `FOREIGN KEY constraint failed` naming
+nothing, because the cascade in `task_repository/items.rs` cleared one of the
+eight blocking references.
 
-Keep `--no-start` in step 1 until FR-168 closes. Adding a handoff here would
-turn a passing scenario red without testing anything the FR does not already
-record.
+FR-168 closed that. All seven remaining references now carry a recorded
+disposition applied inside the cascade — three are deleted with the task, four
+keep their row with a null reference — so a task with a handoff, a resume plan
+or source ingest deletes cleanly. A reference nobody has ruled on still refuses,
+but it now names itself rather than failing anonymously, and the refusal happens
+before the task's runtime is stopped. See
+[QA 222](222-task-delete-reference-disposition.md) and
+[DD-184](../../design_doc/orchestrator/184-task-delete-reference-disposition.md).
+
+`--no-start` stays in step 1 because this scenario is about the `--force` gate
+and does not need a running task; it is no longer load-bearing for the delete
+itself.
 
 ---
 

@@ -68,7 +68,9 @@ sent envelopes; `orchestrator tool secret-rotate` — which rewrites a SecretSto
    cannot be over-applied.
 
 2. **Action and target type come from wildcard-free matches.** `apply_action`
-   and `apply_target_type` match every `ResourceKind` with no `_` arm, so a
+   and `resource_target_type` (named `apply_target_type` here until FR-167 gave
+   the delete path the same table — it names the object, not the verb) match
+   every `ResourceKind` with no `_` arm, so a
    thirteenth variant fails to compile rather than silently inheriting the
    generic name. **This compile-time obligation is the derivation** — the test's
    `ALL_KINDS` array is a convenience that `covers_every_variant` keeps in sync,
@@ -129,9 +131,16 @@ sent envelopes; `orchestrator tool secret-rotate` — which rewrites a SecretSto
   a harness that mirrors production RPCs by reimplementation will diverge
   silently, and a test written against it certifies the mirror. Worth an audit of
   which other RPCs that harness re-implements.
-- **`kind_as_str_covers_all_resource_kinds`** (`core/tests/integration_test.rs`)
+- ~~**`kind_as_str_covers_all_resource_kinds`** (`core/tests/integration_test.rs`)
   asserts three of twelve kinds despite its name — an instance of §4.4 shape 2 in
-  existing tests. Left as found; recorded so it is not mistaken for coverage.
+  existing tests. Left as found; recorded so it is not mistaken for coverage.~~
+  **Closed by FR-167**, which had to build the derived set this test was missing:
+  it now iterates `ALL_RESOURCE_KINDS` and asserts each printed name resolves back
+  through `resource_kind_from_alias`, keeping the three literals as spot pins.
+  Verified by mutation — printing `secretstores` for `SecretStore` fails naming
+  the kind, which the three-literal version could not see. Recording a limit is
+  the right move when there is nothing to check against; re-reading the record
+  when that changes is the other half of it.
 - **`Delete` has the same defect and a worse form of it — filed as FR-167.**
   Asking §5's question ("what state satisfies every criterion while the goal is
   unmet?") of this FR's criteria answers: deletion. `delete` gates its envelope on

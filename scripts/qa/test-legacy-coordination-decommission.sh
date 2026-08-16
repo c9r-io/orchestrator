@@ -10,9 +10,29 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Evidence bundle. Set FR125_EVIDENCE_DIR to a path of your own to keep it
+# unconditionally — that is the documented way to hold the inventory and the
+# strangler log after a passing run, and it is honoured whatever the verdict.
+#
+# Otherwise the bundle is scratch: kept when the run fails and has something in
+# it, removed when it does not. It used to be kept every time, so a passing run
+# left a directory under $TMPDIR that nobody was coming back for — 20 K per run,
+# measured 2026-08-12 — and a run that died on the command preamble left an empty
+# one, which cannot be told apart from a run that found nothing.
 EVIDENCE_DIR="${FR125_EVIDENCE_DIR:-$(mktemp -d)}"
+EVIDENCE_PINNED="${FR125_EVIDENCE_DIR:+1}"
 INVENTORY="$EVIDENCE_DIR/consumer-inventory.json"
 PASS=0
+
+cleanup() {
+  local status=$?
+  if [[ -n "$EVIDENCE_PINNED" || "$status" -ne 0 ]] && gate_scratch_has_evidence "$EVIDENCE_DIR"; then
+    echo "Evidence: $EVIDENCE_DIR" >&2
+  else
+    rm -rf "$EVIDENCE_DIR"
+  fi
+}
+trap cleanup EXIT
 
 pass() {
   echo "  PASS: $1"
@@ -110,4 +130,5 @@ if [[ "${FR125_FULL:-0}" == "1" ]]; then
 fi
 
 echo "FR-125 QA: $PASS passed, 0 failed"
-echo "Evidence: $EVIDENCE_DIR"
+# The evidence line is printed by cleanup(), which is the only place that knows
+# whether the bundle survived the run.

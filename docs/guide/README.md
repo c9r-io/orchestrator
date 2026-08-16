@@ -24,12 +24,23 @@ This guide helps you understand and use Agent Orchestrator as a **Harness Engine
 | [06 - Self-Bootstrap](06-self-bootstrap.md) | Self-modifying workflows and survival mechanisms | Advanced |
 | [07 - CLI Reference](07-cli-reference.md) | Command quick-reference for the C/S runtime | Reference |
 | [Error Codes](error-codes.md) | Bracketed machine error codes: meaning, trigger, remedy | Reference |
-| [Agent Process Console 用户指南（中文）](zh/08-agent-process-console.md) | Daily Attention triage, process recovery, session takeover, sources, and operations | Beginner to Advanced |
+| [08 - Agent Process Console](08-agent-process-console.md) | Daily Attention triage, task recovery, session takeover, sources, and operations | Beginner to Advanced |
 | [Agent Process Console v1 Operations](agent-process-console-v1-operations.md) | Upgrade, rollout, stop-loss, rollback, and disaster restore | Operations |
-| [用 Slack Reaction 创建 Skill 任务](slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 自动化、诊断、升级与回滚 | Beginner to Operations |
-| [使用官方 Orchestrator Slack App 一键连接 Workspace](slack-managed-connections.md) | Managed Connection、OAuth、Gateway、转移、诊断与运维 | Beginner to Operations |
-| [为每个 Slack Workspace 创建独立的 Orchestrator App](slack-dedicated-app-provisioning.md) | Dedicated App、Configuration Token、manifest 审批、恢复、迁移与 sandbox 实测 | Advanced to Operations |
-| [受控 Slack Sandbox 持续认证 Runbook](slack-managed-sandbox-certification-runbook.md) | shared/dedicated/组合 live OAuth、checkpoint、双 badge、恢复、清理与证据保鲜 | Operations |
+
+## Chinese-only Guides (中文)
+
+These four Slack operations guides exist only in Chinese. They are listed separately
+rather than in the table above so that the chapter list stays English throughout; each
+is a declared translation gap in `config/governance/docs-publishing.json`, and
+`check_guide_language_parity` in `scripts/qa/test-docs-reality-alignment.sh` fails the
+build if an undeclared Chinese document appears in the English source directory.
+
+| Chapter | Topic | Difficulty |
+|---------|-------|------------|
+| [用 Slack Reaction 创建 Skill 任务 (Chinese)](slack-reaction-skill-automation.md) | Slack app、SecretStore、双 badge 自动化、诊断、升级与回滚 | Beginner to Operations |
+| [使用官方 Orchestrator Slack App 一键连接 Workspace (Chinese)](slack-managed-connections.md) | Managed Connection、OAuth、Gateway、转移、诊断与运维 | Beginner to Operations |
+| [为每个 Slack Workspace 创建独立的 Orchestrator App (Chinese)](slack-dedicated-app-provisioning.md) | Dedicated App、Configuration Token、manifest 审批、恢复、迁移与 sandbox 实测 | Advanced to Operations |
+| [受控 Slack Sandbox 持续认证 Runbook (Chinese)](slack-managed-sandbox-certification-runbook.md) | shared/dedicated/组合 live OAuth、checkpoint、双 badge、恢复、清理与证据保鲜 | Operations |
 
 ## Complementary Resources
 
@@ -68,4 +79,4 @@ Once installed, Claude will automatically reference the guide when working with 
 
 ## Chinese Version / 中文版
 
-See [zh/README.md](zh/README.md) for the full Chinese translation of this guide.
+See [中文版用户指南 (Chinese)](zh/README.md) for the full Chinese translation of this guide.

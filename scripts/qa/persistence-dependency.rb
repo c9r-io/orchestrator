@@ -53,7 +53,10 @@ include RustSource
 SCOPE = "every workspace member listed in the root Cargo.toml, its Cargo.toml " \
   "parsed by dependency section, and its non-test Rust source outside core — " \
   "its src tree and its Cargo build script — excluding inline cfg(test) " \
-  "modules, files under a tests directory, and files named test*.rs; the " \
+  "modules, files under a tests directory, and files whose basename contains " \
+  "test that are also confirmed test-only — their mod declaration is gated on " \
+  "cfg(test) or a test-only feature, or nothing but comments survives stripping " \
+  "their cfg(test) modules; the " \
   "driver token is counted on the lexically masked source, so a comment or doc " \
   "comment naming it is not a reference, while SQL statements are counted on " \
   "the unmasked source because the pattern anchors inside a string literal".freeze

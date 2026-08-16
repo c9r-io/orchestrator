@@ -71,7 +71,7 @@ describe("Sources", () => {
     expect(screen.queryByRole("button", { name: "重新路由" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "打开 Slack 消息" })).not.toBeInTheDocument();
     expect(invoke).not.toHaveBeenCalledWith("source_automation_route_get", expect.anything());
-    fireEvent.click(screen.getAllByRole("button", { name: "打开进程" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "打开任务" })[0]);
     expect(onOpenTask).toHaveBeenCalledWith("task-1");
   });
 

@@ -155,30 +155,13 @@ echo "FR-001 sandbox QA project: ${PROJECT} (isolated under ${QA_ROOT})"
 
 run_task "sandbox-open-files-limit" "sandbox fd limit" "sandbox fd limit" "sandbox_resource_exceeded" "open_files_limit_exceeded" "open_files"
 
-# sandbox-cpu-limit is expected to fail and is scoped out by name, not by making
-# the gate non-blocking: five of the six sub-cases work, and dropping them to
-# dodge one would be the enumeration mistake DD-179 records for
-# test-process-console-ui.sh's npm audit step — an exemption sized to the whole
-# gate when the objection is to one line inside it.
-#
-# The limit is enforced (the process dies at ~1s of CPU under max_cpu_seconds: 1)
-# and unobservable: no event, no reason code, sandbox_denied false, exit_code 1.
 # CPU exhaustion is the one limit that kills the process instead of making a call
-# fail, so the probe cannot self-report it, and the SIGXCPU fallback at
-# phase_runner/util.rs:312 does not fire because the signal never reaches
-# status.signal(). docs/ticket/20260812-cpu-limit-exhaustion-is-enforced-but-unobservable.md
-#
-# Asserted as expected-failing rather than skipped. A skip says nothing when the
-# defect is fixed; this fails the moment the event starts arriving, so the gate is
-# the regression test and the exemption cannot outlive what it excuses.
-# A subshell, because run_task reports failure with `exit 1` rather than `return`:
-# called bare in condition position it would take the whole gate down instead of
-# yielding false, and the run would end before the five remaining assertions.
-if ( run_task "sandbox-cpu-limit" "sandbox cpu limit" "sandbox cpu limit" "sandbox_resource_exceeded" "cpu_limit_exceeded" "cpu" ) 2>/dev/null; then
-  echo "[FAIL] sandbox-cpu-limit now classifies; remove this exemption and the ticket" >&2
-  exit 1
-fi
-echo "[KNOWN-FAILING] sandbox-cpu-limit: enforced but unobservable (ticket 20260812-cpu-limit-exhaustion-is-enforced-but-unobservable)"
+# fail, so its stderr is empty and the probe cannot self-report it. The signal was
+# always its only channel, and until DD-188 that channel did not exist: the driver
+# path collapsed a signal death into exit_code 1 and substituted exit_signal None,
+# which left the SIGXCPU arm of phase_runner/util.rs:312 unreachable for every
+# driver-executed step. This case was expected-failing for three days on that.
+run_task "sandbox-cpu-limit" "sandbox cpu limit" "sandbox cpu limit" "sandbox_resource_exceeded" "cpu_limit_exceeded" "cpu"
 
 run_task "sandbox-memory-limit" "sandbox memory limit" "sandbox memory limit" "sandbox_resource_exceeded" "memory_limit_exceeded" "memory"
 run_task "sandbox-process-limit" "sandbox process limit" "sandbox process limit" "sandbox_resource_exceeded" "processes_limit_exceeded" "processes"

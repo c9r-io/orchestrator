@@ -290,7 +290,33 @@ pub async fn pause_task(state: Arc<InnerState>, task_id: &str) -> Result<()> {
 }
 
 /// Delete a task (stops it first if running).
+///
+/// The reference check runs *before* the runtime is stopped. Stopping first and
+/// discovering the refusal afterwards would leave the operator with a task that
+/// is neither running nor deleted, having asked for one thing and got a third.
+/// The delete re-derives the same check under its own transaction, so this is a
+/// courtesy to the caller and never the authority.
 pub async fn delete_task(state: Arc<InnerState>, task_id: &str) -> Result<()> {
+    let resolved = resolve_task_id(&state, task_id)
+        .await
+        .map_err(|err| classify_task_error("task.delete", err))?;
+    let blocked_by = state
+        .task_repo
+        .references_blocking_delete(&resolved)
+        .await
+        .map_err(|err| classify_task_error("task.delete", err))?;
+    if !blocked_by.is_empty() {
+        return Err(classify_task_error(
+            "task.delete",
+            anyhow::anyhow!(
+                "task {resolved} is still referenced by {}, and no disposition is recorded \
+                 for {}; delete refused and the task was left running",
+                blocked_by.join(", "),
+                if blocked_by.len() == 1 { "it" } else { "them" },
+            ),
+        ));
+    }
+
     stop_task_runtime_for_delete(state.clone(), task_id)
         .await
         .map_err(|err| classify_task_error("task.delete", err))?;
@@ -691,6 +717,125 @@ mod tests {
             .expect("delete task");
         let remaining = list_tasks(&state).await.expect("list after delete");
         assert!(remaining.is_empty());
+    }
+
+    /// FR-168: a task carrying a handoff deletes, through the operator's path.
+    ///
+    /// This is the acceptance criterion as written — a task with a
+    /// `handoff_snapshots` row went through `orchestrator task delete` and
+    /// failed with a bare `FOREIGN KEY constraint failed`. The repository-level
+    /// suite asserts the disposition; this asserts that the service path an
+    /// operator actually reaches gets the same answer, which is a different
+    /// claim: `delete_task` has its own reference check and its own ordering.
+    #[tokio::test]
+    async fn a_task_with_a_handoff_deletes_through_the_service_path() {
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
+        conn.execute(
+            "INSERT INTO handoff_snapshots (id, project_id, task_id, source_event_cursor,
+                 projection_version, briefing_json, content_hash, state_version, generated_by,
+                 created_at)
+             VALUES ('h-1', 'default', ?1, 0, 0, '{}', 'h', 'v1', 'op', '2026-01-01T00:00:00+00:00')",
+            rusqlite::params![task_id],
+        )
+        .expect("seed a handoff snapshot");
+
+        delete_task(state.clone(), &task_id)
+            .await
+            .expect("a task with a handoff must delete");
+
+        assert!(
+            list_tasks(&state).await.expect("list").is_empty(),
+            "the task survived a delete that reported success"
+        );
+        let snapshots: i64 = conn
+            .query_row("SELECT COUNT(*) FROM handoff_snapshots", [], |row| {
+                row.get(0)
+            })
+            .expect("count snapshots");
+        assert_eq!(
+            snapshots, 0,
+            "the handoff snapshot outlived the task that owned it"
+        );
+    }
+
+    /// FR-168: a reference nobody has ruled on refuses, names itself, and does
+    /// not stop the task's runtime on the way out.
+    ///
+    /// The ordering is the half the repository suite cannot see. `delete_task`
+    /// used to stop the runtime first and discover the refusal afterwards,
+    /// leaving the operator with a task that was neither running nor deleted —
+    /// a third outcome nobody asked for.
+    ///
+    /// The ordering is asserted by **observing the runtime registration**, not
+    /// by reading the wording of the error. `stop_task_runtime_for_delete`
+    /// removes the task from `state.running` and sets its stop flag, so a
+    /// refusal that ran after it leaves an empty map and a raised flag. An
+    /// earlier version of this test asserted that the message contained
+    /// "left running", which is a string literal in the error and would have
+    /// gone on passing with the two steps in either order — the proxy failure
+    /// this FR spent its budget on, reappearing in the test written to close it.
+    #[tokio::test]
+    async fn an_unruled_reference_refuses_before_the_runtime_is_stopped() {
+        use std::sync::atomic::Ordering;
+
+        let mut fixture = TestState::new();
+        let (state, task_id) = seed_task(&mut fixture);
+        let conn =
+            orchestrator_persistence::test_support::open_conn(&state.db_path).expect("open sqlite");
+        conn.execute_batch(
+            "CREATE TABLE later_addition (
+                 id TEXT PRIMARY KEY,
+                 task_id TEXT NOT NULL,
+                 FOREIGN KEY(task_id) REFERENCES tasks(id)
+             );",
+        )
+        .expect("add a table nobody has ruled on");
+        conn.execute(
+            "INSERT INTO later_addition (id, task_id) VALUES ('row-1', ?1)",
+            rusqlite::params![task_id],
+        )
+        .expect("pin the task");
+
+        // Register the task as running, so that stopping it is observable.
+        let runtime = agent_orchestrator::state::RunningTask::new();
+        let stop_flag = runtime.stop_flag.clone();
+        state.running.lock().await.insert(task_id.clone(), runtime);
+
+        let error = delete_task(state.clone(), &task_id)
+            .await
+            .expect_err("an unruled reference must refuse the delete");
+
+        // The diagnostic names the holder. An exit status could not tell this
+        // apart from a missing task or a disk error.
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains("later_addition.task_id"),
+            "the refusal did not name the reference holding the task: {rendered}"
+        );
+        assert!(
+            !rendered.contains("FOREIGN KEY constraint failed"),
+            "the operator still gets the raw driver error: {rendered}"
+        );
+
+        // The runtime was left alone: still registered, flag never raised.
+        assert!(
+            state.running.lock().await.contains_key(&task_id),
+            "the refused delete deregistered the task's runtime, leaving it \
+             neither running nor deleted"
+        );
+        assert!(
+            !stop_flag.load(Ordering::SeqCst),
+            "the refused delete raised the task's stop flag on its way out"
+        );
+
+        assert_eq!(
+            list_tasks(&state).await.expect("list").len(),
+            1,
+            "a refused delete removed the task anyway"
+        );
     }
 
     #[tokio::test]

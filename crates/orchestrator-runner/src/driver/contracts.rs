@@ -115,8 +115,23 @@ pub enum DriverEvent {
     Finished {
         /// Normalized terminal outcome.
         outcome: DriverOutcome,
-        /// Process-compatible exit code.
+        /// Process-compatible exit code. `-1` when the process was killed by a
+        /// signal and therefore has no exit code, matching the non-driver wait
+        /// path in `phase_runner::wait`.
         exit_code: i32,
+        /// The signal that killed the process, when one did.
+        ///
+        /// Without this the terminal event cannot distinguish "exited 1" from
+        /// "killed by SIGXCPU", and a classifier that keys on the signal has no
+        /// input at all. That was not hypothetical: the CPU-limit arm of
+        /// `detect_resource_exceeded` was unreachable for every driver-executed
+        /// step — which is all of them — because this field did not exist and
+        /// the wait path substituted `None`. CPU exhaustion is the one sandbox
+        /// limit that kills the process instead of making a call fail, so its
+        /// stderr is empty and the signal is the only channel it has.
+        /// `None` for protocol-driven providers, which report an outcome
+        /// rather than a process status. See DD-188.
+        exit_signal: Option<i32>,
     },
 }
 
@@ -296,9 +311,18 @@ pub trait DriverSession: Send + Sync {
             if let DriverEvent::AssistantText(text) = &event {
                 assistant_texts.push(text.clone());
             }
-            if let DriverEvent::Finished { outcome, exit_code } = event {
+            if let DriverEvent::Finished {
+                outcome,
+                exit_code,
+                exit_signal,
+            } = event
+            {
                 terminal = Some((outcome, exit_code));
-                events.push(DriverEvent::Finished { outcome, exit_code });
+                events.push(DriverEvent::Finished {
+                    outcome,
+                    exit_code,
+                    exit_signal,
+                });
                 break;
             }
             events.push(event);

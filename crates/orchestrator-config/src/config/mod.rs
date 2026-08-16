@@ -13,7 +13,10 @@ mod item_select;
 mod observability;
 mod pipeline;
 mod prehook;
-mod runner;
+// Crate-visible so cli_types.rs can name the runner defaults by their home
+// module rather than through the glob re-export below. It holds the single
+// definition of those defaults; see the comment beside them.
+pub(crate) mod runner;
 mod safety;
 mod source_task_binding;
 mod source_task_template;

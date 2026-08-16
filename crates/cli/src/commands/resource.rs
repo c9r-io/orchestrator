@@ -141,30 +141,13 @@ pub(crate) async fn dispatch(
         } => {
             let resource = resolve_resource(&resource, name.as_deref());
             let resp = client
-                .delete(orchestrator_proto::DeleteRequest {
+                .delete(resource_delete_request(
                     resource,
                     force,
                     dry_run,
                     project,
                     force_references,
-                    audit: Some(orchestrator_proto::ActionAuditContext {
-                        reason_code: if force_references {
-                            "operator_force_reference_cleanup".to_string()
-                        } else {
-                            "operator_resource_delete".to_string()
-                        },
-                        operator_reason: Some(
-                            "atomically delete SourceTaskTemplate binding references".to_string(),
-                        ),
-                        idempotency_key: Some(format!(
-                            "cli-resource-delete-references-{}",
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .map(|duration| duration.as_nanos())
-                                .unwrap_or_default()
-                        )),
-                    }),
-                })
+                ))
                 .await
                 .map_err(format_grpc_error)?
                 .into_inner();
@@ -172,6 +155,128 @@ pub(crate) async fn dispatch(
             Ok(None)
         }
         other => Ok(Some(other)),
+    }
+}
+
+/// Builds the delete request, envelope included.
+///
+/// Extracted so the envelope is assertable on the request actually constructed.
+/// Since FR-167 every non-dry-run delete reserves an audit row, so an absent
+/// envelope is what `action_audit_mode: enforced` refuses and a wrong one is what
+/// gets stored forever.
+///
+/// The three fields were all written for `--force-references`, because until
+/// FR-167 that was the only case the daemon read them in: an ordinary delete had
+/// its envelope discarded, so the operator reason it carried was never stored and
+/// so never wrong. Now that it is stored, a plain `delete secretstore/x` would
+/// have persisted "atomically delete SourceTaskTemplate binding references" as
+/// the operator's stated reason. The reason and the retry identity are therefore
+/// scoped to the operation that justifies them.
+fn resource_delete_request(
+    resource: String,
+    force: bool,
+    dry_run: bool,
+    project: Option<String>,
+    force_references: bool,
+) -> orchestrator_proto::DeleteRequest {
+    orchestrator_proto::DeleteRequest {
+        resource,
+        force,
+        dry_run,
+        project,
+        force_references,
+        audit: Some(orchestrator_proto::ActionAuditContext {
+            reason_code: if force_references {
+                "operator_force_reference_cleanup".to_string()
+            } else {
+                "operator_resource_delete".to_string()
+            },
+            operator_reason: force_references
+                .then(|| "atomically delete SourceTaskTemplate binding references".to_string()),
+            idempotency_key: Some(format!(
+                "{}-{}",
+                if force_references {
+                    "cli-resource-delete-references"
+                } else {
+                    "cli-resource-delete"
+                },
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or_default()
+            )),
+        }),
+    }
+}
+
+#[cfg(test)]
+mod resource_delete_envelope_tests {
+    use super::resource_delete_request;
+
+    /// An ordinary delete must be attributable, and must not borrow the
+    /// force-references justification. Asserted on the request that is actually
+    /// built rather than on the presence of the text in the source: a
+    /// commented-out envelope satisfies a grep and would leave the delete
+    /// unaudited exactly as before FR-167.
+    #[test]
+    fn ordinary_delete_carries_its_own_envelope() {
+        let request = resource_delete_request(
+            "secretstore/prod".into(),
+            true,
+            false,
+            Some("default".into()),
+            false,
+        );
+        let audit = request.audit.expect("an ordinary delete must be audited");
+        assert_eq!(audit.reason_code, "operator_resource_delete");
+        assert_eq!(
+            audit.operator_reason, None,
+            "a plain delete must not claim to be a binding cleanup"
+        );
+        let key = audit.idempotency_key.expect("retry identity is required");
+        assert!(
+            key.starts_with("cli-resource-delete-")
+                && !key.starts_with("cli-resource-delete-references-"),
+            "an ordinary delete must not share the reference-cleanup key space: {key}"
+        );
+    }
+
+    #[test]
+    fn force_references_delete_keeps_the_cleanup_envelope() {
+        let request = resource_delete_request(
+            "sourcetasktemplate/analyze".into(),
+            true,
+            false,
+            Some("default".into()),
+            true,
+        );
+        let audit = request.audit.expect("a cleanup must be audited");
+        assert_eq!(audit.reason_code, "operator_force_reference_cleanup");
+        assert_eq!(
+            audit.operator_reason.as_deref(),
+            Some("atomically delete SourceTaskTemplate binding references")
+        );
+        assert!(
+            audit
+                .idempotency_key
+                .expect("retry identity is required")
+                .starts_with("cli-resource-delete-references-")
+        );
+    }
+
+    /// Successive deletes must get distinct retry identities, or the second is
+    /// refused as a replay of the first.
+    #[test]
+    fn successive_deletes_get_distinct_retry_identities() {
+        let first = resource_delete_request("agent/a".into(), true, false, None, false)
+            .audit
+            .and_then(|audit| audit.idempotency_key)
+            .expect("retry identity is required");
+        let second = resource_delete_request("agent/a".into(), true, false, None, false)
+            .audit
+            .and_then(|audit| audit.idempotency_key)
+            .expect("retry identity is required");
+        assert_ne!(first, second, "two deletes shared one retry identity");
     }
 }
 

@@ -256,6 +256,7 @@ async fn wait_for_driver(
     let deadline = start + std::time::Duration::from_secs(step_timeout_secs);
     let heartbeat_interval = std::time::Duration::from_secs(HEARTBEAT_INTERVAL_SECS);
     let mut progress = HeartbeatProgress::default();
+    let mut terminal_signal: Option<i32> = None;
     let mut events = Vec::new();
     let mut stream = session.take_events()?;
     let mut timed_out = false;
@@ -285,14 +286,27 @@ async fn wait_for_driver(
         match tokio::time::timeout(heartbeat_interval.min(remaining), stream.next()).await {
             Ok(Some(Ok(event))) => {
                 let terminal = match &event {
-                    DriverEvent::Finished { outcome, exit_code } => Some(match outcome {
-                        DriverOutcome::Success => *exit_code,
-                        DriverOutcome::Failed | DriverOutcome::Cancelled => *exit_code,
-                    }),
+                    DriverEvent::Finished {
+                        outcome,
+                        exit_code,
+                        exit_signal,
+                    } => Some((
+                        match outcome {
+                            DriverOutcome::Success => *exit_code,
+                            DriverOutcome::Failed | DriverOutcome::Cancelled => *exit_code,
+                        },
+                        *exit_signal,
+                    )),
                     _ => None,
                 };
                 events.push(event);
-                if let Some(exit_code) = terminal {
+                if let Some((exit_code, signal)) = terminal {
+                    // The signal travels with the terminal event rather than
+                    // being discarded here: detect_resource_exceeded keys the
+                    // CPU-limit case on it, and substituting None below made
+                    // that arm unreachable for every driver-executed step
+                    // (DD-188).
+                    terminal_signal = signal;
                     break exit_code;
                 }
             }
@@ -352,7 +366,7 @@ async fn wait_for_driver(
     let provider_session = session.session_ref();
     Ok(WaitResult {
         exit_code,
-        exit_signal: None,
+        exit_signal: terminal_signal,
         timed_out,
         duration: start.elapsed(),
         driver_events: events,

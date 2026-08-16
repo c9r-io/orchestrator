@@ -263,7 +263,7 @@ Verify users discover source operations through visible navigation and privilege
 
 ### Expected
 
-- Sources is the fourth navigation entry with a unique active state; `Cmd/Ctrl+1..5` map to Attention, Processes, Sessions, Sources, and System.
+- Sources is the fourth navigation entry with a unique active state; `Cmd/Ctrl+1..5` map to Attention, Tasks, Sessions, Sources, and System.
 - Provider, installation, routing state, timestamp, conversation/thread, and stable error code are readable without raw message text.
 - Opening a process selects the integrated Process Workspace and SourcePanel preserves provenance.
 - Only admins can see/use replay; errors use `role="alert"`, list updates use `aria-live`, and controls are keyboard reachable with visible focus.

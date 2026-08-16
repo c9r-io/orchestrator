@@ -63,7 +63,7 @@ pub(crate) async fn apply(
             if agent_raw_args_override(descriptor) {
                 "agent_driver"
             } else {
-                apply_target_type(descriptor.kind)
+                resource_target_type(descriptor.kind)
             }
         })
         .unwrap_or("resource_manifest");
@@ -273,11 +273,48 @@ fn apply_action(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static s
     }
 }
 
-/// Canonical audit `target_type` for a builtin apply, one per `ResourceKind`.
+/// Canonical audit action for a builtin delete, one per `ResourceKind`.
+///
+/// Exhaustive and wildcard-free for the same reason as [`apply_action`]: a
+/// thirteenth variant must fail to compile rather than silently inherit the
+/// generic `resource.delete`.
+///
+/// Two names break the `resource.<snake_kind>.delete` rule, and for one reason
+/// each. `source.binding.delete` is already recorded in `control_action_audit`
+/// and named by `scripts/qa/test-source-task-binding.sh`; renaming it would
+/// falsify stored rows. `source.template.delete` is new but is spelled to match
+/// its own apply, `source.template.apply` — the vocabulary is one family per
+/// kind, so that an auditor asking "everything about this source template" needs
+/// one prefix rather than two. `delete_action_naming::apply_and_delete_share_a_family`
+/// asserts that property rather than leaving it to care.
+fn delete_action(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static str {
+    use agent_orchestrator::cli_types::ResourceKind;
+    match kind {
+        ResourceKind::Workspace => "resource.workspace.delete",
+        ResourceKind::Agent => "resource.agent.delete",
+        ResourceKind::Workflow => "resource.workflow.delete",
+        ResourceKind::Project => "resource.project.delete",
+        ResourceKind::RuntimePolicy => "resource.runtime_policy.delete",
+        ResourceKind::StepTemplate => "resource.step_template.delete",
+        ResourceKind::SourceTaskTemplate => "source.template.delete",
+        ResourceKind::SourceTaskBinding => "source.binding.delete",
+        ResourceKind::ExecutionProfile => "resource.execution_profile.delete",
+        ResourceKind::EnvStore => "resource.env_store.delete",
+        ResourceKind::SecretStore => "resource.secret_store.delete",
+        ResourceKind::Trigger => "resource.trigger.delete",
+    }
+}
+
+/// Canonical audit `target_type` for a builtin resource, one per `ResourceKind`.
 ///
 /// Exhaustive for the same reason as [`apply_action`]. The two Source kinds keep
 /// the `source_task_*` spellings already present in stored rows.
-fn apply_target_type(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static str {
+///
+/// Shared by apply and delete. `target_type` names the object, not the verb, and
+/// the values the delete path already stored for `source.binding.delete` and
+/// `delete_references` agree with this table — so reusing it moves nothing, while
+/// a second table would be free to drift from this one.
+fn resource_target_type(kind: agent_orchestrator::cli_types::ResourceKind) -> &'static str {
     use agent_orchestrator::cli_types::ResourceKind;
     match kind {
         ResourceKind::Workspace => "workspace",
@@ -489,19 +526,35 @@ pub(crate) async fn delete(
         .to_string();
     let target_id = request.get_ref().resource.clone();
     let resource_kind = target_id.split('/').next().unwrap_or_default();
-    let is_source_task_binding = matches!(
-        resource_kind,
-        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb"
-    );
-    let reference_target_type = if matches!(resource_kind, "trigger" | "tg") {
-        "trigger"
-    } else {
-        "source_task_template"
+    let resolved_kind = agent_orchestrator::resource::resource_kind_from_alias(resource_kind);
+    // `--force-references` is valid only for SourceTaskTemplate and Trigger; the
+    // service layer refuses every other kind before anything is removed.
+    let reference_target_type = match resolved_kind {
+        Some(agent_orchestrator::cli_types::ResourceKind::Trigger) => "trigger",
+        _ => "source_task_template",
     };
     let dry_run = request.get_ref().dry_run;
+    let force = request.get_ref().force;
     let context = request.get_ref().audit.clone();
     let force_references = request.get_ref().force_references;
-    let attempt = if force_references || is_source_task_binding {
+    // `None` is a real answer, not a parse failure: `crd`,
+    // `customresourcedefinition` and every CRD-defined custom kind are deletable
+    // and have no `ResourceKind`. They record the generic name, mirroring an
+    // apply that resolves to no single builtin manifest.
+    let (delete_target_type, delete_action_name) = match resolved_kind {
+        Some(kind) => (resource_target_type(kind), delete_action(kind)),
+        None => ("resource_manifest", "resource.delete"),
+    };
+    // Every non-dry-run delete is audited. The condition this replaced fired
+    // only for `--force-references` and SourceTaskBinding, so eleven of twelve
+    // kinds left no `control_action_audit` row at all — and unlike apply's old
+    // condition it had no `context.is_some()` disjunct, so an envelope was
+    // accepted and then discarded. The CLI sends one on every delete, which made
+    // the default path the dropped one. With `begin` unreachable, the `enforced`
+    // rejection inside `resolve_context` could not fire either: the mode neither
+    // audited a delete nor refused it. DD-111 makes the envelope the durable
+    // record of *every* process-console mutation, and a delete is irreversible.
+    let attempt = if !dry_run {
         Some(
             super::action_audit::begin(
                 server,
@@ -514,24 +567,28 @@ pub(crate) async fn delete(
                 context.as_ref(),
                 super::action_audit::ActionDescriptor {
                     project_id: &project_id,
-                    target_type: if is_source_task_binding {
-                        "source_task_binding"
-                    } else {
+                    target_type: if force_references {
                         reference_target_type
+                    } else {
+                        delete_target_type
                     },
                     target_id: &target_id,
-                    action: if is_source_task_binding {
-                        "source.binding.delete"
-                    } else {
+                    // A `--force-references` cleanup keeps its own name. It is a
+                    // cross-resource action — it removes bindings the caller did
+                    // not name — so it is not the per-kind delete of its target
+                    // and does not join that naming surface.
+                    action: if force_references {
                         "delete_references"
+                    } else {
+                        delete_action_name
                     },
                     expected_version: None,
                     fencing_token: None,
                     canonical_request: serde_json::json!({
                         "resource": target_id.clone(),
                         "project_id": project_id.clone(),
-                        "force": true,
-                        "force_references": true,
+                        "force": force,
+                        "force_references": force_references,
                         "dry_run": dry_run,
                     }),
                     fallback_reason_code: if force_references {
@@ -552,7 +609,11 @@ pub(crate) async fn delete(
     let req = request.into_inner();
     if let Some(replayed) = attempt.as_ref().filter(|attempt| !attempt.should_execute) {
         return Ok(replayed.response(DeleteResponse {
-            message: format!("{} reference cleanup already completed", req.resource),
+            message: if force_references {
+                format!("{} reference cleanup already completed", req.resource)
+            } else {
+                format!("{} already deleted", req.resource)
+            },
         }));
     }
     if let Err(error) = agent_orchestrator::service::resource::delete_resource_with_references(
@@ -582,10 +643,10 @@ pub(crate) async fn delete(
         message: format!("{} {}{}", req.resource, verb, scope),
     };
     if let Some(attempt) = attempt {
-        let result_type = if is_source_task_binding {
-            "source_task_binding"
-        } else {
+        let result_type = if force_references {
             reference_target_type
+        } else {
+            delete_target_type
         };
         attempt
             .succeeded(server, Some(result_type), Some(&req.resource))
@@ -613,14 +674,14 @@ pub(crate) async fn manifest_export(
 
 #[cfg(test)]
 mod apply_action_naming {
-    use super::{apply_action, apply_target_type};
+    use super::{apply_action, resource_target_type};
     use agent_orchestrator::cli_types::ResourceKind;
 
     /// Every `ResourceKind`, listed once.
     ///
     /// Two independent gates keep this honest, and neither is this array on its
     /// own. A thirteenth variant fails to compile in `apply_action` and
-    /// `apply_target_type`, which have no `_` arm — that is the real derivation
+    /// `resource_target_type`, which have no `_` arm — that is the real derivation
     /// from the enum. `covers_every_variant` below then fails until the variant
     /// is added here too, so the array cannot silently fall behind the enum it
     /// claims to enumerate.
@@ -697,15 +758,18 @@ mod apply_action_naming {
 
     #[test]
     fn every_kind_has_a_distinct_target_type() {
-        let mut types: Vec<&'static str> =
-            ALL_KINDS.iter().copied().map(apply_target_type).collect();
+        let mut types: Vec<&'static str> = ALL_KINDS
+            .iter()
+            .copied()
+            .map(resource_target_type)
+            .collect();
         types.sort_unstable();
         let total = types.len();
         types.dedup();
         assert_eq!(total, types.len(), "two kinds share an audit target_type");
         for kind in ALL_KINDS {
             assert_ne!(
-                apply_target_type(kind),
+                resource_target_type(kind),
                 "resource",
                 "{kind:?} still falls back to the generic target_type"
             );
@@ -726,13 +790,127 @@ mod apply_action_naming {
             "source.binding.apply"
         );
         assert_eq!(
-            apply_target_type(ResourceKind::SourceTaskTemplate),
+            resource_target_type(ResourceKind::SourceTaskTemplate),
             "source_task_template"
         );
         assert_eq!(
-            apply_target_type(ResourceKind::SourceTaskBinding),
+            resource_target_type(ResourceKind::SourceTaskBinding),
             "source_task_binding"
         );
+    }
+}
+
+#[cfg(test)]
+mod delete_action_naming {
+    use super::{apply_action, delete_action, resource_target_type};
+    use agent_orchestrator::cli_types::ResourceKind;
+    use agent_orchestrator::resource::ALL_RESOURCE_KINDS;
+
+    /// The defect FR-167 closes: eleven of twelve kinds recorded no row at all,
+    /// so there was nothing to tell a SecretStore removal from a Workspace one.
+    /// Distinctness is the property that was missing, so it is the property
+    /// asserted — "non-empty" would have passed against the broken code.
+    #[test]
+    fn every_kind_has_a_distinct_named_delete_action() {
+        let mut actions: Vec<&'static str> = ALL_RESOURCE_KINDS
+            .iter()
+            .copied()
+            .map(delete_action)
+            .collect();
+        actions.sort_unstable();
+        let total = actions.len();
+        actions.dedup();
+        assert_eq!(total, actions.len(), "two kinds share a delete action name");
+        for kind in ALL_RESOURCE_KINDS {
+            let action = delete_action(kind);
+            assert_ne!(
+                action, "resource.delete",
+                "{kind:?} still falls back to the generic delete action name"
+            );
+            assert!(
+                action.ends_with(".delete"),
+                "{kind:?} action {action} breaks the <domain>.<kind>.delete convention"
+            );
+        }
+    }
+
+    /// A delete name must not collide with an apply name. They share one column
+    /// in `control_action_audit`, so a collision would make `--action` return
+    /// both verbs and no filter could separate them again.
+    #[test]
+    fn delete_and_apply_names_never_collide() {
+        let mut names: Vec<&'static str> = ALL_RESOURCE_KINDS
+            .iter()
+            .copied()
+            .flat_map(|kind| [apply_action(kind), delete_action(kind)])
+            .collect();
+        names.push("resource.apply");
+        names.push("resource.delete");
+        names.push("delete_references");
+        names.push("agent.driver.raw_args.apply");
+        names.sort_unstable();
+        let total = names.len();
+        names.dedup();
+        assert_eq!(
+            total,
+            names.len(),
+            "an action name is claimed twice across the apply and delete surfaces"
+        );
+    }
+
+    /// One vocabulary family per kind.
+    ///
+    /// This is why `SourceTaskTemplate` deletes as `source.template.delete`
+    /// rather than the rule-literal `resource.source_task_template.delete`: with
+    /// the families split, an auditor asking for everything about one source
+    /// template would need two prefixes and would silently get half the story
+    /// from either one. Asserted, because it is the kind of consistency that
+    /// erodes the first time someone adds a kind in a hurry.
+    #[test]
+    fn apply_and_delete_share_a_family() {
+        for kind in ALL_RESOURCE_KINDS {
+            let apply = apply_action(kind);
+            let delete = delete_action(kind);
+            let family = |action: &'static str| {
+                action
+                    .rsplit_once('.')
+                    .map(|(head, _)| head)
+                    .unwrap_or(action)
+            };
+            assert_eq!(
+                family(apply),
+                family(delete),
+                "{kind:?} applies as {apply} but deletes as {delete}; the two verbs must share a family"
+            );
+        }
+    }
+
+    /// `source.binding.delete` is already stored in `control_action_audit` and
+    /// asserted by `scripts/qa/test-source-task-binding.sh`. Renaming it would
+    /// falsify recorded history, so the spelling is pinned rather than left to
+    /// the convention.
+    #[test]
+    fn shipped_delete_action_name_is_unchanged() {
+        assert_eq!(
+            delete_action(ResourceKind::SourceTaskBinding),
+            "source.binding.delete"
+        );
+    }
+
+    /// `target_type` is shared with apply because it names the object, not the
+    /// verb. This pins the three values the delete path already stored, so the
+    /// shared table cannot quietly move a delete row's target type.
+    #[test]
+    fn shared_target_types_match_the_values_delete_already_stored() {
+        assert_eq!(
+            resource_target_type(ResourceKind::SourceTaskBinding),
+            "source_task_binding"
+        );
+        assert_eq!(
+            resource_target_type(ResourceKind::SourceTaskTemplate),
+            "source_task_template"
+        );
+        assert_eq!(resource_target_type(ResourceKind::Trigger), "trigger");
     }
 }
 

@@ -59,7 +59,10 @@ include RustSource
 
 SCOPE = "every workspace member listed in the root Cargo.toml and its non-test " \
   "Rust source — its src tree and its Cargo build script — excluding inline " \
-  "cfg(test) modules, files under a tests directory, and files named test*.rs; " \
+  "cfg(test) modules, files under a tests directory, and files whose basename " \
+  "contains test that are also confirmed test-only — their mod declaration is " \
+  "gated on cfg(test) or a test-only feature, or nothing but comments survives " \
+  "stripping their cfg(test) modules; " \
   "public API is resolved through the module tree and its re-exports, and driver " \
   "types through each file's own use statements".freeze
 

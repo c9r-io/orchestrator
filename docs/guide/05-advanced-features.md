@@ -4,7 +4,9 @@ This chapter covers advanced workflow primitives: Custom Resource Definitions, P
 
 ## Custom Resource Definitions (CRDs)
 
-CRDs let you define new resource types beyond the built-in kinds (Workspace, Agent, Workflow, StepTemplate, ExecutionProfile, SecretStore, EnvStore, WorkflowStore, Trigger, RuntimePolicy). This is useful for domain-specific configuration (prompt libraries, evaluation rubrics, etc.).
+CRDs let you define new resource types beyond the built-in kinds (Workspace, Agent, Workflow, Project, RuntimePolicy, StepTemplate, SourceTaskTemplate, SourceTaskBinding, ExecutionProfile, EnvStore, SecretStore, Trigger). This is useful for domain-specific configuration (prompt libraries, evaluation rubrics, etc.).
+
+That list is the `ResourceKind` enum in `crates/orchestrator-config/src/cli_types.rs`, and `check_resource_kind_catalog` in `scripts/qa/test-docs-reality-alignment.sh` fails the build when the two diverge. `WorkflowStore` is **not** a built-in kind — it is a CRD, defined the same way as any other CRD below and described under [Persistent Store](#persistent-store-wp01).
 
 ### Defining a CRD
 
@@ -91,7 +93,7 @@ CRDs support two levels of validation:
 
 ## EnvStore & SecretStore
 
-EnvStore and SecretStore are reusable variable sets that agents can reference. They share the same `data` structure; `SecretStore` is semantically designated for sensitive values.
+EnvStore and SecretStore are reusable variable sets that agents can reference. They share the same `data` structure, but the kind is not a naming convention: a SecretStore spec is encrypted at rest, redacted on export, and served by the `orchestrator secret key` rotation and revocation surface, while an EnvStore is none of those things. See [02 - Resource Model](02-resource-model.md#9-secretstore) for the full comparison before choosing.
 
 ```yaml
 apiVersion: orchestrator.dev/v2

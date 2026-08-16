@@ -22,10 +22,23 @@
 #
 # Scope is every tracked .rs under core/src and crates/*/src, minus tests/
 # directories, tests.rs / *_tests.rs basenames, and inline #[cfg(test)] modules
-# (stripped with scripts/lib/rust_source.rb's brace-matching helper). The
-# basename rule is deliberately narrower than rust_source.rb's /test.*\.rs\z/,
-# which also swallows scheduler/safety/self_test.rs — a production module that
-# emits [empty_change_check]; that near-miss is recorded in DD-163.
+# (stripped with scripts/lib/rust_source.rb's brace-matching helper).
+#
+# This basename rule used to be narrower than rust_source.rb's on purpose: that
+# function excluded by the spelling /test.*\.rs\z/, which swallowed
+# scheduler/safety/self_test.rs — a production module emitting
+# [empty_change_check] — and DD-163 recorded the near-miss. **That reason has
+# expired.** rust_source.rb now confirms a basename match against the file's mod
+# declaration instead of trusting it, so it scans self_test.rs too and the two
+# predicates agree about the file this comment was written for.
+#
+# One difference survives, and it runs the other way: rust_source.rb also
+# excludes cfg-gated helpers like test_utils.rs and test_support.rs, which this
+# gate still scans because their basenames are neither tests.rs nor *_tests.rs.
+# That is wider, not narrower, and it has never produced a finding here. Adopting
+# RustSource.test_only_file? wholesale would be the unification, and it is a
+# behaviour change to this gate's scan that wants its own before/after rather
+# than riding along with the rust_source.rb repair.
 #
 # Exclusions carry a reason and are checked for staleness: an excluded token
 # the scan no longer produces fails the gate, so the list cannot outlive the

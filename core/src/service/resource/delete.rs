@@ -1,3 +1,4 @@
+use crate::cli_types::ResourceKind;
 use crate::config_load::{ResourceRemoval, persist_config_for_delete, read_active_config};
 use crate::error::{OrchestratorError, Result, classify_resource_error};
 use crate::state::InnerState;
@@ -140,23 +141,28 @@ pub fn delete_resource_with_references(
                 ));
             }
         };
-        let exists = match kind {
-            "ws" | "workspace" => proj_cfg.workspaces.contains_key(name),
-            "agent" => proj_cfg.agents.contains_key(name),
-            "wf" | "workflow" => proj_cfg.workflows.contains_key(name),
-            "steptemplate" | "step-template" | "step_template" => {
-                proj_cfg.step_templates.contains_key(name)
-            }
-            "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
+        // Dispatches on the resolved kind for the same reason
+        // `delete_resource_from_project` does, and carried the same defect: the
+        // SecretStore aliases looked in `env_stores`, so a dry run reported a
+        // real SecretStore as absent. A dry run that disagrees with the delete it
+        // previews is worse than no dry run, so the two must read the same map —
+        // the wildcard-free match is what keeps them reading it.
+        let exists = match crate::resource::resource_kind_from_alias(kind) {
+            Some(ResourceKind::Workspace) => proj_cfg.workspaces.contains_key(name),
+            Some(ResourceKind::Agent) => proj_cfg.agents.contains_key(name),
+            Some(ResourceKind::Workflow) => proj_cfg.workflows.contains_key(name),
+            Some(ResourceKind::StepTemplate) => proj_cfg.step_templates.contains_key(name),
+            Some(ResourceKind::SourceTaskTemplate) => {
                 proj_cfg.source_task_templates.contains_key(name)
             }
-            "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
+            Some(ResourceKind::SourceTaskBinding) => {
                 proj_cfg.source_task_bindings.contains_key(name)
             }
-            "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
-            | "secret_store" => proj_cfg.env_stores.contains_key(name),
-            "trigger" | "tg" => proj_cfg.triggers.contains_key(name),
-            _ => false,
+            Some(ResourceKind::ExecutionProfile) => proj_cfg.execution_profiles.contains_key(name),
+            Some(ResourceKind::EnvStore) => proj_cfg.env_stores.contains_key(name),
+            Some(ResourceKind::SecretStore) => proj_cfg.secret_stores.contains_key(name),
+            Some(ResourceKind::Trigger) => proj_cfg.triggers.contains_key(name),
+            Some(ResourceKind::Project | ResourceKind::RuntimePolicy) | None => false,
         };
         if !exists {
             return Err(classify_resource_error(
@@ -368,58 +374,86 @@ fn remove_source_task_binding_references(
     });
 }
 
+/// Removes one project-scoped resource, dispatching on the resolved kind.
+///
+/// The match is exhaustive and wildcard-free: a thirteenth `ResourceKind` must
+/// fail to compile here rather than fall into a catch-all that reports "not
+/// found" for a kind nobody wired up.
+///
+/// **The `SecretStore` arm is a fix, not a transcription.** The string-keyed
+/// version this replaced routed `secretstore | secret-store | secret_store` into
+/// `proj.env_stores`, alongside the EnvStore aliases — the two kinds have
+/// separate maps (`ProjectConfig::env_stores` and `ProjectConfig::secret_stores`),
+/// so a SecretStore delete searched the wrong one. It reported `SecretStore/x not
+/// found in project` for a store that existed, which made SecretStores
+/// undeletable; and when an EnvStore happened to share the name it removed *that*
+/// instead, while `canonical_project_kind` returned `SecretStore` so the tombstone
+/// row, the deletion guard and the resource-row delete all named a kind that had
+/// not been touched. Nothing observed it because no test deleted a SecretStore —
+/// FR-167 is the first to assert on one, and DD-182 had meanwhile written down
+/// "moving a value between the two is a delete and re-apply", advice the code
+/// could not carry out.
 pub(super) fn delete_resource_from_project(
     proj: &mut crate::config::ProjectConfig,
     kind: &str,
     name: &str,
 ) -> Result<bool> {
-    match kind {
-        "ws" | "workspace" => Ok(proj.workspaces.remove(name).is_some()),
-        "agent" => Ok(proj.agents.remove(name).is_some()),
-        "wf" | "workflow" => Ok(proj.workflows.remove(name).is_some()),
-        "steptemplate" | "step-template" | "step_template" => {
-            Ok(proj.step_templates.remove(name).is_some())
-        }
-        "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
-            Ok(proj.source_task_templates.remove(name).is_some())
-        }
-        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
-            Ok(proj.source_task_bindings.remove(name).is_some())
-        }
-        "executionprofile" | "execution-profile" | "execution_profile" => {
-            Ok(proj.execution_profiles.remove(name).is_some())
-        }
-        "envstore" | "env-store" | "env_store" | "secretstore" | "secret-store"
-        | "secret_store" => Ok(proj.env_stores.remove(name).is_some()),
-        "trigger" | "tg" => Ok(proj.triggers.remove(name).is_some()),
-        _ => Err(classify_resource_error(
+    use crate::cli_types::ResourceKind;
+
+    let unknown = || {
+        classify_resource_error(
             "resource.delete",
             anyhow::anyhow!("unknown resource type for project delete: {kind}"),
-        )),
+        )
+    };
+    match crate::resource::resource_kind_from_alias(kind).ok_or_else(unknown)? {
+        ResourceKind::Workspace => Ok(proj.workspaces.remove(name).is_some()),
+        ResourceKind::Agent => Ok(proj.agents.remove(name).is_some()),
+        ResourceKind::Workflow => Ok(proj.workflows.remove(name).is_some()),
+        ResourceKind::StepTemplate => Ok(proj.step_templates.remove(name).is_some()),
+        ResourceKind::SourceTaskTemplate => Ok(proj.source_task_templates.remove(name).is_some()),
+        ResourceKind::SourceTaskBinding => Ok(proj.source_task_bindings.remove(name).is_some()),
+        ResourceKind::ExecutionProfile => Ok(proj.execution_profiles.remove(name).is_some()),
+        ResourceKind::EnvStore => Ok(proj.env_stores.remove(name).is_some()),
+        ResourceKind::SecretStore => Ok(proj.secret_stores.remove(name).is_some()),
+        ResourceKind::Trigger => Ok(proj.triggers.remove(name).is_some()),
+        // Handled before this point (`Project`) or not deletable at all
+        // (`RuntimePolicy` has no `ProjectConfig` map). Named rather than left to
+        // a wildcard so a new variant cannot join them by accident.
+        ResourceKind::Project | ResourceKind::RuntimePolicy => Err(unknown()),
     }
 }
 
+/// Canonical manifest name for a project-scoped delete target.
+///
+/// Delegates to the single alias table in `resource::parse` rather than carrying
+/// its own copy. FR-167 made the delete path's audit action name derive from that
+/// same table, and two independent tables would fail in one direction silently:
+/// an alias accepted here but absent there deletes the resource and records the
+/// generic `resource.delete`, with nothing in any log to say a kind went unnamed.
+///
+/// `Project` and `RuntimePolicy` are excluded deliberately, and the exclusion is
+/// not symmetric. A `Project` delete is handled earlier in
+/// [`delete_resource_with_references`] and never reaches here. A `RuntimePolicy`
+/// delete reaches here and is refused: there is no `ProjectConfig` map to remove
+/// it from, so the kind is not deletable at all. The audit row is still reserved
+/// before execution, so the attempt is recorded as
+/// `resource.runtime_policy.delete` with `status = failed`.
 pub(super) fn canonical_project_kind(kind: &str) -> Result<&'static str> {
-    match kind {
-        "ws" | "workspace" => Ok("Workspace"),
-        "agent" => Ok("Agent"),
-        "wf" | "workflow" => Ok("Workflow"),
-        "steptemplate" | "step-template" | "step_template" => Ok("StepTemplate"),
-        "sourcetasktemplate" | "source-task-template" | "source_task_template" | "stt" => {
-            Ok("SourceTaskTemplate")
-        }
-        "sourcetaskbinding" | "source-task-binding" | "source_task_binding" | "stb" => {
-            Ok("SourceTaskBinding")
-        }
-        "executionprofile" | "execution-profile" | "execution_profile" => Ok("ExecutionProfile"),
-        "envstore" | "env-store" | "env_store" => Ok("EnvStore"),
-        "secretstore" | "secret-store" | "secret_store" => Ok("SecretStore"),
-        "trigger" | "tg" => Ok("Trigger"),
-        _ => Err(classify_resource_error(
-            "resource.delete",
-            anyhow::anyhow!("unknown resource type for project delete: {kind}"),
-        )),
-    }
+    crate::resource::resource_kind_from_alias(kind)
+        .filter(|resolved| {
+            !matches!(
+                resolved,
+                ResourceKind::Project | ResourceKind::RuntimePolicy
+            )
+        })
+        .map(crate::resource::kind_canonical_name)
+        .ok_or_else(|| {
+            classify_resource_error(
+                "resource.delete",
+                anyhow::anyhow!("unknown resource type for project delete: {kind}"),
+            )
+        })
 }
 
 #[cfg(test)]
@@ -484,5 +518,87 @@ mod source_template_reference_tests {
             crate::error::ErrorCategory::ExternalDependency
         );
         assert_eq!(mapped.operation(), "resource.delete");
+    }
+}
+
+/// The one-table invariant FR-167 rests on.
+///
+/// The audit action name a delete records is derived from
+/// `resource::resource_kind_from_alias`. If the two sides of the delete path
+/// disagreed about what a kind string means, the disagreement would not raise
+/// anything: the resource would be removed and the row would carry the generic
+/// name. These assertions are derived from `kind_aliases` rather than listing
+/// strings, so a future alias joins them without anyone remembering to.
+#[cfg(test)]
+mod alias_table_is_single_sourced {
+    use super::*;
+    use crate::cli_types::ResourceKind;
+    use crate::resource::{ALL_RESOURCE_KINDS, kind_aliases};
+
+    /// Kinds that a project-scoped delete can name. `Project` short-circuits
+    /// earlier in `delete_resource_with_references`; `RuntimePolicy` has no
+    /// `ProjectConfig` map and is refused.
+    fn project_scoped() -> Vec<ResourceKind> {
+        ALL_RESOURCE_KINDS
+            .into_iter()
+            .filter(|kind| !matches!(kind, ResourceKind::Project | ResourceKind::RuntimePolicy))
+            .collect()
+    }
+
+    #[test]
+    fn every_alias_of_a_project_scoped_kind_is_accepted_by_both_halves() {
+        let mut config = crate::config::ProjectConfig::default();
+        for kind in project_scoped() {
+            for alias in kind_aliases(kind) {
+                assert_eq!(
+                    canonical_project_kind(alias).expect("alias must resolve"),
+                    crate::resource::kind_canonical_name(kind),
+                    "canonical_project_kind disagrees about {alias}"
+                );
+                // The removal half must recognise the same alias. `false` here
+                // means "recognised, nothing to remove" — an `Err` would mean
+                // the two halves disagree, which is the failure under test.
+                let removed = delete_resource_from_project(&mut config, alias, "absent-fixture")
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "delete_resource_from_project rejects {alias}, which canonical_project_kind accepts: {error}"
+                        )
+                    });
+                assert!(!removed, "the empty fixture reported a removal for {alias}");
+            }
+        }
+    }
+
+    /// The two kinds outside the project-scoped set are refused, and refused
+    /// with the diagnostic callers already see. The message is asserted rather
+    /// than only the error, because `canonical_project_kind` now shares its
+    /// resolution with kinds that *are* accepted.
+    #[test]
+    fn project_and_runtime_policy_are_refused_by_name() {
+        for kind in [ResourceKind::Project, ResourceKind::RuntimePolicy] {
+            for alias in kind_aliases(kind) {
+                let error = canonical_project_kind(alias).expect_err(&format!(
+                    "{alias} must not be deletable as a project-scoped kind"
+                ));
+                assert!(
+                    error.to_string().contains(&format!(
+                        "unknown resource type for project delete: {alias}"
+                    )),
+                    "unexpected diagnostic for {alias}: {error}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unresolvable_kinds_keep_their_diagnostic() {
+        let error = canonical_project_kind("promptlibrary")
+            .expect_err("a CRD-defined kind is not a project-scoped builtin");
+        assert!(
+            error
+                .to_string()
+                .contains("unknown resource type for project delete: promptlibrary"),
+            "unexpected diagnostic: {error}"
+        );
     }
 }

@@ -3347,18 +3347,30 @@ async fn a_task_the_history_limit_cannot_remove_is_left_whole_and_named() {
         )
         .expect("seed an event");
     }
-    // The row that pins it: a resume plan is cross-session handoff state, one
-    // of the seven references the task cascade does not clear.
-    conn.execute(
-        "INSERT INTO resume_plans (id, project_id, task_id, boundary_id, mode,
-             expected_state_version, side_effect_class, replay_safe,
-             elevated_confirmation_required, consequence_json, status, expires_at,
-             created_by, created_at)
-         VALUES ('plan-pinned', 'default', ?1, 'b', 'resume', 'v1', 'none', 1, 0, '{}',
-                 'pending', ?2, 'operator', ?2)",
-        rusqlite::params![TASK_ID, now],
+    // The row that pins it: a reference with no recorded disposition. This was
+    // a `resume_plans` row until FR-168 ruled that table delete-with-task, at
+    // which point it stopped refusing anything.
+    //
+    // The replacement is created here rather than picked from the schema, and
+    // that is deliberate: no table in the tree today is undisposed, so a
+    // fixture that named one would have to be edited the moment somebody ruled
+    // on it. Creating one proves the stronger property anyway — the blocking
+    // set is derived from the schema at runtime, so a table that did not exist
+    // when this code was written still refuses the delete and still names
+    // itself, with no list edited anywhere.
+    conn.execute_batch(
+        "CREATE TABLE later_addition (
+             id TEXT PRIMARY KEY,
+             task_id TEXT NOT NULL,
+             FOREIGN KEY(task_id) REFERENCES tasks(id)
+         );",
     )
-    .expect("seed a resume plan");
+    .expect("create a table nobody has ruled on");
+    conn.execute(
+        "INSERT INTO later_addition (id, task_id) VALUES ('pin-1', ?1)",
+        rusqlite::params![TASK_ID],
+    )
+    .expect("pin the task with it");
     // And a row that does *not* pin it, on a table that also references
     // `tasks(id)` but cascades. It is here so that `blocked_by` has to exclude
     // it: a discovery query that forgot to filter on `on_delete` would report
@@ -3381,7 +3393,7 @@ async fn a_task_the_history_limit_cannot_remove_is_left_whole_and_named() {
         outcome.skipped,
         vec![store::SkippedTask {
             task_id: TASK_ID.to_string(),
-            blocked_by: vec!["resume_plans.task_id".to_string()],
+            blocked_by: vec!["later_addition.task_id".to_string()],
         }],
         "the skip did not name the table that caused it"
     );

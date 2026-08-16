@@ -12,9 +12,10 @@
 //! prevent duplicates live in the paths that create tasks, not here.
 
 use anyhow::{Context, Result};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{OptionalExtension, params};
 
 use crate::async_database::{AsyncDatabase, flatten_err};
+use crate::task_repository::TaskDeleteBlocked;
 
 /// One trigger fire to record against `(trigger_name, project)`.
 #[derive(Debug, Clone)]
@@ -213,61 +214,6 @@ pub struct HistoryCleanupOutcome {
     pub log_paths: Vec<String>,
 }
 
-/// The columns that reference `tasks(id)` and would refuse a delete.
-///
-/// Read from the schema rather than listed here. Ten tables reference
-/// `tasks(id)`; `task_graph_runs` and `task_graph_snapshots` declare
-/// `ON DELETE CASCADE` and so never refuse anything, and SQLite clears them
-/// itself. Of the eight that remain, the task cascade clears exactly one —
-/// `task_items`, together with the `command_runs` hanging off it and the
-/// `events` rows, which carry no foreign key at all — and that one name is the
-/// only literal below.
-///
-/// A table added later that references `tasks(id)` without a cascade appears
-/// in this list on its own. That is the point: a hand-written list of the
-/// seven would be correct today and silently short by one the next time
-/// somebody adds a table, which is the shape this repository keeps finding.
-fn blocking_references(conn: &Connection) -> Result<Vec<(String, String)>> {
-    let mut stmt = conn.prepare(
-        r#"SELECT m.name, f."from"
-             FROM sqlite_master m
-             JOIN pragma_foreign_key_list(m.name) f
-            WHERE m.type = 'table'
-              AND f."table" = 'tasks'
-              AND UPPER(COALESCE(f.on_delete, '')) <> 'CASCADE'
-              AND m.name <> 'task_items'
-            ORDER BY m.name, f."from""#,
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-    })?;
-    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-}
-
-/// Which of `references` currently hold a row naming `task_id`.
-fn references_holding(
-    conn: &Connection,
-    references: &[(String, String)],
-    task_id: &str,
-) -> Result<Vec<String>> {
-    let mut holding = Vec::new();
-    for (table, column) in references {
-        // Both identifiers come from `sqlite_master` in this same database, not
-        // from a caller, and neither can be bound as a parameter.
-        let found = conn
-            .query_row(
-                &format!(r#"SELECT 1 FROM "{table}" WHERE "{column}" = ?1 LIMIT 1"#),
-                params![task_id],
-                |_| Ok(()),
-            )
-            .optional()?;
-        if found.is_some() {
-            holding.push(format!("{table}.{column}"));
-        }
-    }
-    Ok(holding)
-}
-
 /// Deletes the tasks a history limit selected, reporting what stayed and why.
 ///
 /// Each task goes through `task_repository`'s cascade — the one
@@ -276,9 +222,13 @@ fn references_holding(
 /// cascade runs in its own transaction per task, so a task refused partway
 /// leaves none of its rows removed and the sweep continues to the next.
 ///
-/// A task still referenced by a table the cascade does not clear is skipped
+/// A task still referenced by a table with no recorded disposition is skipped
 /// whole and named in the outcome, never stripped of its items and left
-/// standing. A failure that is *not* a child row propagates instead of being
+/// standing. The attribution is *not* recomputed here: the cascade already
+/// decided, and it reports what held the task as a typed `TaskDeleteBlocked`.
+/// Two derivations of the same fact are two things to keep in agreement.
+///
+/// A failure that is *not* a blocking reference propagates instead of being
 /// recorded as a skip: it is not a retention decision and must not read as one.
 pub async fn delete_tasks_within_history_limit(
     db: &AsyncDatabase,
@@ -290,7 +240,6 @@ pub async fn delete_tasks_within_history_limit(
     db.writer()
         .call(move |conn| {
             (|| -> Result<HistoryCleanupOutcome> {
-                let references = blocking_references(conn)?;
                 let mut outcome = HistoryCleanupOutcome::default();
                 for task_id in &ids {
                     match crate::task_repository::delete_task_and_collect_log_paths(conn, task_id) {
@@ -298,21 +247,21 @@ pub async fn delete_tasks_within_history_limit(
                             outcome.deleted += 1;
                             outcome.log_paths.extend(log_paths);
                         }
-                        Err(error) => {
-                            let blocked_by = references_holding(conn, &references, task_id)?;
-                            if blocked_by.is_empty() {
+                        Err(error) => match error.downcast::<TaskDeleteBlocked>() {
+                            Ok(blocked) => outcome.skipped.push(SkippedTask {
+                                task_id: blocked.task_id,
+                                blocked_by: blocked.blocked_by,
+                            }),
+                            Err(error) => {
                                 return Err(error).with_context(|| {
                                     format!(
                                         "delete task {task_id} for history limit: \
-                                         nothing references it, so this is not a retention skip"
+                                         no reference is holding it, so this is not a \
+                                         retention skip"
                                     )
                                 });
                             }
-                            outcome.skipped.push(SkippedTask {
-                                task_id: task_id.clone(),
-                                blocked_by,
-                            });
-                        }
+                        },
                     }
                 }
                 Ok(outcome)
