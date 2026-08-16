@@ -98,44 +98,6 @@ fn event_to_proto(e: EventDto) -> Event {
     }
 }
 
-fn timeline_entry_to_proto(
-    entry: orchestrator_scheduler::scheduler::timeline::TimelineEntry,
-) -> TimelineEntry {
-    TimelineEntry {
-        id: entry.id,
-        task_id: entry.task_id,
-        occurred_at: entry.occurred_at,
-        category: entry.category.as_str().to_string(),
-        title: entry.title,
-        summary: entry.summary,
-        status: entry.status,
-        actor: entry.actor.map(|actor| TimelineActorRef {
-            actor_type: actor.actor_type,
-            actor_id: actor.actor_id,
-        }),
-        step_id: entry.step_id,
-        task_item_id: entry.task_item_id,
-        command_run_id: entry.command_run_id,
-        session_id: entry.session_id,
-        checkpoint_id: entry.checkpoint_id,
-        source_event_id: entry.source_event_id,
-        evidence: entry
-            .evidence
-            .into_iter()
-            .map(|evidence| TimelineEvidenceRef {
-                kind: evidence.kind,
-                label: evidence.label,
-                uri: evidence.uri,
-                content_type: evidence.content_type,
-                digest: evidence.digest,
-                redacted: evidence.redacted,
-            })
-            .collect(),
-        raw_event_ids: entry.raw_event_ids,
-        projection_version: entry.projection_version,
-    }
-}
-
 fn graph_debug_to_proto(bundle: TaskGraphDebugBundle) -> orchestrator_proto::TaskGraphDebugBundle {
     orchestrator_proto::TaskGraphDebugBundle {
         graph_run_id: bundle.graph_run_id,
@@ -203,7 +165,6 @@ fn action_audit_to_proto(record: CoreActionAuditRecord) -> ActionAuditRecord {
 /// but skips authorization and shutdown rejection.
 pub struct TestOrchestratorServer {
     state: Arc<InnerState>,
-    shutdown_notify: Arc<Notify>,
 }
 
 type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>;
@@ -956,49 +917,20 @@ impl OrchestratorService for TestOrchestratorServer {
 
     async fn task_retry(
         &self,
-        request: Request<TaskRetryRequest>,
+        _: Request<TaskRetryRequest>,
     ) -> Result<Response<TaskRetryResponse>, Status> {
-        let req = request.into_inner();
-        if !req.force {
-            return Err(Status::failed_precondition(
-                "use --force to confirm task retry",
-            ));
-        }
-        let task_id =
-            orchestrator_scheduler::service::task::retry_task_item(&self.state, &req.task_item_id)
-                .map_err(map_core_error)?;
-        orchestrator_scheduler::service::task::enqueue_task(&self.state, &task_id)
-            .await
-            .map_err(map_core_error)?;
-        Ok(Response::new(TaskRetryResponse {
-            task_id: task_id.clone(),
-            status: "enqueued".into(),
-            message: format!("Task enqueued: {task_id}"),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn task_recover(
         &self,
-        request: Request<TaskRecoverRequest>,
+        _: Request<TaskRecoverRequest>,
     ) -> Result<Response<TaskRecoverResponse>, Status> {
-        let req = request.into_inner();
-        let id = orchestrator_scheduler::service::task::resolve_id(&self.state, &req.task_id)
-            .await
-            .map_err(map_core_error)?;
-        let recovered = orchestrator_scheduler::service::task::recover_task(&self.state, &id)
-            .await
-            .map_err(map_core_error)?;
-        let count = recovered.len() as u64;
-        let message = if count == 0 {
-            format!("No orphaned running items found for task {id}")
-        } else {
-            format!("Recovered {count} orphaned running item(s) for task {id}")
-        };
-        Ok(Response::new(TaskRecoverResponse {
-            task_id: id,
-            recovered_items: count,
-            message,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn task_list(
@@ -1086,212 +1018,53 @@ impl OrchestratorService for TestOrchestratorServer {
 
     async fn task_timeline(
         &self,
-        request: Request<TaskTimelineRequest>,
+        _: Request<TaskTimelineRequest>,
     ) -> Result<Response<TaskTimelineResponse>, Status> {
-        let request = request.into_inner();
-        let page = orchestrator_scheduler::service::task::get_task_timeline(
-            &self.state,
-            &request.task_id,
-            orchestrator_scheduler::scheduler::timeline::TimelineQuery {
-                cursor: request.cursor,
-                limit: if request.limit == 0 {
-                    50
-                } else {
-                    request.limit as usize
-                },
-                categories: request.categories,
-            },
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(TaskTimelineResponse {
-            entries: page
-                .entries
-                .into_iter()
-                .map(timeline_entry_to_proto)
-                .collect(),
-            next_cursor: page.next_cursor,
-            has_more: page.has_more,
-            snapshot_max_event_id: page.snapshot_max_event_id,
-            projection_version: page.projection_version,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn task_timeline_follow(
         &self,
-        request: Request<TaskTimelineFollowRequest>,
+        _: Request<TaskTimelineFollowRequest>,
     ) -> Result<Response<Self::TaskTimelineFollowStream>, Status> {
-        let request = request.into_inner();
-        let state = self.state.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(64);
-        tokio::spawn(async move {
-            let result = orchestrator_scheduler::service::task::get_task_timeline_updates(
-                &state,
-                &request.task_id,
-                request.after_event_id,
-                &request.categories,
-            )
-            .await;
-            match result {
-                Ok((watermark, updates)) if updates.len() > 200 => {
-                    let _ = tx
-                        .send(Ok(TimelineDelta {
-                            kind: "reset_required".to_string(),
-                            entry: None,
-                            snapshot_max_event_id: watermark,
-                        }))
-                        .await;
-                }
-                Ok((watermark, updates)) => {
-                    for entry in updates {
-                        if tx
-                            .send(Ok(TimelineDelta {
-                                kind: "upsert".to_string(),
-                                entry: Some(timeline_entry_to_proto(entry)),
-                                snapshot_max_event_id: watermark,
-                            }))
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                }
-                Err(error) => {
-                    let _ = tx.send(Err(map_core_error(error))).await;
-                }
-            }
-        });
-        Ok(Response::new(
-            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)) as BoxStream<TimelineDelta>,
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
         ))
     }
 
     async fn task_logs(
         &self,
-        request: Request<TaskLogsRequest>,
+        _: Request<TaskLogsRequest>,
     ) -> Result<Response<Self::TaskLogsStream>, Status> {
-        let req = request.into_inner();
-        let logs = orchestrator_scheduler::service::task::get_task_logs(
-            &self.state,
-            &req.task_id,
-            req.tail as usize,
-            req.timestamps,
-        )
-        .await
-        .map_err(map_core_error)?;
-
-        let (tx, rx) = tokio::sync::mpsc::channel(32);
-        for chunk in logs {
-            let proto = TaskLogChunk {
-                run_id: chunk.run_id,
-                phase: chunk.phase,
-                content: chunk.content,
-                stdout_path: chunk.stdout_path,
-                stderr_path: chunk.stderr_path,
-                started_at: chunk.started_at,
-            };
-            let _ = tx.send(Ok(proto)).await;
-        }
-        Ok(Response::new(
-            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)) as BoxStream<TaskLogChunk>,
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
         ))
     }
 
     async fn task_follow(
         &self,
-        request: Request<TaskFollowRequest>,
+        _: Request<TaskFollowRequest>,
     ) -> Result<Response<Self::TaskFollowStream>, Status> {
-        let req = request.into_inner();
-        let state = self.state.clone();
-        let (tx, rx) = tokio::sync::mpsc::channel(64);
-        tokio::spawn(async move {
-            let _ = orchestrator_scheduler::service::task::follow_task_logs_stream(
-                &state,
-                &req.task_id,
-                |line: String, _is_stderr: bool| {
-                    let _ = tx.try_send(Ok(TaskLogLine {
-                        line,
-                        timestamp: String::new(),
-                    }));
-                    Ok(())
-                },
-            )
-            .await;
-        });
-        Ok(Response::new(
-            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)) as BoxStream<TaskLogLine>,
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
         ))
     }
 
     async fn task_watch(
         &self,
-        request: Request<TaskWatchRequest>,
+        _: Request<TaskWatchRequest>,
     ) -> Result<Response<Self::TaskWatchStream>, Status> {
-        let req = request.into_inner();
-        let state = self.state.clone();
-        let interval_secs = if req.interval_secs == 0 {
-            2
-        } else {
-            req.interval_secs
-        };
-        let (tx, rx) = tokio::sync::mpsc::channel(16);
-        tokio::spawn(async move {
-            let interval = std::time::Duration::from_secs(interval_secs);
-            loop {
-                let summary =
-                    match orchestrator_scheduler::service::task::load_summary(&state, &req.task_id)
-                        .await
-                    {
-                        Ok(s) => s,
-                        Err(_) => break,
-                    };
-                let detail = match orchestrator_scheduler::service::task::get_task_detail(
-                    &state,
-                    &req.task_id,
-                )
-                .await
-                {
-                    Ok(d) => d,
-                    Err(_) => break,
-                };
-                let terminal = matches!(
-                    summary.status.as_str(),
-                    "completed" | "failed" | "cancelled" | "deleted"
-                );
-                let snapshot = TaskWatchSnapshot {
-                    task: Some(summary_to_proto(summary)),
-                    items: detail.items.into_iter().map(item_to_proto).collect(),
-                };
-                if tx.send(Ok(snapshot)).await.is_err() {
-                    break;
-                }
-                if terminal {
-                    break;
-                }
-                tokio::time::sleep(interval).await;
-            }
-        });
-        Ok(Response::new(
-            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
-                as BoxStream<TaskWatchSnapshot>,
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
         ))
     }
 
-    async fn apply(
-        &self,
-        request: Request<ApplyRequest>,
-    ) -> Result<Response<ApplyResponse>, Status> {
-        let req = request.into_inner();
-        let result = agent_orchestrator::service::resource::apply_manifests(
-            &self.state,
-            &req.content,
-            req.dry_run,
-            req.project.as_deref(),
-            req.prune,
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(result))
+    async fn apply(&self, _: Request<ApplyRequest>) -> Result<Response<ApplyResponse>, Status> {
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn get(&self, request: Request<GetRequest>) -> Result<Response<GetResponse>, Status> {
@@ -1362,118 +1135,55 @@ impl OrchestratorService for TestOrchestratorServer {
         }))
     }
 
-    async fn delete(
-        &self,
-        request: Request<DeleteRequest>,
-    ) -> Result<Response<DeleteResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::resource::delete_resource(
-            &self.state,
-            &req.resource,
-            req.force,
-            req.project.as_deref(),
-            req.dry_run,
-        )
-        .map_err(map_core_error)?;
-        let scope = req
-            .project
-            .map(|p| format!(" (project: {p})"))
-            .unwrap_or_default();
-        let verb = if req.dry_run {
-            "would be deleted (dry run)"
-        } else {
-            "deleted"
-        };
-        Ok(Response::new(DeleteResponse {
-            message: format!("{} {}{}", req.resource, verb, scope),
-        }))
+    async fn delete(&self, _: Request<DeleteRequest>) -> Result<Response<DeleteResponse>, Status> {
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn store_get(
         &self,
-        request: Request<StoreGetRequest>,
+        _: Request<StoreGetRequest>,
     ) -> Result<Response<StoreGetResponse>, Status> {
-        let req = request.into_inner();
-        let result = agent_orchestrator::service::store::store_get(
-            &self.state,
-            &req.store,
-            &req.key,
-            &req.project,
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(StoreGetResponse {
-            value_json: result.clone(),
-            found: result.is_some(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn store_put(
         &self,
-        request: Request<StorePutRequest>,
+        _: Request<StorePutRequest>,
     ) -> Result<Response<StorePutResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::store::store_put(
-            &self.state,
-            &req.store,
-            &req.key,
-            &req.value_json,
-            &req.project,
-            &req.task_id,
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(StorePutResponse {
-            message: format!("stored key '{}' in '{}'", req.key, req.store),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn store_delete(
         &self,
-        request: Request<StoreDeleteRequest>,
+        _: Request<StoreDeleteRequest>,
     ) -> Result<Response<StoreDeleteResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::store::store_delete(
-            &self.state,
-            &req.store,
-            &req.key,
-            &req.project,
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(StoreDeleteResponse {
-            message: format!("deleted key '{}' from '{}'", req.key, req.store),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn store_list(
         &self,
-        request: Request<StoreListRequest>,
+        _: Request<StoreListRequest>,
     ) -> Result<Response<StoreListResponse>, Status> {
-        let req = request.into_inner();
-        let entries = agent_orchestrator::service::store::store_list(
-            &self.state,
-            &req.store,
-            &req.project,
-            req.limit,
-            req.offset,
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(StoreListResponse { entries }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn store_prune(
         &self,
-        request: Request<StorePruneRequest>,
+        _: Request<StorePruneRequest>,
     ) -> Result<Response<StorePruneResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::store::store_prune(&self.state, &req.store, &req.project)
-            .await
-            .map_err(map_core_error)?;
-        Ok(Response::new(StorePruneResponse {
-            message: format!("pruned store '{}'", req.store),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     /// Deliberately not modelled.
@@ -1504,223 +1214,113 @@ impl OrchestratorService for TestOrchestratorServer {
 
     async fn shutdown(
         &self,
-        _request: Request<ShutdownRequest>,
+        _: Request<ShutdownRequest>,
     ) -> Result<Response<ShutdownResponse>, Status> {
-        self.state.daemon_runtime.request_shutdown();
-        self.shutdown_notify.notify_one();
-        Ok(Response::new(ShutdownResponse {
-            message: "shutdown initiated".to_string(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn maintenance_mode(
         &self,
-        request: Request<MaintenanceModeRequest>,
+        _: Request<MaintenanceModeRequest>,
     ) -> Result<Response<MaintenanceModeResponse>, Status> {
-        let req = request.into_inner();
-        self.state.daemon_runtime.set_maintenance_mode(req.enable);
-        let state_str = if req.enable { "enabled" } else { "disabled" };
-        Ok(Response::new(MaintenanceModeResponse {
-            maintenance_mode: req.enable,
-            message: format!("maintenance mode {state_str}"),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn config_debug(
         &self,
-        request: Request<ConfigDebugRequest>,
+        _: Request<ConfigDebugRequest>,
     ) -> Result<Response<ConfigDebugResponse>, Status> {
-        let req = request.into_inner();
-        let content =
-            agent_orchestrator::service::system::debug_info(&self.state, req.component.as_deref())
-                .map_err(map_core_error)?;
-        Ok(Response::new(ConfigDebugResponse {
-            content,
-            format: "text".to_string(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn worker_status(
         &self,
-        _request: Request<WorkerStatusRequest>,
+        _: Request<WorkerStatusRequest>,
     ) -> Result<Response<WorkerStatusResponse>, Status> {
-        let status = agent_orchestrator::service::system::worker_status(&self.state)
-            .await
-            .map_err(map_core_error)?;
-        Ok(Response::new(status))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
-    async fn check(
-        &self,
-        request: Request<CheckRequest>,
-    ) -> Result<Response<CheckResponse>, Status> {
-        let req = request.into_inner();
-        let report = orchestrator_scheduler::service::system::run_check(
-            &self.state,
-            req.workflow.as_deref(),
-            &req.output_format,
-            req.project_id.as_deref(),
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(CheckResponse {
-            content: report.content,
-            format: req.output_format,
-            exit_code: report.exit_code,
-            diagnostics: report
-                .report
-                .checks
-                .iter()
-                .map(orchestrator_scheduler::service::system::diagnostic_entry_from_check)
-                .collect(),
-        }))
+    async fn check(&self, _: Request<CheckRequest>) -> Result<Response<CheckResponse>, Status> {
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
-    async fn init(&self, request: Request<InitRequest>) -> Result<Response<InitResponse>, Status> {
-        let req = request.into_inner();
-        let message =
-            agent_orchestrator::service::system::run_init(&self.state, req.root.as_deref())
-                .map_err(map_core_error)?;
-        Ok(Response::new(InitResponse { message }))
+    async fn init(&self, _: Request<InitRequest>) -> Result<Response<InitResponse>, Status> {
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn db_status(
         &self,
-        _request: Request<DbStatusRequest>,
+        _: Request<DbStatusRequest>,
     ) -> Result<Response<DbStatusResponse>, Status> {
-        let status =
-            agent_orchestrator::service::system::db_status(&self.state).map_err(map_core_error)?;
-        Ok(Response::new(status))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn db_migrations_list(
         &self,
-        _request: Request<DbMigrationsListRequest>,
+        _: Request<DbMigrationsListRequest>,
     ) -> Result<Response<DbMigrationsListResponse>, Status> {
-        let list = agent_orchestrator::service::system::db_migrations_list(&self.state)
-            .map_err(map_core_error)?;
-        Ok(Response::new(list))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn db_vacuum(
         &self,
-        _request: Request<DbVacuumRequest>,
+        _: Request<DbVacuumRequest>,
     ) -> Result<Response<DbVacuumResponse>, Status> {
-        let result = agent_orchestrator::db_maintenance::vacuum_database(&self.state.db_path)
-            .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(DbVacuumResponse {
-            size_before: result.size_before,
-            size_after: result.size_after,
-            message: "VACUUM complete".into(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn db_log_cleanup(
         &self,
-        request: Request<DbLogCleanupRequest>,
+        _: Request<DbLogCleanupRequest>,
     ) -> Result<Response<DbLogCleanupResponse>, Status> {
-        let req = request.into_inner();
-        let days = if req.older_than_days == 0 {
-            30
-        } else {
-            req.older_than_days
-        };
-        let result = agent_orchestrator::log_cleanup::cleanup_old_logs(
-            &self.state.async_database,
-            &self.state.logs_dir,
-            days,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(DbLogCleanupResponse {
-            files_deleted: result.files_deleted,
-            bytes_freed: result.bytes_freed,
-            message: format!("Deleted {} file(s)", result.files_deleted),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn manifest_validate(
         &self,
-        request: Request<ManifestValidateRequest>,
+        _: Request<ManifestValidateRequest>,
     ) -> Result<Response<ManifestValidateResponse>, Status> {
-        let req = request.into_inner();
-        let report = agent_orchestrator::service::system::validate_manifests(
-            &self.state,
-            &req.content,
-            req.project_id.as_deref(),
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(ManifestValidateResponse {
-            valid: report.valid,
-            errors: report.errors,
-            message: report.message,
-            diagnostics: report.diagnostics,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn manifest_export(
         &self,
-        request: Request<ManifestExportRequest>,
+        _: Request<ManifestExportRequest>,
     ) -> Result<Response<ManifestExportResponse>, Status> {
-        let req = request.into_inner();
-        let content = agent_orchestrator::service::resource::export_manifests(
-            &self.state,
-            &req.output_format,
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(ManifestExportResponse {
-            content,
-            format: req.output_format,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn task_trace(
         &self,
-        request: Request<TaskTraceRequest>,
+        _: Request<TaskTraceRequest>,
     ) -> Result<Response<TaskTraceResponse>, Status> {
-        let req = request.into_inner();
-        let result = orchestrator_scheduler::service::task::get_task_trace(
-            &self.state,
-            &req.task_id,
-            req.verbose,
-        )
-        .await
-        .map_err(map_core_error)?;
-
-        let entries = result
-            .entries
-            .into_iter()
-            .map(|e| TraceEntry {
-                timestamp: e.timestamp,
-                event_type: e.event_type,
-                step: e.step,
-                item_id: e.item_id,
-                payload_json: e.payload_json,
-            })
-            .collect();
-
-        let anomalies = result
-            .anomalies
-            .into_iter()
-            .map(|a| Anomaly {
-                rule: a.rule,
-                severity: format!("{:?}", a.severity).to_lowercase(),
-                message: a.message,
-                at: a.at,
-                escalation: format!("{:?}", a.escalation).to_lowercase(),
-            })
-            .collect();
-
-        let trace_json = result
-            .full_trace
-            .as_ref()
-            .and_then(|t| serde_json::to_string(t).ok())
-            .unwrap_or_else(|| "{}".to_string());
-
-        Ok(Response::new(TaskTraceResponse {
-            entries,
-            anomalies,
-            trace_json,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn secret_key_status(
@@ -1866,166 +1466,65 @@ impl OrchestratorService for TestOrchestratorServer {
 
     async fn event_cleanup(
         &self,
-        request: Request<EventCleanupRequest>,
+        _: Request<EventCleanupRequest>,
     ) -> Result<Response<EventCleanupResponse>, Status> {
-        let req = request.into_inner();
-        let older_than = if req.older_than_days == 0 {
-            30
-        } else {
-            req.older_than_days
-        };
-        if req.dry_run {
-            let count = agent_orchestrator::event_cleanup::count_pending_cleanup(
-                &self.state.async_database,
-                older_than,
-            )
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-            return Ok(Response::new(EventCleanupResponse {
-                affected_count: count,
-                message: format!("{count} events (dry-run)"),
-            }));
-        }
-        let affected = if req.archive {
-            let archive_dir = self.state.data_dir.join("archive/events");
-            agent_orchestrator::event_cleanup::archive_events(
-                &self.state.async_database,
-                &archive_dir,
-                older_than,
-                1000,
-            )
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?
-        } else {
-            agent_orchestrator::event_cleanup::cleanup_old_events(
-                &self.state.async_database,
-                older_than,
-                1000,
-            )
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?
-        };
-        Ok(Response::new(EventCleanupResponse {
-            affected_count: affected,
-            message: format!("{affected} events deleted"),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn event_stats(
         &self,
-        _request: Request<EventStatsRequest>,
+        _: Request<EventStatsRequest>,
     ) -> Result<Response<EventStatsResponse>, Status> {
-        let stats = agent_orchestrator::event_cleanup::event_stats(&self.state.async_database)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(EventStatsResponse {
-            total_rows: stats.total_rows,
-            earliest: stats.earliest.unwrap_or_default(),
-            latest: stats.latest.unwrap_or_default(),
-            by_task_status: stats
-                .by_task_status
-                .into_iter()
-                .map(|(status, count)| EventStatusCount { status, count })
-                .collect(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn task_events(
         &self,
-        request: Request<TaskEventsRequest>,
+        _: Request<TaskEventsRequest>,
     ) -> Result<Response<TaskEventsResponse>, Status> {
-        let req = request.into_inner();
-        let type_filter = if req.event_type_filter.is_empty() {
-            None
-        } else {
-            Some(req.event_type_filter.as_str())
-        };
-        let events = agent_orchestrator::event_cleanup::list_task_events(
-            &self.state.async_database,
-            &req.task_id,
-            type_filter,
-            req.limit,
-        )
-        .await
-        .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(TaskEventsResponse {
-            events: events
-                .into_iter()
-                .map(|e| Event {
-                    id: e.id,
-                    task_id: e.task_id,
-                    task_item_id: e.task_item_id,
-                    event_type: e.event_type,
-                    payload_json: serde_json::to_string(&e.payload).unwrap_or_default(),
-                    created_at: e.created_at,
-                })
-                .collect(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn trigger_suspend(
         &self,
-        request: Request<TriggerSuspendRequest>,
+        _: Request<TriggerSuspendRequest>,
     ) -> Result<Response<TriggerSuspendResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::resource::suspend_trigger(
-            &self.state,
-            &req.trigger_name,
-            req.project.as_deref(),
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(TriggerSuspendResponse {
-            message: format!("trigger '{}' suspended", req.trigger_name),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn trigger_resume(
         &self,
-        request: Request<TriggerResumeRequest>,
+        _: Request<TriggerResumeRequest>,
     ) -> Result<Response<TriggerResumeResponse>, Status> {
-        let req = request.into_inner();
-        agent_orchestrator::service::resource::resume_trigger(
-            &self.state,
-            &req.trigger_name,
-            req.project.as_deref(),
-        )
-        .map_err(map_core_error)?;
-        Ok(Response::new(TriggerResumeResponse {
-            message: format!("trigger '{}' resumed", req.trigger_name),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn trigger_fire(
         &self,
-        request: Request<TriggerFireRequest>,
+        _: Request<TriggerFireRequest>,
     ) -> Result<Response<TriggerFireResponse>, Status> {
-        let req = request.into_inner();
-        let task_id = agent_orchestrator::service::resource::fire_trigger(
-            &self.state,
-            &req.trigger_name,
-            req.project.as_deref(),
-        )
-        .await
-        .map_err(map_core_error)?;
-        Ok(Response::new(TriggerFireResponse {
-            task_id: task_id.clone(),
-            message: format!("trigger '{}' fired — task {}", req.trigger_name, task_id),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn qa_doctor(
         &self,
-        request: Request<QaDoctorRequest>,
+        _: Request<QaDoctorRequest>,
     ) -> Result<Response<QaDoctorResponse>, Status> {
-        let _ = request.into_inner();
-        let stats = agent_orchestrator::qa_doctor::qa_doctor_stats(&self.state.async_database)
-            .await
-            .map_err(|e| Status::internal(e.to_string()))?;
-        Ok(Response::new(QaDoctorResponse {
-            task_execution_metrics_total: stats.task_execution_metrics_total,
-            task_execution_metrics_last_24h: stats.task_execution_metrics_last_24h,
-            task_completion_rate: stats.task_completion_rate,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn process_metrics_get(
@@ -2104,61 +1603,20 @@ impl OrchestratorService for TestOrchestratorServer {
 
     async fn process_metrics_prune(
         &self,
-        request: Request<ProcessMetricsPruneRequest>,
+        _: Request<ProcessMetricsPruneRequest>,
     ) -> Result<Response<ProcessMetricsMaintenanceResponse>, Status> {
-        let retention_days = request.into_inner().retention_days.max(1);
-        let affected_rows =
-            agent_orchestrator::process_metrics::AsyncProcessMetricsRepository::new(
-                self.state.async_database.clone(),
-            )
-            .prune(retention_days)
-            .await
-            .map_err(|error| Status::internal(error.to_string()))?;
-        Ok(Response::new(ProcessMetricsMaintenanceResponse {
-            affected_rows,
-            message: "pruned".into(),
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 
     async fn run_step(
         &self,
-        request: Request<RunStepRequest>,
+        _: Request<RunStepRequest>,
     ) -> Result<Response<RunStepResponse>, Status> {
-        let req = request.into_inner();
-        let payload = agent_orchestrator::dto::CreateRunStepPayload {
-            project_id: req.project_id,
-            workspace_id: req.workspace_id,
-            template: req.template,
-            agent_capability: req.agent_capability,
-            execution_profile: req.execution_profile,
-            initial_vars: if req.initial_vars.is_empty() {
-                None
-            } else {
-                Some(req.initial_vars)
-            },
-            target_files: if req.target_files.is_empty() {
-                None
-            } else {
-                Some(req.target_files)
-            },
-        };
-        let created = agent_orchestrator::task_ops::create_run_step_task(&self.state, payload)
-            .map_err(|err| agent_orchestrator::error::classify_task_error("run_step", err))
-            .map_err(map_core_error)?;
-        let mut status = "created".to_string();
-        let mut message = format!("Task created: {}", created.id);
-        if !req.no_start {
-            orchestrator_scheduler::service::task::enqueue_task(&self.state, &created.id)
-                .await
-                .map_err(map_core_error)?;
-            status = "enqueued".to_string();
-            message = format!("Task enqueued: {}", created.id);
-        }
-        Ok(Response::new(RunStepResponse {
-            task_id: created.id,
-            status,
-            message,
-        }))
+        Err(Status::unimplemented(
+            "no integration test drives this RPC; the production daemon owns it",
+        ))
     }
 }
 
@@ -2219,7 +1677,6 @@ impl TestHarness {
         let shutdown_notify = Arc::new(Notify::new());
         let server = TestOrchestratorServer {
             state: state.clone(),
-            shutdown_notify: shutdown_notify.clone(),
         };
 
         let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
