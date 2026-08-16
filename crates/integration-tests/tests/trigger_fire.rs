@@ -37,6 +37,59 @@ fn load_trigger_cfg(
         .clone()
 }
 
+/// Wait until a trigger has produced at least `want` tasks, or the deadline passes.
+///
+/// Replaces `sleep(300ms); assert!(count >= 1)`, which asserts a fact about how
+/// fast the machine is. It failed on the boundary-coverage job and nowhere else:
+/// that job runs the whole workspace under llvm-cov instrumentation, so 300 ms of
+/// wall clock buys far less engine progress there than on a developer's machine.
+/// The engine was working; the ruler was a stopwatch.
+///
+/// Polling inverts the cost. A passing run returns as soon as the task exists —
+/// typically faster than the sleep it replaces — and only a genuinely broken
+/// engine waits out the deadline. The deadline is generous for the same reason
+/// the old constant was not: it is a bound on failure, not a guess at success.
+async fn wait_for_trigger_tasks(
+    state: &agent_orchestrator::state::InnerState,
+    trigger_name: &str,
+    want: usize,
+    deadline: Duration,
+) -> usize {
+    let start = tokio::time::Instant::now();
+    loop {
+        let count = count_trigger_tasks(state, trigger_name).await;
+        if count >= want || start.elapsed() >= deadline {
+            return count;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
+/// Hold a "this must not happen" assertion open for a window instead of sampling
+/// it once.
+///
+/// A negative claim cannot be polled *for* — there is nothing to wait for — so a
+/// single check after a fixed sleep is really the claim "by now it would have
+/// happened", which is the same stopwatch in a different costume. Watching the
+/// count for a window fails the moment the invariant breaks, and otherwise
+/// spends the window proving it held, which is what the test means.
+async fn assert_trigger_task_count_stays(
+    state: &agent_orchestrator::state::InnerState,
+    trigger_name: &str,
+    expected: usize,
+    window: Duration,
+) {
+    let start = tokio::time::Instant::now();
+    while start.elapsed() < window {
+        let count = count_trigger_tasks(state, trigger_name).await;
+        assert!(
+            count <= expected,
+            "trigger '{trigger_name}' fired again: expected at most {expected} task(s), saw {count}"
+        );
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+}
+
 /// Count tasks in the DB whose name matches the trigger task naming convention.
 async fn count_trigger_tasks(
     state: &agent_orchestrator::state::InnerState,
@@ -546,11 +599,10 @@ spec:
             },
         );
 
-        // Wait for engine to process.
-        tokio::time::sleep(Duration::from_millis(300)).await;
-
-        // Default project triggers should have fired.
-        let default_count = count_trigger_tasks(state, "webhook-trigger").await;
+        // Wait for the engine to process, up to a bound rather than for a
+        // fixed span. See wait_for_trigger_tasks.
+        let default_count =
+            wait_for_trigger_tasks(state, "webhook-trigger", 1, Duration::from_secs(5)).await;
         assert!(
             default_count >= 1,
             "default project trigger should have fired, got {default_count}"
@@ -622,8 +674,10 @@ async fn exclude_trigger_prevents_duplicate_via_broadcast() {
             },
         );
 
-        // Wait for engine to process the broadcast.
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Hold the exclusion open for a window rather than sampling it once.
+        // This fails the instant a second task appears, and otherwise spends the
+        // window proving it did not. See assert_trigger_task_count_stays.
+        assert_trigger_task_count_stays(state, "webhook-trigger", 1, Duration::from_secs(2)).await;
 
         // webhook-trigger should have exactly 1 task (the direct fire), not 2.
         // Note: the broadcast may fire OTHER webhook triggers (throttled-trigger,
