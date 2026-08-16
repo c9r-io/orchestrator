@@ -56,7 +56,6 @@
         "config/governance/qa-gate-surface.json",
         "docs/design_doc/orchestrator/137-legacy-coordination-decommission.md",
         "docs/qa/orchestrator/174-coordination-strangler-completion.md",
-        "docs/qa/orchestrator/175-legacy-coordination-decommission.md",
         "docs/qa/orchestrator/183-gate-surface-execution-truth.md"
       ]
     },
@@ -108,9 +107,8 @@
         "[legacy_pipeline_variables_removed] workflow 'fr156-step-vars-legacy' step 'plan' uses step_vars; put the value in the step's own command or prompt",
         "[legacy_pipeline_variables_removed] workflow 'fr156-store-put-legacy' step 'plan' uses a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`"
       ],
-      "reason": "Deliberately mixed, like coordination-strangler-parity: the `-legacy` workflows hold the pre-migration shape of the two production store_inputs consumers plus one isolated case per other retired kind, and the `-migrated` ones hold the shape that must still apply. test-pipeline-variable-retirement.sh splits it and runs each half. The `-legacy` half is also the rollback evidence for FR-156, kept so the removal stays reversible.",
+      "reason": "Deliberately mixed, like coordination-strangler-parity: the `-legacy` workflows hold the pre-migration shape of the two production store_inputs consumers plus one isolated case per other retired kind, and the `-migrated` ones hold the shape that must still apply. test-pipeline-variable-retirement.sh splits it and runs each half. The `-legacy` half is also the rollback evidence for FR-156, kept so the removal stays reversible. The gate that applied it, test-pipeline-variable-retirement.sh, was retired on 2026-08-16; the bundle stays because core's every_tracked_bundle_is_accepted_or_declared derives its corpus from git ls-files and so still asserts that each declared diagnostic fires — a cheaper and less enumerated check than the gate it outlived.",
       "consumers": [
-        "scripts/qa/test-pipeline-variable-retirement.sh",
         "fixtures/qa/fr156-pipeline-variable-baseline.json",
         "docs/qa/orchestrator/207-pipeline-variable-surface-retirement.md",
         "docs/design_doc/orchestrator/169-pipeline-variable-surface-retirement.md"

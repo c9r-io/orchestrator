@@ -1535,8 +1535,8 @@ if [[ "${1:-}" == "--fixture-test" ]]; then
   d="$(new_case f9)"
   if inject "fixture 9" "$d/.github/workflows/ci.yml" \
     perl -pi -e '
-      s{^(\s*)- name: Legacy coordination decommission contracts$}{$1- name: runs ./scripts/qa/test-legacy-coordination-decommission.sh};
-      s{^(\s*)run: \./scripts/qa/test-legacy-coordination-decommission\.sh$}{$1if: false\n$1run: |\n$1  cat > /dev/null <<EOF\n$1  ./scripts/qa/test-legacy-coordination-decommission.sh\n$1  EOF};
+      s{^(\s*)- name: Verify bash 3\.2 compatibility$}{$1- name: runs ./scripts/qa/test-bash32-compat.sh};
+      s{^(\s*)run: \./scripts/qa/test-bash32-compat\.sh$}{$1if: false\n$1run: |\n$1  cat > /dev/null <<EOF\n$1  ./scripts/qa/test-bash32-compat.sh\n$1  EOF};
     ' "$d/.github/workflows/ci.yml"; then
     expect_fail "fixture 9" "$d" check_wiring_truth "an if: false step, a name: mention and a heredoc body are not wiring"
   fi

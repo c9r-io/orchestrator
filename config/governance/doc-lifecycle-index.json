@@ -3,8 +3,8 @@
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
     "documents": 487,
-    "active": 474,
-    "superseded": 13,
+    "active": 472,
+    "superseded": 15,
     "withRelatedFr": 330
   },
   "documents": {
@@ -1665,10 +1665,11 @@
       ]
     },
     "docs/qa/orchestrator/175-legacy-coordination-decommission.md": {
-      "lifecycle": "active",
+      "lifecycle": "superseded",
       "relatedFr": [
         "FR-125"
-      ]
+      ],
+      "supersededBy": "docs/qa/orchestrator/174-coordination-strangler-completion.md"
     },
     "docs/qa/orchestrator/176-agent-driver-execution-migration.md": {
       "lifecycle": "active"
@@ -1861,10 +1862,11 @@
       ]
     },
     "docs/qa/orchestrator/207-pipeline-variable-surface-retirement.md": {
-      "lifecycle": "active",
+      "lifecycle": "superseded",
       "relatedFr": [
         "FR-156"
-      ]
+      ],
+      "supersededBy": "docs/qa/orchestrator/196-fixture-bundle-validity.md"
     },
     "docs/qa/orchestrator/208-source-domain-decomposition.md": {
       "lifecycle": "active",
@@ -3147,10 +3149,16 @@
       "docs/qa/orchestrator/50-engine-wiring-store-invariant-itemselect.md",
       "docs/qa/orchestrator/51-primitive-composition.md"
     ],
+    "docs/qa/orchestrator/174-coordination-strangler-completion.md": [
+      "docs/qa/orchestrator/175-legacy-coordination-decommission.md"
+    ],
     "docs/qa/orchestrator/175-legacy-coordination-decommission.md": [
       "docs/qa/orchestrator/83-generate-items-mixed-text-extraction.md",
       "docs/qa/orchestrator/84-generate-items-regression-narrowing.md",
       "docs/qa/orchestrator/92-dynamic-items-cycle-overflow.md"
+    ],
+    "docs/qa/orchestrator/196-fixture-bundle-validity.md": [
+      "docs/qa/orchestrator/207-pipeline-variable-surface-retirement.md"
     ],
     "docs/qa/orchestrator/205-cli-output-doc-parity.md": [
       "docs/qa/orchestrator/guide-alignment.md"

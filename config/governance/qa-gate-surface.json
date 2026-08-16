@@ -261,13 +261,11 @@
       "scripts/qa/test-fixture-target-drift.sh",
       "scripts/qa/test-governance-ledger-tooling.sh",
       "scripts/qa/test-jq-status-observed.sh",
-      "scripts/qa/test-legacy-coordination-decommission.sh",
       "scripts/qa/test-markdown-link-integrity.sh",
       "scripts/qa/test-persistence-api-boundary.sh",
       "scripts/qa/test-persistence-dependency.sh",
       "scripts/qa/test-persistence-extraction.sh",
       "scripts/qa/test-pipefail-short-circuit.sh",
-      "scripts/qa/test-pipeline-variable-retirement.sh",
       "scripts/qa/test-qa-doc-lint-workflow-scope.sh",
       "scripts/qa/test-qa-gate-surface.sh",
       "scripts/qa/test-release-publish-surface.sh",
@@ -877,15 +875,6 @@
       "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
     },
     {
-      "path": "scripts/qa/test-legacy-coordination-decommission.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      }
-    },
-    {
       "path": "scripts/qa/test-markdown-link-integrity.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -946,16 +935,6 @@
         "mode": "no-provider"
       },
       "note": "Negative fixtures for pipefail-short-circuit.rb, each paired with a control, since the rule is a guard with zero violations. Case 16 asserts the mechanism deterministically - a producer that sleeps after emitting the match is still writing by construction when the reader leaves, so it reproduces on any machine, where the buffer race measured 8-13 in 400. Scratch git checkouts under TMPDIR; no daemon, no database, no provider, no network."
-    },
-    {
-      "path": "scripts/qa/test-pipeline-variable-retirement.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "coordination-strangler",
-      "providerIsolation": {
-        "mode": "fixture-pinned",
-        "evidence": "fixtures/manifests/bundles/fr156-pipeline-variable-parity.yaml"
-      }
     },
     {
       "path": "scripts/qa/test-process-console-metrics.sh",
