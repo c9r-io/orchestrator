@@ -10,9 +10,9 @@
 -- always allowed; removing anything the previous release knew about is what
 -- breaks a binary rollback, and is what that test fails on.
 --
--- release: v0.5.0
--- revision: 58166a9f6172fa2ea77ea36677ed0db94184beba
--- taken: 2026-08-12
+-- release: v0.6.0
+-- revision: 917815128d3163a4a6f98bf8fdb4c58f877c4530
+-- taken: 2026-08-16
 --
 -- Refresh this at a release cut, never to make a failing test pass: rewriting
 -- it to match a removal is how the contract is lost. Regenerate with
@@ -107,6 +107,7 @@ CREATE TABLE agent_sessions ( id TEXT PRIMARY KEY, task_id TEXT NOT NULL, task_i
 CREATE TABLE attention_actions ( id INTEGER PRIMARY KEY AUTOINCREMENT, attention_item_id TEXT NOT NULL, actor TEXT NOT NULL, mutation_kind TEXT NOT NULL, action_id TEXT, idempotency_key TEXT NOT NULL, request_hash TEXT NOT NULL, target_version INTEGER NOT NULL, status TEXT NOT NULL, request_json TEXT NOT NULL DEFAULT '{}', result_json TEXT, error_code TEXT, created_at TEXT NOT NULL, completed_at TEXT, request_id TEXT, UNIQUE(attention_item_id, idempotency_key), FOREIGN KEY(attention_item_id) REFERENCES attention_items(id) );
 CREATE TABLE attention_changes ( id INTEGER PRIMARY KEY AUTOINCREMENT, attention_item_id TEXT NOT NULL, change_kind TEXT NOT NULL, item_version INTEGER NOT NULL, created_at TEXT NOT NULL, project_id TEXT, resulting_state TEXT, FOREIGN KEY(attention_item_id) REFERENCES attention_items(id) );
 CREATE TABLE attention_items ( id TEXT PRIMARY KEY, project_id TEXT NOT NULL, task_id TEXT NOT NULL, task_item_id TEXT, step_id TEXT, session_id TEXT, kind TEXT NOT NULL, severity TEXT NOT NULL, state TEXT NOT NULL, title TEXT NOT NULL, summary TEXT NOT NULL, requested_decision_json TEXT, actions_json TEXT NOT NULL DEFAULT '[]', dedupe_key TEXT NOT NULL, assignee TEXT, source_event_id TEXT NOT NULL, occurrence_count INTEGER NOT NULL DEFAULT 1, reopen_count INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, last_occurred_at TEXT NOT NULL, snoozed_until TEXT, sla_deadline TEXT, resolved_at TEXT, resolution_json TEXT , source_route_id TEXT, source_binding_name TEXT);
+CREATE TABLE attention_projection_gaps ( project_id TEXT PRIMARY KEY, first_event_id INTEGER NOT NULL, last_event_id INTEGER NOT NULL, first_occurred_at TEXT NOT NULL, last_occurred_at TEXT NOT NULL, dropped_count INTEGER NOT NULL, updated_at TEXT NOT NULL );
 CREATE TABLE attention_projector_state ( projector TEXT PRIMARY KEY, last_event_id INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL );
 CREATE TABLE command_runs ( id TEXT PRIMARY KEY, task_item_id TEXT NOT NULL, phase TEXT NOT NULL, command TEXT NOT NULL, cwd TEXT NOT NULL, workspace_id TEXT NOT NULL DEFAULT '', agent_id TEXT NOT NULL DEFAULT '', project_id TEXT NOT NULL DEFAULT '', exit_code INTEGER, stdout_path TEXT NOT NULL, stderr_path TEXT NOT NULL, output_json TEXT NOT NULL DEFAULT '{}', artifacts_json TEXT NOT NULL DEFAULT '[]', confidence REAL, quality_score REAL, validation_status TEXT NOT NULL DEFAULT 'unknown', started_at TEXT NOT NULL, ended_at TEXT, interrupted INTEGER NOT NULL DEFAULT 0, session_id TEXT, machine_output_source TEXT NOT NULL DEFAULT 'stdout', output_json_path TEXT, pid INTEGER, command_template TEXT, command_rule_index INTEGER, FOREIGN KEY(task_item_id) REFERENCES task_items(id) );
 CREATE TABLE config_heal_log ( id INTEGER PRIMARY KEY AUTOINCREMENT, version INTEGER NOT NULL, original_error TEXT NOT NULL, workflow_id TEXT NOT NULL, step_id TEXT NOT NULL, rule TEXT NOT NULL, detail TEXT NOT NULL, created_at TEXT NOT NULL );
