@@ -8,67 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "test": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "governance": {
-          "conclusion": "failure",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f",
-          "knownFailing": {
-            "reference": "https://github.com/c9r-io/orchestrator/actions/runs/31949549260/job/95170794321",
-            "reason": "Second and last instance of the transient this gate creates for itself. Pinning taiki-e/install-action changed ci.yml, so every liveness record became older than the workflow it describes and the liveness step went red — the only red step in the job; the other eighteen jobs in that run concluded success. Refreshing from that run records `governance: failure`, which needs this annotation in writing. The next run reads a fresh ledger, so the step passes and the job concludes success, and the rule that a known-failing annotation may not outlive its failure forces the refresh that records it to delete this entry."
-          }
+          "conclusion": "success",
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "31949549260",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894167",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         }
       }
     },
@@ -78,8 +74,8 @@
       "jobs": {
         "deploy": {
           "conclusion": "success",
-          "runId": "31565308733",
-          "headSha": "0d9d09f6a66a60dc98fe742bf3ab3a09630c3622"
+          "runId": "31947260893",
+          "headSha": "522bb1a2301c4139020539af602833bfe794589c"
         }
       }
     },
@@ -89,13 +85,13 @@
       "jobs": {
         "cargo-audit": {
           "conclusion": "success",
-          "runId": "31949549395",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894188",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "31949549395",
-          "headSha": "f0689fa1c2ef0471b0190c1c80835fb4bcaebd5f"
+          "runId": "31951894188",
+          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
         }
       }
     },
