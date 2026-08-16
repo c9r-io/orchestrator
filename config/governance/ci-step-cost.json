@@ -22,7 +22,8 @@
   },
   "measurement": {
     "runId": "31398849814",
-    "headSha": "ab98d6ff24a7e358c463bf195ff005d891d560d5"
+    "headSha": "ab98d6ff24a7e358c463bf195ff005d891d560d5",
+    "note": "The two step records removed on 2026-08-16 with the gates they measured (Legacy coordination decommission contracts, 186s; Verify pipeline-variable retirement and per-object migration parity, 2s). The enclosing `seconds` totals are left at what run 31398849814 measured rather than reduced by arithmetic: a duration is a sample, not a function of the tree (FR-140), and the next --refresh reports what the shorter job actually costs. Until then the budget is checked against a total that is too high, which errs toward asking."
   },
   "jobs": {
     "async-lock-governance": {
@@ -81,8 +82,7 @@
         "Install Rust toolchain": 1,
         "Cache Rust build artifacts": 7,
         "Install failing provider stubs": 0,
-        "Verify production inventory, ratchet, and per-workflow parity": 99,
-        "Verify pipeline-variable retirement and per-object migration parity": 2
+        "Verify production inventory, ratchet, and per-workflow parity": 99
       }
     },
     "governance": {
@@ -132,7 +132,6 @@
         "Dependency policy negative fixtures": 28,
         "No short-circuiting reader under pipefail": 1,
         "Pipefail short-circuit negative fixtures": 9,
-        "Legacy coordination decommission contracts": 186,
         "Recorded Codex session resume contracts": 5,
         "Filesystem trigger contracts": 96,
         "Agent driver production parity": 57,

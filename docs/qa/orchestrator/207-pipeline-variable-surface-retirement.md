@@ -1,10 +1,20 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-156
 self_referential_safe: true
+superseded_by: docs/qa/orchestrator/196-fixture-bundle-validity.md
 ---
 
 # Orchestrator - Pipeline Variable Surface Retirement
+
+> **Superseded 2026-08-16.** The gate this document drove, `scripts/qa/test-pipeline-variable-retirement.sh`, was retired: 529 lines and an
+> isolated daemon per push to re-prove a migration FR-156 completed once. Its subject
+> survives without it — `fixtures/manifests/bundles/fr156-pipeline-variable-parity.yaml`
+> is still in the tree, and core's `every_tracked_bundle_is_accepted_or_declared`
+> derives its corpus from `git ls-files`, so each declared rejection diagnostic is
+> still asserted to fire, by a check that enumerates nothing. See
+> [QA 196](196-fixture-bundle-validity.md).
+
 
 **Module**: Orchestrator Config / Scheduler / Workflow Governance
 **Scope**: manifest pipeline-variable rejection, per-object migration parity,

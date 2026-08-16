@@ -79,6 +79,23 @@ fi
 ruby scripts/qa/coordination-governance.rb --test-fixtures --require-complete >/dev/null
 pass "inventory, ratchet, rejection, governance, and consumer fixtures pass"
 
+# Adopted from test-legacy-coordination-decommission.sh when that gate was
+# retired (2026-08-16). It was the one assertion there that nothing else made:
+# the ledger's `productionConsumers` are manifest consumers and `sourceTouches`
+# is a count, so neither can say that the *scheduler* holds no extraction path.
+# The scope is deliberately those two modules and not the workspace — core still
+# defines extract_json_array, and it is reached by the JSON-extraction surface
+# rather than by coordination, so a workspace-wide grep would assert something
+# false and be answered by weakening it.
+if rg -n \
+  'apply_captures|pending_generate_items|extract_json_array' \
+  crates/orchestrator-scheduler/src/scheduler/item_executor \
+  crates/orchestrator-scheduler/src/scheduler/loop_engine \
+  --glob '*.rs' --glob '!tests.rs'; then
+  fail "production scheduler still contains a legacy extraction/consumption path"
+fi
+pass "production scheduler contains no capture/JSONPath extraction or deferred consumption path"
+
 cargo build -p orchestratord -p orchestrator-cli >/dev/null
 cargo build -p orchestrator-runner --bin orch-mcp-tools >/dev/null
 cargo test -p orchestrator-scheduler authenticated_host_executes_real_coordination_tools \

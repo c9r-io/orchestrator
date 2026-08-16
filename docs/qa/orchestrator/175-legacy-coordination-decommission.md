@@ -1,10 +1,23 @@
 ---
-lifecycle: active
+lifecycle: superseded
 related_fr: FR-125
 self_referential_safe: true
+superseded_by: docs/qa/orchestrator/174-coordination-strangler-completion.md
 ---
 
 # Orchestrator - Legacy Coordination Decommission
+
+> **Superseded 2026-08-16.** The gate this document drove, `scripts/qa/test-legacy-coordination-decommission.sh`, was retired. Four of its six
+> assertions re-ran work another CI job already did — four `cargo test` filters the
+> `test` job runs, `coverage-governance.sh --fixture-test` which has its own job, and
+> `test-coordination-strangler.sh` in full, which is its own job — so the governance
+> job paid 186s per push to repeat them, its second most expensive step. The one
+> assertion nothing else made, that the scheduler's `item_executor` and `loop_engine`
+> hold no capture/JSONPath extraction path, moved into
+> `test-coordination-strangler.sh` and is covered by
+> [QA 174](174-coordination-strangler-completion.md). The decommission itself is not
+> undone; only the duplicate proof of it is gone.
+
 
 **Module**: Orchestrator Scheduler / Workflow Governance  
 **Scope**: consumer inventory, capture/JSONPath removal, narrow residual state,
