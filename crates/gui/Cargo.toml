@@ -1,6 +1,6 @@
 [package]
 name = "orchestrator-gui"
-version = "0.5.0"
+version = "0.6.0"
 edition.workspace = true
 rust-version.workspace = true
 license = "MIT"
@@ -13,8 +13,8 @@ publish = false
 custom-protocol = ["tauri/custom-protocol"]
 
 [dependencies]
-orchestrator-client = { path = "../orchestrator-client", version = "0.5.0" }
-orchestrator-proto = { path = "../proto", version = "0.5.0" }
+orchestrator-client = { path = "../orchestrator-client", version = "0.6.0" }
+orchestrator-proto = { path = "../proto", version = "0.6.0" }
 tauri = { version = "2", features = ["rustls-tls"] }
 tauri-plugin-notification = "2"
 tonic = { version = "0.14", features = ["tls-native-roots", "tls-ring"] }
