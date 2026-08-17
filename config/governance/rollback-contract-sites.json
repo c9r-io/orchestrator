@@ -285,9 +285,9 @@
     },
     {
       "path": "docs/feature_request/README.md",
-      "digest": "b79e47eafa11",
+      "digest": "119f1fbc03ff",
       "class": "meta",
-      "note": "FR-165's closure note in the prose section below the generated registry block. Second site in this file and a different class from the first (FR-106's closure note, class index) — another instance of why this ledger is keyed per statement. Its digest has now moved three times: in-progress to closure, again when the closure note absorbed the two leftovers' outcomes, and again on 48974aaf when the markdown-link gate's own resolution was appended to the same line. The mirror condition reported every one of them, which is the point — a line-number key would have followed the move in silence."
+      "note": "FR-165's closure note in the prose section below the generated registry block. Second site in this file and a different class from the first (FR-106's closure note, class index) — another instance of why this ledger is keyed per statement. Its digest has now moved four times: in-progress to closure, again when the closure note absorbed the two leftovers' outcomes, again on 48974aaf when the markdown-link gate's own resolution was appended to the same line, and again under FR-172, which compacted every closure note to a pointer and reduced this one from 2,131 characters to the paths it names. The mirror condition reported every one of them, which is the point — a line-number key would have followed the move in silence, and FR-172's author did not know this ledger keyed a line of that file until the gate said so."
     }
   ]
 }

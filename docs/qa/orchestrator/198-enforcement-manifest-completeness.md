@@ -266,3 +266,35 @@ other reason. The diagnostic is asserted, not just the status.
       branch push or a pull request
 - [ ] `boundary-coverage` and `coverage-policy-fixtures` both install
       `./.github/actions/provider-stubs`
+
+## Certification record
+
+Moved here from the FR-147 closure note by FR-172, which found it recorded
+nowhere else. It is evidence that one full sweep met §4.6's validity conditions,
+not a procedure to repeat.
+
+At `099b6169`, same revision before and after, worktree clean at both ends. The
+gate set was **derived, not typed**: `jq '.scripts[]|select(.enforcement=="ci-required").path'`
+gave **46** paths (43 before this FR), and `workflow_model.rb run-commands` was
+read back per workflow/job for the real invocation lines — 51 lines touching
+`scripts/**`, of which **46 invocations** referenced a ci-required path, variants
+(`--fixture-test`, `--tool-fixtures`, the `FR126_FAST=1` prefix, and
+`certify-slack-managed-live.sh status`, which exits 2 when run bare) included. Of
+the 46 paths, 39 were invoked directly and 7 through a declared `invokedBy`
+wrapper; **the uncovered set was empty**. Each ran as `bash -c "$cmd" > log 2>&1`
+with `$?` taken directly, never through a pipe.
+
+**46/46 completed, 2 red, neither a regression from this FR**:
+`ci-liveness.rb` (its ledger stopped at `2b2e5cab` while ci.yml had moved on —
+confirmed by a before-run at `9fa37e37`, prior to this FR, which was red with the
+same diagnostic) and `test-dependency-policy.sh --tool-fixtures` (no `cargo-deny`
+on the machine, `error: no such command: deny`; that variant runs from
+`security.yml` and is revision-independent).
+
+Alongside: `test-qa-gate-surface.sh` 14/14 in main mode and **37 passed / 0
+failed** under `--fixture-test` with its summary line present; fixtures 25/26/27
+each fail only `check_workflow_execution_declared`. `cargo test --workspace
+--exclude orchestrator-gui` was 2725 passed / 0 failed / 2 ignored with strict
+clippy clean — the first cargo re-check **took no exit code at all**, having used
+`${PIPESTATUS[0]}` under zsh (whose arrays start at 1) with cargo piped into
+`tail`, and was re-run per §4.6.4 taking `$?` directly.
