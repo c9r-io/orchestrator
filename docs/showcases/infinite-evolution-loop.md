@@ -168,25 +168,29 @@ Reference convergence dimensions:
 
 ## Automatic Topic Discovery
 
-Implemented via agent step + `spawn_tasks` post-action, **with no core code changes required**:
+Implemented via an agent step that calls the `spawn_task` coordination tool, **with
+no core code changes required**:
 
 ```yaml
 - id: discover_topics
   required_capability: plan
   template: topic_discovery    # prompt guides agent to analyze codebase for improvement points
-  behavior:
-    post_actions:
-      - type: spawn_tasks
-        from_var: discover_output
-        json_path: "$.topics"
-        mapping:
-          goal: "$.description"
-          workflow: "self-evolution"
-          name: "$.slug"
-        max_tasks: 3
 ```
 
-The agent analyzes the codebase and outputs a JSON list -> `spawn_tasks` automatically creates sub-tasks. Combined with Trigger resources, this forms a continuous discovery loop.
+The agent analyzes the codebase and calls `spawn_task` once per topic it found,
+passing the goal and workflow directly:
+
+```json
+{"name": "spawn_task", "arguments": {"goal": "<description>", "workflow": "self-evolution", "name": "<slug>"}}
+```
+
+Combined with Trigger resources, this forms a continuous discovery loop.
+
+> The `spawn_tasks` post-action this showcase originally used — a JSONPath mapping
+> over a captured JSON array — was removed at the v0.7 window. The agent now holds
+> the list it produced rather than having the engine re-parse it out of stdout, and
+> `max_tasks` is replaced by the `safety.max_spawned_tasks` bound below, which
+> applies whatever route the spawn takes.
 
 ---
 

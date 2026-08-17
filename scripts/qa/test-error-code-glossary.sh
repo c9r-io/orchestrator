@@ -3,7 +3,7 @@
 # FR-152: the error-code glossary matches the source-derived code set.
 #
 # The orchestrator prints machine-readable bracketed codes —
-# [driver_config_invalid], [legacy_agent_command_deprecated] — straight to the
+# [driver_config_invalid], [secret_value_placeholder_rejected] — straight to the
 # user's terminal, concentrated on the first-run path. docs/guide/error-codes.md
 # is the glossary; this gate keeps it honest in both directions: a code the
 # product can emit but the glossary does not explain fails, and so does a
@@ -157,10 +157,14 @@ check_derivation_produces_codes() {
     echo "    the derivation produced an empty set" >&2
     return 1
   }
-  # legacy_agent_command_deprecated is the code the quickstart path prints;
-  # a derivation that lost it has the wrong scope, whatever else it found.
-  grep -qx "legacy_agent_command_deprecated" "$derived" || {
-    echo "    derivation sanity: legacy_agent_command_deprecated is missing from the set" >&2
+  # A sanity anchor: some code the derivation must find, or its scope is wrong
+  # whatever else it turned up. FR-173 retired the previous anchor
+  # (legacy_agent_command_deprecated) along with the surface it named, so the
+  # anchor moved to a code emitted from a different file and a different layer —
+  # picking one from the same file the derivation already reads would make this
+  # check agree with itself.
+  grep -qx "driver_config_invalid" "$derived" || {
+    echo "    derivation sanity: driver_config_invalid is missing from the set" >&2
     return 1
   }
 }
@@ -240,7 +244,7 @@ else
 fi
 
 if check_derivation_produces_codes "$DERIVED"; then
-  pass "the derived set is non-empty and contains the quickstart-path code"
+  pass "the derived set is non-empty and contains its cross-layer sanity anchor"
 else
   fail "the derivation lost its scope"
 fi

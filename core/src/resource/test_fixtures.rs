@@ -53,7 +53,19 @@ pub fn agent_manifest(name: &str, command: &str) -> OrchestratorResource {
         spec: ResourceSpec::Agent(Box::new(AgentSpec {
             enabled: None,
             command: command.to_string(),
-            driver: None,
+            // FR-173 made spec.driver required; a fixture without one no longer
+            // represents any manifest a user can write.
+            driver: Some(crate::config::AgentDriverConfig {
+                provider: crate::config::DriverProvider::Shell,
+                transport: crate::config::DriverTransport::Cli,
+                binary: None,
+                options: Default::default(),
+                claude: None,
+                codex: None,
+                shell: None,
+                raw_args: vec![],
+                unsafe_raw_args: false,
+            }),
             capabilities: None,
             metadata: None,
             selection: None,
@@ -98,10 +110,7 @@ pub fn workflow_manifest(name: &str) -> OrchestratorResource {
                 stall_timeout_secs: None,
                 behavior: Default::default(),
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
                 extra: Default::default(),
-                step_vars: None,
             }],
             loop_policy: WorkflowLoopSpec {
                 mode: "once".to_string(),
@@ -271,7 +280,6 @@ pub fn runtime_policy_manifest() -> OrchestratorResource {
                 shell: "/bin/bash".to_string(),
                 shell_arg: "-lc".to_string(),
                 policy: "unsafe".to_string(),
-                executor: "shell".to_string(),
                 allowed_shells: vec![],
                 allowed_shell_args: vec![],
                 env_allowlist: vec![],

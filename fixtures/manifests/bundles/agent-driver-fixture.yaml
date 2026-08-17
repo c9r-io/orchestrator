@@ -9,15 +9,17 @@ spec:
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---
-# fixture-driverless-exempt: FR-126 legacy promotion path; test-agent-driver-abstraction.sh asserts [legacy_agent_command_deprecated] on this document
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
-  name: legacy-shell-pilot
+  name: second-shell-pilot
 spec:
   capabilities: [driver_legacy_pilot]
   command: >-
     echo '{"confidence":1.0,"quality_score":1.0,"artifacts":[]}'
+  driver:
+    provider: shell
+    transport: cli
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -69,7 +71,7 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
-  name: legacy-shell-pilot
+  name: second-shell-pilot
 spec:
   steps:
     - id: run

@@ -209,7 +209,6 @@ mod tests {
                     shell: "/bin/bash".to_string(),
                     shell_arg: "-lc".to_string(),
                     policy: "allowlist".to_string(),
-                    executor: "shell".to_string(),
                     allowed_shells: vec![],
                     allowed_shell_args: vec![],
                     env_allowlist: vec![],

@@ -281,7 +281,7 @@ mod resource_delete_envelope_tests {
 }
 
 /// True when a warning or error line carries a bracketed machine code like
-/// `[legacy_agent_command_deprecated]` — the shapes documented in
+/// `[driver_config_invalid]` — the shapes documented in
 /// docs/guide/error-codes.md. Hand-rolled scan; a regex dependency for one
 /// hint line would be over-engineering.
 fn contains_bracketed_code(line: &str) -> bool {
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn bracketed_codes_are_detected() {
         assert!(contains_bracketed_code(
-            "[legacy_agent_command_deprecated] Agent 'echo' omits spec.driver"
+            "[secret_value_placeholder_rejected] SecretStore 's' key 'K' carries the placeholder"
         ));
         assert!(contains_bracketed_code(
             "[FILE_SHARING_GLOBAL_SKILL_UNTRUSTED] global Skill directory is untrusted"

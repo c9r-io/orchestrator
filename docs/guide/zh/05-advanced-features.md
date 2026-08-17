@@ -224,13 +224,15 @@ orchestrator store delete context my_key
   enabled: true
   behavior:
     post_actions:
-      - type: spawn_tasks
-        from_var: task_list        # 包含目标 JSON 数组的管道变量
-        json_path: "$.goals"
-        mapping:
-          goal: "$.description"
+      - type: spawn_task
+        goal: "verify-changes"
         workflow: child_workflow
 ```
+
+一次声明派生一个子任务。复数形式 `spawn_tasks` —— 从管道变量里取出 JSON 数组、再用
+JSONPath 表达式做映射 —— 随协调收敛退休，并在 v0.7 窗口被移除。需要按运行期算出的列表
+扇出的步骤，请在步骤内部对每一项调用一次 `spawn_task` 协调工具，让这个列表是步骤自己
+持有的值，而不是引擎从捕获文本里解析出来的东西。
 
 ### 安全限制
 
@@ -249,15 +251,15 @@ safety:
 
 ### 生成项
 
-```yaml
-- id: generate
-  scope: task
-  enabled: true
-  behavior:
-    post_actions:
-      - type: generate_items
-        from_var: candidates       # 包含 JSON 数组的管道变量
+项由 **`generate_items` 协调工具**生成，由步骤的 Agent 直接把项传进去：
+
+```json
+{"name": "generate_items", "arguments": {"items": [{"goal": "candidate-a"}, {"goal": "candidate-b"}]}}
 ```
+
+声明式的 `post_actions: [{type: generate_items, from_var: ...}]` 形式随协调收敛退休，
+并在 v0.7 窗口被移除。工具直接接收项本身，因此没有管道变量要填，也没有 JSONPath
+表达式可写错。
 
 ### 项选择
 

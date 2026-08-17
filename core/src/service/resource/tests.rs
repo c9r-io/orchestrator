@@ -14,19 +14,19 @@ fn workflow_manifest(name: &str, command: &str) -> String {
 
 fn project_bundle_manifest(delete_workflow_name: &str, workspace_root: &str) -> String {
     format!(
-        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {delete_workflow_name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo delete\"\n  loop:\n    mode: once\n"
+        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n  driver:\n    provider: shell\n    transport: cli\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: {delete_workflow_name}\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo delete\"\n  loop:\n    mode: once\n"
     )
 }
 
 fn project_subset_manifest(workspace_root: &str) -> String {
     format!(
-        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
+        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: shared-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: shared-agent\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n  driver:\n    provider: shell\n    transport: cli\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: keep-me\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
     )
 }
 
 fn labeled_bundle_manifest(project: &str, workspace_root: &str) -> String {
     format!(
-        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: labeled-ws\n  labels:\n    env: dev\n    tier: qa\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: unlabeled-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: labeled-agent\n  labels:\n    env: dev\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: labeled-workflow\n  project: {project}\n  labels:\n    env: dev\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
+        "apiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: labeled-ws\n  labels:\n    env: dev\n    tier: qa\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Workspace\nmetadata:\n  name: unlabeled-ws\nspec:\n  root_path: \"{workspace_root}\"\n  qa_targets:\n    - docs/qa\n  ticket_dir: docs/ticket\n  self_referential: false\n---\napiVersion: orchestrator.dev/v2\nkind: Agent\nmetadata:\n  name: labeled-agent\n  labels:\n    env: dev\nspec:\n  capabilities:\n    - implement\n  command: \"echo '{{\\\"confidence\\\":1.0,\\\"quality_score\\\":1.0,\\\"artifacts\\\":[]}}'\"\n  driver:\n    provider: shell\n    transport: cli\n---\napiVersion: orchestrator.dev/v2\nkind: Workflow\nmetadata:\n  name: labeled-workflow\n  project: {project}\n  labels:\n    env: dev\nspec:\n  steps:\n    - id: implement\n      type: implement\n      enabled: true\n      command: \"echo keep\"\n  loop:\n    mode: once\n"
     )
 }
 
@@ -51,7 +51,7 @@ spec:
 }
 
 #[test]
-fn apply_legacy_command_agent_warns_and_persists_shell_driver() {
+fn apply_command_only_agent_is_rejected_and_not_persisted() {
     let mut fixture = TestState::new();
     let state = fixture.build();
     let manifest = "apiVersion: orchestrator.dev/v2
@@ -63,6 +63,9 @@ spec:
   command: echo {prompt}
 ";
 
+    // Apply reports a manifest rejection in-band (DD-137): the call succeeds and
+    // the refusal arrives in `errors`/`diagnostics`. An `expect_err` here would
+    // fail even against a correct implementation.
     let response = apply_manifests(
         &state,
         manifest,
@@ -70,22 +73,35 @@ spec:
         Some(crate::config::DEFAULT_PROJECT_ID),
         false,
     )
-    .expect("legacy Agent should be accepted during compatibility window");
+    .expect("apply returns the rejection in-band, not as a transport error");
+
+    assert!(
+        response.results.is_empty(),
+        "nothing may be applied: {:?}",
+        response.results
+    );
+    let error = response.errors.join(" | ");
+    assert!(error.contains("agent.spec.driver is required"), "{error}");
+    assert!(error.contains("provider: shell"), "{error}");
     assert!(
         response
-            .warnings
+            .diagnostics
             .iter()
-            .any(|warning| warning.contains("legacy_agent_command_deprecated"))
+            .any(|d| d.code == "manifest_invalid"),
+        "the refusal must be machine-readable: {:?}",
+        response.diagnostics
     );
 
+    // The rejection has to happen before anything is persisted. Asserting only
+    // the error would pass on an implementation that stored the Agent and then
+    // complained.
     let active = read_active_config(&state).expect("read active config");
-    let agent = &active.config.projects[crate::config::DEFAULT_PROJECT_ID].agents["legacy-command"];
-    let driver = agent
-        .driver
-        .as_ref()
-        .expect("normalized Agent should persist a typed driver");
-    assert_eq!(driver.provider, crate::config::DriverProvider::Shell);
-    assert_eq!(driver.transport, crate::config::DriverTransport::Cli);
+    assert!(
+        !active.config.projects[crate::config::DEFAULT_PROJECT_ID]
+            .agents
+            .contains_key("legacy-command"),
+        "a rejected Agent must not be persisted"
+    );
 }
 
 #[test]

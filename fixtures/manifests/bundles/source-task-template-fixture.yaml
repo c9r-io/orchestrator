@@ -16,7 +16,6 @@ spec:
     shell: /bin/bash
     shell_arg: "-lc"
     policy: unsafe
-    executor: shell
     allowed_shells: [/bin/bash, /bin/zsh, /bin/sh]
     allowed_shell_args: ["-lc", "-c"]
     env_allowlist: [PATH, HOME, USER, LANG, TERM]

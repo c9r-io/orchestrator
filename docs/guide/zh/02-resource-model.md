@@ -64,7 +64,7 @@ spec:
 
 ## 2. Agent（代理）
 
-Agent 是具有声明能力并显式选择 provider driver 的执行单元。历史 command-only manifest 只在 runtime 兼容入口被接受；Apply 会发出 `[legacy_agent_command_deprecated]`，并持久化显式 `shell/cli` driver。
+Agent 是具有声明能力并显式选择 provider driver 的执行单元。`spec.driver` 必填：FR-173 移除了此前接受 command-only manifest 的提升逻辑，Apply 现在会拒绝这类 manifest，并在诊断中给出应当补写的 driver 块。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -102,8 +102,8 @@ spec:
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `capabilities` | 是 | 此代理能做什么（与步骤的 `required_capability` 匹配） |
-| `command` | 条件必填 | 显式 `shell/cli` driver 必填；Claude/Codex driver 应省略。command-only 输入仅用于兼容，并会在告警后被提升 |
-| `driver` | 新 manifest 必填 | 类型化的 provider/transport adapter（`shell`、`claude`、`codex`；当前可执行 transport 为 CLI） |
+| `command` | 条件必填 | 显式 `shell/cli` driver 必填；Claude/Codex driver 应省略。只写 `command` 而不写 `driver` 会被拒绝，不再被提升 |
+| `driver` | 必填 | 类型化的 provider/transport adapter（`shell`、`claude`、`codex`；当前可执行 transport 为 CLI） |
 | `metadata.cost` | 否 | 用于代理选择策略的成本感知路由 |
 | `metadata.description` | 否 | 代理的人类可读描述 |
 | `selection` | 否 | 代理选择策略覆盖（见下文） |
@@ -281,7 +281,7 @@ spec:
   observability: { ... }
 ```
 
-新 manifest 不应设置 **`runner.executor`**。它只是 parse-only 兼容字段：`shell` 仅为历史 round-trip 兼容而接受；`streaming` 会在 Apply 时以 `[legacy_runner_executor_removed]` 被拒绝。Provider 执行归属于每个 Agent 的 `spec.driver`；请选择 `shell/cli`、`claude/cli` 或 `codex/cli`。
+`runner.executor` 已不存在。它曾是 parse-only 兼容字段，唯一被接受的值什么也不选择，FR-173 在 v0.7 窗口移除了它；`RunnerSpec` 现在声明 `deny_unknown_fields`，所以仍携带该字段的 manifest 会被具名拒绝，而不是让这个键被悄悄丢弃。Provider 执行归属于每个 Agent 的 `spec.driver`；请选择 `shell/cli`、`claude/cli` 或 `codex/cli`。
 
 ## 7. ExecutionProfile（执行 Profile）
 

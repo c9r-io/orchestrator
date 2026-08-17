@@ -73,9 +73,6 @@ fn minimal_config() -> agent_orchestrator::config::OrchestratorConfig {
                             timeout_secs: None,
                             stall_timeout_secs: None,
                             item_select_config: None,
-                            store_inputs: vec![],
-                            store_outputs: vec![],
-                            step_vars: None,
                         }],
                         execution: Default::default(),
                         loop_policy: WorkflowLoopConfig {
@@ -135,6 +132,9 @@ metadata:
   name: {name}
 spec:
   command: "{command}"
+  driver:
+    provider: shell
+    transport: cli
   capabilities:
     - qa
 "#
@@ -319,24 +319,53 @@ spec:
     );
 }
 
+/// FR-173 replaced the "command or driver" alternative with a required driver,
+/// so the two halves are now two distinct refusals and each needs its own case.
+/// A single test asserting "some error" would pass on an implementation that
+/// reported the missing command when the driver is what is missing.
 #[test]
-fn validation_rejects_agent_without_command_or_driver() {
+fn validation_rejects_an_agent_without_a_driver() {
+    let yaml = r#"apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: driverless-agent
+spec:
+  command: "echo {prompt}"
+"#;
+    let resources = parse_resources_from_yaml(yaml).expect("parse invalid agent");
+    let registered = dispatch_resource(only(resources)).expect("dispatch invalid agent");
+    let message = registered
+        .validate()
+        .expect_err("a driverless Agent is refused")
+        .to_string();
+    assert!(
+        message.contains("agent.spec.driver is required"),
+        "{message}"
+    );
+    assert!(message.contains("provider: shell"), "{message}");
+}
+
+#[test]
+fn validation_rejects_an_empty_command_under_a_shell_driver() {
     let yaml = r#"apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: empty-agent
 spec:
   command: "  "
+  driver:
+    provider: shell
+    transport: cli
 "#;
     let resources = parse_resources_from_yaml(yaml).expect("parse invalid agent");
     let registered = dispatch_resource(only(resources)).expect("dispatch invalid agent");
-    let result = registered.validate();
-    assert!(result.is_err());
+    let message = registered
+        .validate()
+        .expect_err("a shell driver without a command is refused")
+        .to_string();
     assert!(
-        result
-            .expect_err("operation should fail")
-            .to_string()
-            .contains("agent.spec.command or agent.spec.driver is required")
+        message.contains("driver shell/cli requires agent.spec.command"),
+        "{message}"
     );
 }
 
@@ -751,9 +780,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "qa_doc_gen".to_string(),
@@ -777,9 +803,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "implement".to_string(),
@@ -803,9 +826,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "qa_testing".to_string(),
@@ -829,9 +849,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "ticket_fix".to_string(),
@@ -855,9 +872,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "align_tests".to_string(),
@@ -881,9 +895,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "doc_governance".to_string(),
@@ -907,9 +918,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                             WorkflowStepConfig {
                                 id: "loop_guard".to_string(),
@@ -933,9 +941,6 @@ fn multi_agent_config() -> agent_orchestrator::config::OrchestratorConfig {
                                 timeout_secs: None,
                                 stall_timeout_secs: None,
                                 item_select_config: None,
-                                store_inputs: vec![],
-                                store_outputs: vec![],
-                                step_vars: None,
                             },
                         ],
                         execution: Default::default(),
@@ -1076,9 +1081,6 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "align_tests".to_string(),
@@ -1102,9 +1104,6 @@ fn normalize_workflow_sets_required_capability_for_sdlc_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),

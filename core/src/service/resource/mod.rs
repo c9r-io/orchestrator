@@ -89,14 +89,11 @@ pub fn apply_manifests(
                 }
                 // Collect non-fatal compatibility and schema warnings before
                 // normalization persists the resource.
-                match registered {
-                    crate::resource::RegisteredResource::Workflow(ref wf) => {
-                        warnings.extend(wf.collect_warnings());
-                    }
-                    crate::resource::RegisteredResource::Agent(ref agent) => {
-                        warnings.extend(agent.collect_warnings());
-                    }
-                    _ => {}
+                // Only Workflow carries warnings now; FR-173 removed Agent's
+                // `collect_warnings`, which existed to announce the command-only
+                // promotion.
+                if let crate::resource::RegisteredResource::Workflow(ref wf) = registered {
+                    warnings.extend(wf.collect_warnings());
                 }
                 if let Some(meta_project) = registered.metadata_project()
                     && meta_project != cli_project

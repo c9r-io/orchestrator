@@ -181,9 +181,19 @@ pub(super) async fn spawn_phase_process(
             tty_early_return: None,
         });
     }
+    // FR-173 retired the `[legacy_agent_execution_removed]` code but not this
+    // guard. Immediately below is the direct-command spawn path, which the
+    // comment there marks as *not* Agent execution; without this check a
+    // driverless Agent would take it and run, which is the pre-driver execution
+    // path the abstraction exists to have removed. Removing the guard would buy
+    // one fewer error code at the price of a silent wrong execution.
+    //
+    // The advice changed with it: re-applying a command-only Agent no longer
+    // promotes it to shell/cli, it is rejected, so the manifest is where the
+    // driver has to be declared.
     if setup.driver.is_none() && agent_id != "builtin" {
         anyhow::bail!(
-            "[legacy_agent_execution_removed] Agent '{agent_id}' has no typed driver; re-apply it to promote command-only configuration to shell/cli"
+            "Agent '{agent_id}' has no typed driver; declare `spec.driver` in its manifest and re-apply"
         );
     }
     // Engine-owned direct Step commands deliberately keep the shared safe

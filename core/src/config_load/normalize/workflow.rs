@@ -73,9 +73,6 @@ pub fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             };
             apply_default_step_behavior(&mut placeholder);
             let _ = normalize_step_execution_mode_recursive(&mut placeholder);

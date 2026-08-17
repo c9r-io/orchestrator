@@ -470,11 +470,12 @@ end
 # populate them and nothing read them. Counting them as "production consumers"
 # counted something that could not have one. FR-156 deleted the fields; an
 # author who writes `outputs:` now gets the ordinary unknown-field warning.
-pipeline_consumer_kinds = %w[
-  step_vars
-  store_inputs
-  store_outputs
-].freeze
+# FR-173 retired these at v0.7: the fields and the store_put variant are gone,
+# so there is no authoring surface left to count. The list stays as an empty
+# frozen array rather than being deleted, because the consumer scan below is what
+# proves the count is zero — removing the scan would make the ledger's
+# productionConsumerCount an assertion nobody re-derives.
+pipeline_consumer_kinds = %w[].freeze
 pipeline_consumers = documents.flat_map do |document|
   document["touches"].map do |touch|
     # The store_put post-action is the sixth. It reads a pipeline variable by

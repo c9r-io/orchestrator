@@ -106,11 +106,9 @@ if fixture_premise "production fixture bindings" ruby -ryaml -rjson -rdigest -e 
       document["kind"] == "Agent" && document.dig("metadata", "name") == production_name
     end
     abort("missing production Agent #{production_name}") unless production
-    legacy = agents.fetch("#{fixture_prefix}-legacy")
     typed = agents.fetch("#{fixture_prefix}-typed")
     command = production.dig("spec", "command")
-    abort("#{contract} fixture command drift") unless
-      legacy.dig("spec", "command") == command && typed.dig("spec", "command") == command
+    abort("#{contract} fixture command drift") unless typed.dig("spec", "command") == command
     abort("#{contract} target driver drift") unless
       production.dig("spec", "driver", "provider") == "shell" &&
       typed.dig("spec", "driver", "provider") == "shell" &&
@@ -223,11 +221,28 @@ PROJECT="qa-agent-driver-production-parity"
   cd "$QA_ROOT/workspace"
   "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out" 2>&1
 )
-if [[ "$(rg -c 'legacy_agent_command_deprecated' "$QA_ROOT/apply.out")" -eq 3 ]]; then
-  pass "all three production shell compatibility manifests warn and promote"
-else
+# Before FR-173 this counted three [legacy_agent_command_deprecated] warnings.
+# The promotion is gone, so the assertion is inverted — and inverting it alone
+# would be satisfied by an apply that failed outright and therefore warned about
+# nothing. The three Agents must be present with a shell driver afterwards.
+if rg -q 'legacy_agent_command_deprecated' "$QA_ROOT/apply.out"; then
   cat "$QA_ROOT/apply.out" >&2
-  fail "expected three command-only promotion warnings"
+  fail "a retired promotion warning is still emitted"
+else
+  applied_typed=0
+  for fixture_agent in hello-typed scheduled-typed fr-watch-typed; do
+    if (cd "$QA_ROOT/workspace" &&
+        "$ORCH" get agent "$fixture_agent" --project "$PROJECT" -o json) |
+        jq -e '.spec.driver.provider == "shell"' >/dev/null; then
+      applied_typed=$((applied_typed + 1))
+    fi
+  done
+  if [[ "$applied_typed" -eq 3 ]]; then
+    pass "the three production shell contracts apply with explicit drivers and no promotion"
+  else
+    cat "$QA_ROOT/apply.out" >&2
+    fail "expected 3 typed shell Agents after apply, found $applied_typed"
+  fi
 fi
 
 create_and_wait() {
@@ -257,42 +272,46 @@ create_and_wait() {
 
 DB="$QA_ROOT/data/agent_orchestrator.db"
 EVIDENCE='[]'
+# Each contract used to run twice — once through a command-only Agent and once
+# through a typed one — and the pass required the two to agree *and* to match the
+# recorded pre-migration baseline. FR-173 retired the command-only form, which
+# left the two declarations differing only in capability name, so the first
+# conjunct compared a run against a rename of itself. The baseline comparison is
+# the one that was always carrying the evidence (§4.3), and it is unchanged: the
+# hash on the right-hand side still comes from a run recorded before the
+# migration, not from anything this gate produces.
 for contract in hello scheduled fr-watch; do
-  legacy="$(create_and_wait "parity-$contract-legacy")"
   typed="$(create_and_wait "parity-$contract-typed")"
-  legacy_id="${legacy%%|*}"
   typed_id="${typed%%|*}"
-  legacy_status="${legacy##*|}"
   typed_status="${typed##*|}"
-  legacy_exit="$(sqlite3 "$DB" "SELECT exit_code FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='$legacy_id') ORDER BY started_at DESC LIMIT 1;")"
   typed_exit="$(sqlite3 "$DB" "SELECT exit_code FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='$typed_id') ORDER BY started_at DESC LIMIT 1;")"
-  legacy_stdout="$(sqlite3 "$DB" "SELECT stdout_path FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='$legacy_id') ORDER BY started_at DESC LIMIT 1;")"
   typed_stdout="$(sqlite3 "$DB" "SELECT stdout_path FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id='$typed_id') ORDER BY started_at DESC LIMIT 1;")"
-  legacy_hash="$(shasum -a 256 "$legacy_stdout" | awk '{print $1}')"
   typed_hash="$(shasum -a 256 "$typed_stdout" | awk '{print $1}')"
   baseline_key="$contract"
   [[ "$contract" == "hello" ]] && baseline_key="hello-world"
   [[ "$contract" == "scheduled" ]] && baseline_key="scheduled-scan"
   baseline_hash="$(jq -r --arg key "$baseline_key" '.contracts[$key].stdoutSha256' "$BASELINE")"
-  legacy_events="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$legacy_id' AND event_type LIKE 'driver_%';")"
+  # An absent baseline entry yields the string "null", which would compare equal
+  # to a second "null" and pass on two things that were never measured.
+  if [[ -z "$baseline_hash" || "$baseline_hash" == "null" ]]; then
+    fail "$baseline_key has no recorded pre-migration stdout hash to compare against"
+    continue
+  fi
   typed_events="$(sqlite3 "$DB" "SELECT COUNT(*) FROM events WHERE task_id='$typed_id' AND event_type LIKE 'driver_%';")"
-  if [[ "$legacy_status" == "completed" && "$typed_status" == "completed" &&
-        "$legacy_exit" == "0" && "$typed_exit" == "0" &&
-        "$legacy_hash" == "$typed_hash" && "$typed_hash" == "$baseline_hash" &&
-        "$legacy_events" -gt 0 && "$typed_events" -gt 0 ]]; then
+  if [[ "$typed_status" == "completed" && "$typed_exit" == "0" &&
+        "$typed_hash" == "$baseline_hash" && "$typed_events" -gt 0 ]]; then
     pass "$baseline_key preserves terminal, exit, exact output, and normalized events"
   else
-    fail "$baseline_key parity diverged"
+    fail "$baseline_key diverged from its recorded pre-migration contract"
   fi
   EVIDENCE="$(jq -c \
     --arg contract "$baseline_key" \
-    --arg legacy_task "$legacy_id" \
     --arg typed_task "$typed_id" \
     --arg terminal "$typed_status" \
     --arg stdout_sha256 "$typed_hash" \
-    --argjson legacy_events "$legacy_events" \
+    --arg baseline_sha256 "$baseline_hash" \
     --argjson typed_events "$typed_events" \
-    '. + [{contract:$contract,legacy_task:$legacy_task,typed_task:$typed_task,terminal:$terminal,stdout_sha256:$stdout_sha256,legacy_driver_events:$legacy_events,typed_driver_events:$typed_events}]' \
+    '. + [{contract:$contract,typed_task:$typed_task,terminal:$terminal,stdout_sha256:$stdout_sha256,baseline_sha256:$baseline_sha256,typed_driver_events:$typed_events}]' \
     <<<"$EVIDENCE")"
 done
 

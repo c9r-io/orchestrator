@@ -402,9 +402,6 @@ mod tests {
                         timeout_secs: None,
                         stall_timeout_secs: None,
                         item_select_config: None,
-                        store_inputs: vec![],
-                        store_outputs: vec![],
-                        step_vars: None,
                     },
                     WorkflowStepConfig {
                         id: "implement".into(),
@@ -428,9 +425,6 @@ mod tests {
                         timeout_secs: None,
                         stall_timeout_secs: None,
                         item_select_config: None,
-                        store_inputs: vec![],
-                        store_outputs: vec![],
-                        step_vars: None,
                     },
                     WorkflowStepConfig {
                         id: "loop_guard".into(),
@@ -459,9 +453,6 @@ mod tests {
                         timeout_secs: None,
                         stall_timeout_secs: None,
                         item_select_config: None,
-                        store_inputs: vec![],
-                        store_outputs: vec![],
-                        step_vars: None,
                     },
                 ],
                 execution: Default::default(),
@@ -593,9 +584,6 @@ mod tests {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -658,9 +646,6 @@ mod tests {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -703,9 +688,6 @@ mod tests {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -775,9 +757,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         }];
 
         let tmp = tempfile::tempdir().expect("create temp dir");
@@ -877,9 +856,6 @@ mod tests {
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                 }],
                 execution: Default::default(),
                 loop_policy: WorkflowLoopConfig::default(),
@@ -951,9 +927,6 @@ mod tests {
                     timeout_secs: None,
                     stall_timeout_secs: None,
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                 }],
                 scope: None,
                 behavior: StepBehavior::default(),
@@ -962,9 +935,6 @@ mod tests {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             });
 
         let tmp = tempfile::tempdir().expect("create temp dir");

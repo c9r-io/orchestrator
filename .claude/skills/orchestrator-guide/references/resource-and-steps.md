@@ -404,21 +404,20 @@ behavior:
     action: continue          # continue | set_status | early_return
   on_success:
     action: continue
-  captures:
-    - var: build_output
-      source: stdout          # stdout | stderr | exit_code | failed_flag | success_flag
   post_actions:
     - type: create_ticket
     - type: scan_tickets
     - type: spawn_task        # WP02
       goal: "verify"
       workflow: verify_wf
-    - type: spawn_tasks       # WP02 (multiple)
-      from_var: task_list
-      workflow: child_wf
-    - type: generate_items    # WP03
-      from_var: candidates
 ```
+
+`create_ticket`, `scan_tickets` and `spawn_task` are the whole set. `captures`,
+`spawn_tasks`, `generate_items` and `store_put` were removed at the v0.7 window and
+a step declaring any of them is refused by name — `StepBehavior` declares
+`deny_unknown_fields`, so the refusal names the key rather than dropping it. Fanning
+out over a runtime list and generating items are both done from inside the step, via
+the `spawn_task` and `generate_items` coordination tools.
 
 ## Loop Policy
 

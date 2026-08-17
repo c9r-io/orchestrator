@@ -26,16 +26,6 @@ impl Resource for RuntimePolicyResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
-        if self.spec.runner.executor == "streaming" {
-            return Err(anyhow!(
-                "[legacy_runner_executor_removed] runner.executor=streaming was removed; configure a typed Agent driver instead"
-            ));
-        }
-        if self.spec.runner.executor != "shell" {
-            return Err(anyhow!(
-                "runner.executor must be shell; the field is retained only for manifest compatibility"
-            ));
-        }
         if self.spec.runner.policy == "allowlist" {
             let mut errors = Vec::new();
             if self.spec.runner.allowed_shells.is_empty() {
@@ -185,9 +175,6 @@ pub(crate) fn runner_config_to_spec(config: &RunnerConfig) -> RunnerSpec {
             RunnerPolicy::Unsafe => "unsafe".to_string(),
             RunnerPolicy::Allowlist => "allowlist".to_string(),
         },
-        // Parse-only compatibility field. Execution is selected per Agent
-        // through `spec.driver`, never through a global runner switch.
-        executor: "shell".to_string(),
         allowed_shells: config.allowed_shells.clone(),
         allowed_shell_args: config.allowed_shell_args.clone(),
         env_allowlist: config.env_allowlist.clone(),
@@ -288,7 +275,6 @@ mod tests {
             shell: "/bin/zsh".to_string(),
             shell_arg: "-c".to_string(),
             policy: "allowlist".to_string(),
-            executor: "shell".to_string(),
             allowed_shells: vec!["/bin/bash".to_string()],
             allowed_shell_args: vec!["-c".to_string()],
             env_allowlist: vec!["PATH".to_string()],
@@ -304,7 +290,6 @@ mod tests {
         let roundtripped = runner_config_to_spec(&config);
         assert_eq!(roundtripped.shell, "/bin/zsh");
         assert_eq!(roundtripped.policy, "allowlist");
-        assert_eq!(roundtripped.executor, "shell");
         assert_eq!(roundtripped.allowed_shells, vec!["/bin/bash".to_string()]);
     }
 
@@ -353,19 +338,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_removed_streaming_executor() {
-        let mut manifest = runtime_policy_manifest();
-        if let ResourceSpec::RuntimePolicy(ref mut spec) = manifest.spec {
-            spec.runner.executor = "streaming".to_string();
-        }
-        let resource = dispatch_resource(manifest).expect("dispatch should succeed");
-        let error = resource
-            .validate()
-            .expect_err("removed global executor must fail closed");
-        assert!(error.to_string().contains("legacy_runner_executor_removed"));
-    }
-
-    #[test]
     fn validate_accepts_unsafe_with_empty_lists() {
         let manifest = runtime_policy_manifest();
         let resource = dispatch_resource(manifest).expect("dispatch should succeed");
@@ -378,7 +350,6 @@ mod tests {
             shell: "/bin/sh".to_string(),
             shell_arg: "-c".to_string(),
             policy: "unsafe".to_string(),
-            executor: "shell".to_string(),
             allowed_shells: vec![],
             allowed_shell_args: vec![],
             env_allowlist: vec![],
@@ -396,7 +367,6 @@ mod tests {
             shell: "/bin/sh".to_string(),
             shell_arg: "-c".to_string(),
             policy: "legacy".to_string(),
-            executor: "shell".to_string(),
             allowed_shells: vec![],
             allowed_shell_args: vec![],
             env_allowlist: vec![],
@@ -414,7 +384,6 @@ mod tests {
             shell: "/bin/sh".to_string(),
             shell_arg: "-c".to_string(),
             policy: "unknown".to_string(),
-            executor: "shell".to_string(),
             allowed_shells: vec![],
             allowed_shell_args: vec![],
             env_allowlist: vec![],

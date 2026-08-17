@@ -11,84 +11,11 @@ the product without a glossary entry fails the build, and so does an entry
 whose code no longer exists. Run `orchestrator guide error-codes` for the CLI
 pointer to this page.
 
-## `legacy_agent_command_deprecated`
 
-- **Meaning**: a `kind: Agent` manifest sets `spec.command` but omits
-  `spec.driver`. This is the deprecated pre-driver authoring form.
-- **Trigger**: `orchestrator apply` on such a manifest. The apply succeeds:
-  the warning announces that the Agent is promoted to an explicit `shell/cli`
-  driver when persisted.
-- **Action**: add the typed driver to the manifest so the promotion is
-  explicit:
 
-  ```yaml
-  spec:
-    driver:
-      provider: shell
-      transport: cli
-  ```
 
-  See [Agent Driver Model](agent-driver-model.md).
 
-## `legacy_agent_execution_removed`
 
-- **Meaning**: the scheduler was asked to execute an Agent whose stored record
-  has no typed driver — a record persisted before driver promotion existed.
-- **Trigger**: task execution selects such an Agent.
-- **Action**: re-apply the Agent manifest. Apply promotes command-only
-  configuration to `shell/cli` and the stored record gains its driver.
-
-## `legacy_coordination_removed`
-
-- **Meaning**: a Workflow step uses `behavior.captures`, part of the
-  removed CEL/capture coordination mechanism (DD-137).
-- **Trigger**: `orchestrator apply` or `manifest validate` on a Workflow
-  carrying `behavior.captures`. The manifest is rejected.
-- **Action**: delete the `captures` block and use typed driver/tool results
-  instead. See [Coordination Tools](coordination-tools.md).
-
-## `legacy_json_path_removed`
-
-- **Meaning**: a Workflow step uses a JSONPath-backed post-action
-  (`spawn_tasks` / `generate_items`), removed with the same coordination
-  collapse.
-- **Trigger**: `orchestrator apply` or `manifest validate` on such a Workflow.
-  The manifest is rejected.
-- **Action**: replace the post-action with typed daemon tools. See
-  [Coordination Tools](coordination-tools.md).
-
-## `legacy_pipeline_variables_removed`
-
-- **Meaning**: a Workflow step authors a pipeline variable through one of the
-  four retired step-level constructs — `store_inputs`, `store_outputs`,
-  `step_vars`, or a `store_put` post-action. All four routed an author-chosen
-  value through the generic pipeline-variable map retired by the coordination
-  collapse (DD-169).
-- **Trigger**: `orchestrator apply` or `manifest validate` on such a Workflow,
-  including when the construct sits inside `chain_steps`. The manifest is
-  rejected and the diagnostic names which of the four you used.
-- **Action**: have the step address the store itself, which needs no binding:
-
-  ```yaml
-  command: >-
-    LAST_SHA="$(orchestrator store get promotion last_published_sha
-    --project {project_id} 2>/dev/null || true)" && ...
-  ```
-
-  `{project_id}` renders from the task context, so nothing has to be
-  pre-substituted into the step. For an agent step, put the same command in the
-  prompt and let the agent run it. For `step_vars`, write the value directly into
-  the step's own command or prompt. See [Coordination Tools](coordination-tools.md).
-
-## `legacy_runner_executor_removed`
-
-- **Meaning**: the manifest sets `runner.executor: streaming`, a removed
-  execution mode. `runner.executor` survives only as a parse-only
-  compatibility field for the historical `shell` value.
-- **Trigger**: `orchestrator apply` on a manifest with
-  `runner.executor: streaming`. The manifest is rejected.
-- **Action**: delete `runner.executor` and configure each Agent's
-  `spec.driver` instead (`shell/cli`, `claude/cli`, or `codex/cli`).
 
 ## `driver_config_invalid`
 

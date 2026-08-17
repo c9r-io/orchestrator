@@ -1,7 +1,6 @@
 use super::*;
 use crate::config::{
-    CaptureDecl, CaptureSource, ExecutionMode, LoopMode, OrchestratorConfig, StepBehavior,
-    WorkflowConfig, WorkflowStepConfig,
+    ExecutionMode, LoopMode, OrchestratorConfig, StepBehavior, WorkflowConfig, WorkflowStepConfig,
 };
 use crate::config_load::tests::{make_builtin_step, make_command_step, make_step, make_workflow};
 #[allow(unused_imports)]
@@ -32,9 +31,6 @@ fn normalize_workflow_sets_builtin_for_self_test() {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -139,9 +135,6 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test_recover".to_string(),
@@ -165,9 +158,6 @@ fn normalize_workflow_preserves_multiple_self_test_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -430,7 +420,6 @@ fn normalize_sets_non_coordination_defaults_for_qa_step() {
         qa.behavior.collect_artifacts,
         "qa step should have collect_artifacts=true"
     );
-    assert!(qa.behavior.captures.is_empty());
     assert!(qa.behavior.post_actions.is_empty());
 }
 
@@ -443,7 +432,6 @@ fn normalize_does_not_inject_coordination_for_fix_step() {
         .iter()
         .find(|s| s.id == "fix")
         .expect("fix step should exist");
-    assert!(fix.behavior.captures.is_empty());
     assert!(fix.behavior.post_actions.is_empty());
 }
 
@@ -460,35 +448,7 @@ fn normalize_sets_non_coordination_defaults_for_retest_step() {
         retest.behavior.collect_artifacts,
         "retest step should have collect_artifacts=true"
     );
-    assert!(retest.behavior.captures.is_empty());
     assert!(retest.behavior.post_actions.is_empty());
-}
-
-#[test]
-fn normalize_does_not_duplicate_existing_captures() {
-    let mut step = make_step("qa", true);
-    step.behavior.captures.push(CaptureDecl {
-        var: "qa_failed".to_string(),
-        source: CaptureSource::FailedFlag,
-        json_path: None,
-    });
-    let mut workflow = make_workflow(vec![step]);
-    normalize_workflow_config(&mut workflow);
-    let qa = workflow
-        .steps
-        .iter()
-        .find(|s| s.id == "qa")
-        .expect("qa step should exist");
-    let qa_failed_count = qa
-        .behavior
-        .captures
-        .iter()
-        .filter(|c| c.var == "qa_failed")
-        .count();
-    assert_eq!(
-        qa_failed_count, 1,
-        "should not duplicate existing qa_failed capture"
-    );
 }
 
 #[test]
@@ -690,9 +650,6 @@ fn normalize_preserves_required_capability_on_custom_step_ids() {
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
-        store_inputs: vec![],
-        store_outputs: vec![],
-        step_vars: None,
     }];
     let mut wf = make_workflow(steps);
     normalize_workflow_config(&mut wf);
@@ -797,8 +754,13 @@ fn normalize_config_rebuilds_resource_store_from_config_snapshot() {
     );
 }
 
+/// FR-173 removed the command-only promotion. The inverted assertion matters
+/// more than the deleted one did: `load_config` does not normalise, so a record
+/// written before the retirement survives a load with `driver: None`, and the
+/// scheduler's spawn guard is what stands between that record and a pre-driver
+/// execution. Normalisation quietly re-adding a driver would hide it.
 #[test]
-fn normalize_config_promotes_legacy_command_agent_to_shell_driver() {
+fn normalize_config_no_longer_promotes_a_command_only_agent() {
     let mut config = OrchestratorConfig::default();
     config
         .projects
@@ -814,13 +776,16 @@ fn normalize_config_promotes_legacy_command_agent_to_shell_driver() {
         );
 
     let normalized = normalize_config(config);
-    let driver = normalized.projects[crate::config::DEFAULT_PROJECT_ID].agents["legacy-shell"]
-        .driver
-        .as_ref()
-        .expect("legacy command agent should be promoted");
+    let agent = &normalized.projects[crate::config::DEFAULT_PROJECT_ID].agents["legacy-shell"];
 
-    assert_eq!(driver.provider, crate::config::DriverProvider::Shell);
-    assert_eq!(driver.transport, crate::config::DriverTransport::Cli);
+    assert!(
+        agent.driver.is_none(),
+        "normalisation must not invent a driver: {:?}",
+        agent.driver
+    );
+    // The command is left alone — the record is preserved as written, it is
+    // simply no longer completed on the way through.
+    assert_eq!(agent.command, "echo {prompt}");
 }
 
 #[test]

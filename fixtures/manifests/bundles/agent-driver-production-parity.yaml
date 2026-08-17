@@ -1,4 +1,11 @@
 # FR-126 offline production-contract parity fixture.
+# FR-173 collapsed this bundle's legacy half. Until the v0.7 window the
+# bundle carried a `<name>-legacy` Agent beside each `<name>-typed` one and
+# the gate compared their runs. With the command-only form retired the two
+# declarations differed only in capability name, so that comparison measured
+# a rename. The evidence that survives is the one that was always doing the
+# work: each typed run against the recorded pre-migration baseline in
+# fixtures/driver/legacy-agent-execution-baseline.json.
 # This bundle mirrors only deterministic execution contracts from production
 # manifests. It never invokes a real provider or applies docs/workflow directly.
 # Provider commands must run under a NON-login shell for the gate's PATH
@@ -29,16 +36,6 @@ spec:
   qa_targets: [docs/qa]
   ticket_dir: docs/ticket
 ---
-# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
-apiVersion: orchestrator.dev/v2
-kind: Agent
-metadata:
-  name: hello-legacy
-spec:
-  capabilities: [hello_legacy]
-  command: >-
-    echo '{"confidence":0.95,"quality_score":0.9, "artifacts":[{"kind":"analysis","findings":[ {"title":"hello-world","description":"Workflow executed successfully.","severity":"info"} ]}]}'
----
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -51,16 +48,6 @@ spec:
     provider: shell
     transport: cli
 ---
-# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
-apiVersion: orchestrator.dev/v2
-kind: Agent
-metadata:
-  name: scheduled-legacy
-spec:
-  capabilities: [scheduled_legacy]
-  command: >-
-    echo '{"confidence":0.94,"quality_score":0.91, "artifacts":[{"kind":"analysis","findings":[ {"title":"no-critical-issues","description":"No critical security issues found. 2 low-severity recommendations noted.","severity":"info"} ]}]}'
----
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
@@ -72,16 +59,6 @@ spec:
   driver:
     provider: shell
     transport: cli
----
-# fixture-driverless-exempt: FR-138 legacy/typed parity matrix; test-agent-driver-production-parity.sh asserts exactly 3 [legacy_agent_command_deprecated] warnings
-apiVersion: orchestrator.dev/v2
-kind: Agent
-metadata:
-  name: fr-watch-legacy
-spec:
-  capabilities: [fr_watch_legacy]
-  command: >-
-    echo '{"confidence":0.93,"quality_score":0.90, "artifacts":[{"kind":"analysis","findings":[ {"title":"fr-triaged","description":"FR triaged: P1 priority, medium complexity, no blocking dependencies.","severity":"info"} ]}]}'
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -122,20 +99,6 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
-  name: parity-hello-legacy
-spec:
-  steps:
-    - id: run
-      type: hello_legacy
-      required_capability: hello_legacy
-      enabled: true
-      repeatable: false
-  loop:
-    mode: once
----
-apiVersion: orchestrator.dev/v2
-kind: Workflow
-metadata:
   name: parity-hello-typed
 spec:
   steps:
@@ -150,40 +113,12 @@ spec:
 apiVersion: orchestrator.dev/v2
 kind: Workflow
 metadata:
-  name: parity-scheduled-legacy
-spec:
-  steps:
-    - id: run
-      type: scheduled_legacy
-      required_capability: scheduled_legacy
-      enabled: true
-      repeatable: false
-  loop:
-    mode: once
----
-apiVersion: orchestrator.dev/v2
-kind: Workflow
-metadata:
   name: parity-scheduled-typed
 spec:
   steps:
     - id: run
       type: scheduled_typed
       required_capability: scheduled_typed
-      enabled: true
-      repeatable: false
-  loop:
-    mode: once
----
-apiVersion: orchestrator.dev/v2
-kind: Workflow
-metadata:
-  name: parity-fr-watch-legacy
-spec:
-  steps:
-    - id: run
-      type: fr_watch_legacy
-      required_capability: fr_watch_legacy
       enabled: true
       repeatable: false
   loop:

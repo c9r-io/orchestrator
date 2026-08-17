@@ -305,6 +305,10 @@ fn every_tracked_bundle_is_accepted_or_declared() {
 /// the way the apply path does — `collect_warnings` on each dispatched
 /// resource — rather than grepping the YAML for `driver:`, so the assertion
 /// holds against what the product would print, not how the fixture is spelled.
+///
+/// FR-173 removed the Agent arm: a command-only Agent is now rejected by
+/// validate rather than warned about, so corpus validity above already covers
+/// it and a warning collector here would have nothing to collect.
 #[test]
 fn quickstart_bundle_applies_without_warnings() {
     let root = repo_root();
@@ -324,14 +328,8 @@ fn quickstart_bundle_applies_without_warnings() {
         let registered = crate::resource::dispatch_resource(*resource)
             .unwrap_or_else(|error| panic!("{path} resource does not dispatch: {error}"));
         dispatched += 1;
-        match &registered {
-            crate::resource::RegisteredResource::Workflow(wf) => {
-                warnings.extend(wf.collect_warnings());
-            }
-            crate::resource::RegisteredResource::Agent(agent) => {
-                warnings.extend(agent.collect_warnings());
-            }
-            _ => {}
+        if let crate::resource::RegisteredResource::Workflow(wf) = &registered {
+            warnings.extend(wf.collect_warnings());
         }
     }
     assert_eq!(
@@ -509,7 +507,6 @@ fn agents_md_manifests_apply_without_legacy_warnings() {
                         agent.metadata.name,
                         index + 1
                     );
-                    warnings.extend(agent.collect_warnings());
                 }
                 _ => {}
             }
@@ -582,10 +579,14 @@ fn an_injected_retired_construct_is_rejected_by_its_own_diagnostic() {
     );
     assert!(
         report.errors.iter().any(|error| {
-            error.contains("[legacy_coordination_removed]")
-                && error.contains("fr148-retired-construct-probe")
+            // FR-173 deleted `behavior.captures` and gave StepBehavior
+            // `deny_unknown_fields`, so the retirement diagnostic is now serde's
+            // unknown-field error rather than a named `[legacy_*]` code. What the
+            // fixture asserts is unchanged: the construct is refused, and the
+            // refusal says which field.
+            error.contains("captures")
         }),
-        "expected the retirement diagnostic naming the injected workflow; got: {:?}",
+        "expected the refusal to name the retired field; got: {:?}",
         report.errors
     );
 
@@ -665,7 +666,7 @@ mod evaluator {
             vec![declaration(
                 "a.yaml",
                 Status::Rotted,
-                "[legacy_coordination_removed]",
+                "[example_rejection_code]",
             )],
         );
         let violations = evaluate(&observed, &ledger);
@@ -682,7 +683,7 @@ mod evaluator {
             "a.yaml".to_string(),
             Outcome::Invalid(vec![
                 "workspace 'w' work_dir not found: /nope".to_string(),
-                "[legacy_json_path_removed] workflow 'w' step 's'".to_string(),
+                "[example_rejection_code] workflow 'w' step 's'".to_string(),
             ]),
         )]);
         let ledger = ledger(
@@ -690,7 +691,7 @@ mod evaluator {
             vec![declaration(
                 "a.yaml",
                 Status::Rotted,
-                "[legacy_json_path_removed]",
+                "[example_rejection_code]",
             )],
         );
         assert!(evaluate(&observed, &ledger).is_empty());
@@ -700,15 +701,13 @@ mod evaluator {
     fn an_undeclared_rejection_is_a_violation() {
         let observed = BTreeMap::from([(
             "a.yaml".to_string(),
-            Outcome::Invalid(vec![
-                "[legacy_coordination_removed] workflow 'w'".to_string(),
-            ]),
+            Outcome::Invalid(vec!["[example_rejection_a] workflow 'w'".to_string()]),
         )]);
         let violations = evaluate(&observed, &ledger(0, vec![]));
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert!(
             violations[0].contains("undeclared rejection")
-                && violations[0].contains("legacy_coordination_removed"),
+                && violations[0].contains("example_rejection_a"),
             "the violation has to carry the diagnostic, or the reader learns nothing: \
              {violations:?}"
         );
@@ -791,13 +790,13 @@ mod evaluator {
         let observed = BTreeMap::from([(
             "a.yaml".to_string(),
             Outcome::Invalid(vec![
-                "[legacy_json_path_removed] workflow 'second' step 'plan'".to_string(),
+                "[example_rejection_b] workflow 'second' step 'plan'".to_string(),
             ]),
         )]);
         let mut entry = declaration("a.yaml", Status::Intentional, "unused");
         entry.expect = vec![
-            "[legacy_coordination_removed] workflow 'first' step 'qa'".to_string(),
-            "[legacy_json_path_removed] workflow 'second' step 'plan'".to_string(),
+            "[example_rejection_a] workflow 'first' step 'qa'".to_string(),
+            "[example_rejection_b] workflow 'second' step 'plan'".to_string(),
         ];
         assert!(evaluate(&observed, &ledger(0, vec![entry.clone()])).is_empty());
 

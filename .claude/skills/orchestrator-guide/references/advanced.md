@@ -102,10 +102,11 @@ behavior:
     - type: spawn_task
       goal: "verify-changes"
       workflow: verify_wf
-    - type: spawn_tasks
-      from_var: task_list       # JSON array
-      workflow: child_wf
 ```
+
+One child per declaration. The plural `spawn_tasks` was removed at the v0.7 window;
+fan out over a runtime list by calling the `spawn_task` coordination tool from inside
+the step, once per item.
 
 Safety:
 
@@ -118,14 +119,15 @@ safety:
 
 ## Dynamic Items + Selection (WP03)
 
-Generate items:
+Generate items by calling the `generate_items` coordination tool from inside the
+step, passing the items themselves:
 
-```yaml
-behavior:
-  post_actions:
-    - type: generate_items
-      from_var: candidates
+```json
+{"name": "generate_items", "arguments": {"items": [{"goal": "candidate-a"}]}}
 ```
+
+The declarative `post_actions: [{type: generate_items, from_var: ...}]` form was
+removed at the v0.7 window.
 
 Select items:
 

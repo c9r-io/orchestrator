@@ -22,12 +22,10 @@ pub(crate) fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorCo
             triggers: Default::default(),
         });
 
+    // FR-173 retired the command-only Agent promotion at the v0.7 window. An
+    // Agent without `spec.driver` is now rejected by validate rather than
+    // silently given a shell/cli one here, so nothing is left to normalise.
     for project in config.projects.values_mut() {
-        for agent in project.agents.values_mut() {
-            if agent.driver.is_none() && !agent.command.trim().is_empty() {
-                agent.driver = Some(crate::config::AgentDriverConfig::shell_cli());
-            }
-        }
         for workflow in project.workflows.values_mut() {
             normalize_workflow_config(workflow);
         }
