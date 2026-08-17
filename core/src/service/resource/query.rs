@@ -120,6 +120,45 @@ fn get_single_resource(
                     anyhow::anyhow!("{} not found: {}", crd.kind, name),
                 ));
             }
+            // Project, RuntimePolicy, EnvStore and SecretStore have a typed
+            // reader but no store-based rendering above. Serving them from the
+            // same function `describe` calls is what makes `get kind/name` and
+            // `describe kind/name` agree byte for byte — a property this arm
+            // gets for free and a duplicated kind list here would not.
+            //
+            // The kind has to be resolved *separately* from the lookup, because
+            // `describe_builtin_resource` returns `Ok(None)` both for a kind it
+            // does not know and for a known kind whose instance is absent.
+            // Asking it alone reports a missing instance as an unknown type,
+            // which is the diagnostic conflation FR-171 requirement 3 is about.
+            // The builtin CRD registry already carries every alias, so the
+            // singular set is derived from it rather than repeated here.
+            //
+            // Plural forms are excluded deliberately: `get workspaces/foo` is a
+            // malformed query, and answering it with `Workspace not found: foo`
+            // would assert something about `foo` that was never looked up.
+            if let Some(crd) = crate::crd::resolve::find_crd_by_kind_or_alias(config, kind) {
+                let singular = crd.kind.eq_ignore_ascii_case(kind)
+                    || crd
+                        .short_names
+                        .iter()
+                        .any(|short| short.eq_ignore_ascii_case(kind));
+                if singular {
+                    if let Some(content) = describe_builtin_resource(
+                        config,
+                        kind,
+                        name,
+                        output_format,
+                        Some(project_id),
+                    )? {
+                        return Ok(content);
+                    }
+                    return Err(classify_resource_error(
+                        "resource.get",
+                        anyhow::anyhow!("{} not found: {}", crd.kind, name),
+                    ));
+                }
+            }
             return Err(classify_resource_error(
                 "resource.get",
                 anyhow::anyhow!("unknown resource type: {kind}"),
@@ -244,6 +283,28 @@ fn get_list_resource(
             project.source_task_bindings.keys().collect(),
             "SourceTaskBinding",
         ),
+        "envstore" | "env-store" | "env_store" | "envstores" => {
+            (project.env_stores.keys().collect(), "EnvStore")
+        }
+        // Listing a SecretStore yields names only — this function formats
+        // `filtered`, which is a Vec of names, and never touches a spec. The
+        // values live in `get_single_resource`, which redacts them.
+        "secretstore" | "secret-store" | "secret_store" | "secretstores" => {
+            (project.secret_stores.keys().collect(), "SecretStore")
+        }
+        // Project is the one kind that is not project-scoped, so it is read
+        // from the whole config rather than from `project`, and `--project`
+        // does not narrow it. The empty name is skipped for the same reason
+        // `export_manifest_resources` skips it: a blank project id is a
+        // structural artefact, not a project someone created.
+        "project" | "projects" => (
+            config
+                .projects
+                .keys()
+                .filter(|name| !name.is_empty())
+                .collect(),
+            "Project",
+        ),
         _ => {
             // CRD-defined custom resource list fallback (skip kinds with dedicated ProjectConfig
             // projections — those are handled by the match arms above)
@@ -284,13 +345,23 @@ fn get_list_resource(
         }
     };
 
+    // `get_namespaced` is a raw `{kind}/{project}/{name}` lookup and does not
+    // resolve scope itself. Every kind above except Project is project-scoped;
+    // Project is stored under `_system`, so looking it up under `project_id`
+    // would find nothing and silently drop every row from a label query.
+    let store_project = if crate::crd::store::is_project_scoped(crd_kind) {
+        project_id
+    } else {
+        crate::crd::store::SYSTEM_PROJECT
+    };
+
     let filtered: Vec<&String> = if let Some(sel) = selector {
         let conditions = parse_label_selector(sel)?;
         names
             .into_iter()
             .filter(|name| {
                 let labels = resource_store
-                    .get_namespaced(crd_kind, project_id, name)
+                    .get_namespaced(crd_kind, store_project, name)
                     .and_then(|cr| cr.metadata.labels.as_ref());
                 match_labels(labels, &conditions)
             })
@@ -377,6 +448,34 @@ fn describe_builtin_resource(
             ExecutionProfileResource::get_from_project(config, name, project)
                 .map(RegisteredResource::ExecutionProfile)
         }
+        "envstore" | "env-store" | "env_store" => {
+            EnvStoreResource::get_from_project(config, name, project)
+                .map(RegisteredResource::EnvStore)
+        }
+        // The in-memory config holds decrypted SecretStore values — the load
+        // path runs `decrypt_resource_spec_json` over every resource — so this
+        // is the point where they must not escape. Reads render the same
+        // placeholder `sanitized_config_snapshot` writes into a snapshot; the
+        // values are reachable only through env injection, never through a
+        // read command.
+        "secretstore" | "secret-store" | "secret_store" => {
+            SecretStoreResource::get_from_project(config, name, project).map(|mut store| {
+                for value in store.spec.data.values_mut() {
+                    *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
+                }
+                RegisteredResource::SecretStore(store)
+            })
+        }
+        "project" => ProjectResource::get_from_project(config, name, project)
+            .map(RegisteredResource::Project),
+        // RuntimePolicy is a resolved singleton rather than a stored row:
+        // `get_from_project` returns the effective policy for any name, walking
+        // project -> `_system` -> defaults. That is why it answers a single
+        // read and is deliberately absent from `get_list_resource`.
+        "runtimepolicy" | "runtime-policy" => {
+            RuntimePolicyResource::get_from_project(config, name, project)
+                .map(RegisteredResource::RuntimePolicy)
+        }
         _ => return Ok(None),
     };
     resource
@@ -434,10 +533,67 @@ pub fn list_resource_summaries(
             "executionprofile",
             project.execution_profiles.keys().cloned().collect(),
         ),
+        "envstore" | "env-store" | "env_store" | "envstores" => (
+            "EnvStore",
+            "envstore",
+            project.env_stores.keys().cloned().collect(),
+        ),
+        // Names only, like every other row here: the page carries name, revision
+        // and source, never a spec. A single read of one of these redacts.
+        "secretstore" | "secret-store" | "secret_store" | "secretstores" => (
+            "SecretStore",
+            "secretstore",
+            project.secret_stores.keys().cloned().collect(),
+        ),
+        // Project is not project-scoped, so its names come from the whole config
+        // and `--project` does not narrow the page.
+        "project" | "projects" => (
+            "Project",
+            "project",
+            config
+                .projects
+                .keys()
+                .filter(|name| !name.is_empty())
+                .cloned()
+                .collect(),
+        ),
+        // This catalog covers the kinds with a typed renderer, because it renders
+        // every row through `describe_builtin_resource` and treats `None` as a
+        // missing resource. That is eight of twelve: Trigger, SourceTaskTemplate
+        // and SourceTaskBinding are readable through `get` but have no typed
+        // renderer, and adding one changes how `describe` renders them — the
+        // rendering convergence FR-171 deliberately left out of scope. RuntimePolicy
+        // is absent for the reason it is absent from `get_list_resource`: it is a
+        // resolved singleton, not a collection.
+        //
+        // The message says which of those two reasons applies rather than
+        // reporting every unsupported kind as bad input, which is what
+        // "unsupported expert resource catalog type" did for all seven.
         other => {
+            // Two registries are consulted because neither covers all twelve
+            // kinds. `find_crd_by_kind_or_alias` yields the canonical kind name
+            // but has no definition for Trigger; `is_builtin_alias` knows every
+            // kind's singular and plural but returns only a bool. So a Trigger
+            // query is correctly told *why* it is refused and cannot be told the
+            // canonical spelling — a user-visible consequence of the asymmetry,
+            // recorded rather than papered over.
+            let canonical = crate::crd::resolve::find_crd_by_kind_or_alias(config, other)
+                .map(|crd| crd.kind.clone());
+            let builtin_name = canonical.is_some() || crate::crd::resolve::is_builtin_alias(other);
             return Err(classify_resource_error(
                 "resource.list",
-                anyhow::anyhow!("unsupported expert resource catalog type: {other}"),
+                match canonical.as_deref() {
+                    Some("RuntimePolicy") => anyhow::anyhow!(
+                        "RuntimePolicy is a resolved singleton, not a collection; read it with `get runtimepolicy/<name>`"
+                    ),
+                    Some(kind) => anyhow::anyhow!(
+                        "{kind} is not in the resource catalog: it has no typed renderer, so it is readable through `get {other}/<name>` but not browsable here"
+                    ),
+                    None if builtin_name => anyhow::anyhow!(
+                        "{other} names a builtin resource with no typed renderer, so it is readable through `get` but not browsable here"
+                    ),
+                    None => anyhow::anyhow!("unknown resource catalog type: {other}"),
+                },
             ));
         }
     };

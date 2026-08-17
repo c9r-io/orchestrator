@@ -180,6 +180,21 @@ pointer to this page.
   without producing changes — usually a goal the agent judged already done,
   or a prompt that did not reach the working directory it was meant to edit.
 
+## `secret_value_placeholder_rejected`
+
+- **Meaning**: a `kind: SecretStore` manifest carries the redaction placeholder
+  `[ENCRYPTED]` as a value instead of a real secret. Reads redact secret
+  values, so this is what a manifest obtained from `get secretstore/<name>` or
+  `describe secretstore/<name>` looks like — it does not carry the values it
+  appears to carry.
+- **Trigger**: `orchestrator apply` or `manifest validate` on such a manifest.
+  The manifest is rejected; nothing is written.
+- **Action**: supply the real value for every key. Apply replaces the whole
+  store, so a key omitted from `spec.data` is deleted rather than preserved —
+  a redacted manifest cannot be repaired by deleting the placeholder lines.
+  Read commands are for inspecting which keys a store defines; they are not a
+  backup of its values.
+
 ## `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED`
 
 - **Meaning**: a globally shared Skill directory failed the trust check; the

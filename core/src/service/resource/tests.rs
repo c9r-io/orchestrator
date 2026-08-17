@@ -753,3 +753,442 @@ fn driver_apply_errors_expose_stable_structured_diagnostics() {
     assert_eq!(errors.len(), 1);
     assert!(errors[0].contains("driver_raw_args_unsafe_mode_required"));
 }
+
+/// FR-171: which read entry points recognise which `ResourceKind`.
+///
+/// The property under test is **entry-point reachability**, not the arm count of
+/// any one function. That distinction is the whole point: FR-171 was filed
+/// claiming `describe` supported five kinds because `describe_builtin_resource`
+/// has five typed arms, and it was wrong — that function returns `Ok(None)` for
+/// the rest and `describe_resource` falls back to `get_resource`. A gate that
+/// counted arms would have preserved the error it was written to prevent, so
+/// every probe below goes through the public entry point a command calls.
+mod resource_observability_matrix {
+    use super::*;
+    use crate::cli_types::ResourceKind;
+
+    /// What each kind must answer, per the FR-171 adjudication.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct Adjudication {
+        /// `orchestrator get <plural>` recognises the type.
+        list: bool,
+        /// `orchestrator get <singular>/<name>` recognises the type.
+        single: bool,
+    }
+
+    /// Query names and adjudication per kind.
+    ///
+    /// Wildcard-free on purpose, following the `apply_action_naming` idiom in
+    /// `crates/daemon/src/server/resource.rs`: a thirteenth `ResourceKind`
+    /// variant does not fail an assertion, it **fails to compile**, so the
+    /// adjudication cannot silently omit it. The compiler is the derivation from
+    /// the enum; `ALL_KINDS` below only keeps the iteration list honest.
+    fn adjudicated(kind: ResourceKind) -> (&'static str, &'static str, Adjudication) {
+        let both = Adjudication {
+            list: true,
+            single: true,
+        };
+        match kind {
+            ResourceKind::Workspace => ("workspaces", "workspace", both),
+            ResourceKind::Agent => ("agents", "agent", both),
+            ResourceKind::Workflow => ("workflows", "workflow", both),
+            ResourceKind::StepTemplate => ("steptemplates", "steptemplate", both),
+            ResourceKind::ExecutionProfile => ("executionprofiles", "executionprofile", both),
+            ResourceKind::Trigger => ("triggers", "trigger", both),
+            ResourceKind::SourceTaskTemplate => ("sourcetasktemplates", "sourcetasktemplate", both),
+            ResourceKind::SourceTaskBinding => ("sourcetaskbindings", "sourcetaskbinding", both),
+            // Added by FR-171.
+            ResourceKind::EnvStore => ("envstores", "envstore", both),
+            ResourceKind::SecretStore => ("secretstores", "secretstore", both),
+            ResourceKind::Project => ("projects", "project", both),
+            // RuntimePolicy is deliberately not listable. It is a resolved
+            // singleton — `get_from_project` returns the effective policy for
+            // any name, walking project -> `_system` -> defaults, and
+            // `delete_from_project` is hardcoded false — so a collection query
+            // would imply a second one could be applied. Single read only.
+            ResourceKind::RuntimePolicy => (
+                "runtimepolicies",
+                "runtimepolicy",
+                Adjudication {
+                    list: false,
+                    single: true,
+                },
+            ),
+        }
+    }
+
+    const ALL_KINDS: [ResourceKind; 12] = [
+        ResourceKind::Workspace,
+        ResourceKind::Agent,
+        ResourceKind::Workflow,
+        ResourceKind::Project,
+        ResourceKind::RuntimePolicy,
+        ResourceKind::StepTemplate,
+        ResourceKind::SourceTaskTemplate,
+        ResourceKind::SourceTaskBinding,
+        ResourceKind::ExecutionProfile,
+        ResourceKind::EnvStore,
+        ResourceKind::SecretStore,
+        ResourceKind::Trigger,
+    ];
+
+    #[test]
+    fn all_kinds_covers_every_variant() {
+        fn index(kind: ResourceKind) -> usize {
+            match kind {
+                ResourceKind::Workspace => 0,
+                ResourceKind::Agent => 1,
+                ResourceKind::Workflow => 2,
+                ResourceKind::Project => 3,
+                ResourceKind::RuntimePolicy => 4,
+                ResourceKind::StepTemplate => 5,
+                ResourceKind::SourceTaskTemplate => 6,
+                ResourceKind::SourceTaskBinding => 7,
+                ResourceKind::ExecutionProfile => 8,
+                ResourceKind::EnvStore => 9,
+                ResourceKind::SecretStore => 10,
+                ResourceKind::Trigger => 11,
+            }
+        }
+        let mut seen = [false; 12];
+        for kind in ALL_KINDS {
+            seen[index(kind)] = true;
+        }
+        assert!(
+            seen.iter().all(|hit| *hit),
+            "ALL_KINDS has fallen behind ResourceKind"
+        );
+    }
+
+    /// The adjudication above is written down, not derived — §4.4's rule is that
+    /// a judgement has no ledger to derive from. But it is not unconstrained
+    /// either: the codebase had already declared which kinds are collections,
+    /// twice, before anyone wrote the reason down.
+    ///
+    /// `builtin_crd_definitions()` carries `CrdScope`, and `RuntimePolicy` is the
+    /// only builtin marked `Singleton` (the enum's own doc comment says
+    /// "Singleton resources such as RuntimePolicy"). Independently,
+    /// `is_builtin_alias` reserves a plural name against CRD use for eleven of
+    /// twelve kinds and reserves only the singular for RuntimePolicy.
+    ///
+    /// This test asserts the two agree. If someone changes a scope, it fails
+    /// naming the kind rather than silently following the change — which is what
+    /// deriving `list` from `CrdScope` would have done instead.
+    #[test]
+    fn adjudication_agrees_with_the_declared_crd_scope() {
+        use crate::crd::builtin_defs::builtin_crd_definitions;
+        use crate::crd::scope::CrdScope;
+
+        let scopes: std::collections::HashMap<String, CrdScope> = builtin_crd_definitions()
+            .iter()
+            .map(|def| (def.kind.clone(), def.scope))
+            .collect();
+
+        // The two registries are not mirrors of each other, which this test
+        // found rather than assumed: `Trigger` is a `ResourceKind` with no
+        // builtin CRD definition, and the registry separately carries
+        // `WorkflowStore` and `StoreBackendProvider`, which are CRDs and not
+        // `ResourceKind` variants — the same class of drift DD-182 found when the
+        // guide listed `WorkflowStore` among the built-in kinds.
+        //
+        // So the cross-check runs over the intersection and *names* what it
+        // skipped. A silently shrinking comparison set is how this kind of test
+        // reports success over ground it stopped covering.
+        let mut unchecked = Vec::new();
+        for kind in ALL_KINDS {
+            let (_, _, want) = adjudicated(kind);
+            let canonical = format!("{kind:?}");
+            let Some(scope) = scopes.get(&canonical) else {
+                unchecked.push(canonical);
+                continue;
+            };
+            let listable_by_scope = *scope != CrdScope::Singleton;
+            assert_eq!(
+                want.list, listable_by_scope,
+                "{canonical}: adjudication says list={}, declared CrdScope {:?} implies list={}",
+                want.list, scope, listable_by_scope
+            );
+        }
+        assert_eq!(
+            unchecked,
+            vec!["Trigger".to_string()],
+            "the set of ResourceKinds without a builtin CRD definition changed; \
+             each one is a kind this cross-check cannot see"
+        );
+
+        // The adjudication rests on RuntimePolicy being the only singleton. That
+        // is asserted directly, so a second kind becoming `Singleton` fails here
+        // instead of quietly making the rule ambiguous.
+        let singletons: Vec<&String> = scopes
+            .iter()
+            .filter(|(_, scope)| **scope == CrdScope::Singleton)
+            .map(|(kind, _)| kind)
+            .collect();
+        assert_eq!(
+            singletons,
+            vec!["RuntimePolicy"],
+            "RuntimePolicy is expected to be the only Singleton builtin"
+        );
+    }
+
+    /// Recognition is probed with **no instance applied**, which is what
+    /// separates "this entry point knows the type" from "there is one of these".
+    /// A recognised singular read of an absent name says `<Kind> not found`; an
+    /// unrecognised one says `unknown resource type`. Those are different
+    /// sentences, and the difference is the measurement.
+    #[test]
+    fn every_entry_point_matches_its_adjudication() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let project = Some(crate::config::DEFAULT_PROJECT_ID);
+
+        for kind in ALL_KINDS {
+            let (plural, singular, want) = adjudicated(kind);
+
+            let list = get_resource(&state, plural, None, "yaml", project);
+            let list_recognised = match &list {
+                Ok(_) => true,
+                Err(err) => !err.to_string().contains("unknown list resource type"),
+            };
+            assert_eq!(
+                list_recognised, want.list,
+                "list recognition for {kind:?} via `get {plural}`: {list:?}"
+            );
+
+            let named = format!("{singular}/fr171-absent-probe");
+            let single = get_resource(&state, &named, None, "yaml", project);
+            let single_recognised = match &single {
+                Ok(_) => true,
+                Err(err) => !err.to_string().contains("unknown resource type"),
+            };
+            assert_eq!(
+                single_recognised, want.single,
+                "single recognition for {kind:?} via `get {named}`: {single:?}"
+            );
+
+            // `describe` and the single read must agree **exactly**, on success
+            // and on failure alike.
+            //
+            // The first version of this check asked only whether describe's error
+            // mentioned `unknown resource type`, and that was §4.4 shape 1 written
+            // into the very test meant to guard against it: verified by mutation,
+            // making `describe_builtin_resource`'s `_ => Ok(None)` return an error
+            // instead left all four tests green, because a *different* error
+            // message read as "recognised". Comparing the two outcomes needs no
+            // taxonomy of error text — a fallback that stops working makes the two
+            // entry points disagree, whatever it says.
+            //
+            // Absent instances are compared on purpose: for a present resource the
+            // two paths render differently (typed vs. store), which FR-171
+            // deliberately does not converge.
+            let described = describe_resource(&state, &named, "yaml", project);
+            let single_outcome = match &single {
+                Ok(content) => Ok(content.clone()),
+                Err(err) => Err(err.to_string()),
+            };
+            let describe_outcome = match &described {
+                Ok(content) => Ok(content.clone()),
+                Err(err) => Err(err.to_string()),
+            };
+            assert_eq!(
+                describe_outcome, single_outcome,
+                "`describe {named}` and `get {named}` must return the same outcome for {kind:?}"
+            );
+        }
+    }
+
+    /// The GUI's resource catalog (`list_resource_summaries`) renders every row
+    /// through `describe_builtin_resource`, so it can only page kinds with a typed
+    /// renderer — eight of twelve. Before FR-171 it served five and answered the
+    /// other seven with `unsupported expert resource catalog type`, which reports
+    /// "the product has not decided" as "you typed something invalid".
+    ///
+    /// The three excluded-but-readable kinds and the singleton now get distinct
+    /// diagnostics. Asserting the diagnostics rather than the exit code is the
+    /// point: three refusals that differ only in exit status cannot tell an
+    /// operator which of three reasons applies.
+    #[test]
+    fn the_resource_catalog_pages_eight_kinds_and_explains_the_rest() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let project = Some(crate::config::DEFAULT_PROJECT_ID);
+
+        let manifest = concat!(
+            "apiVersion: orchestrator.dev/v2\nkind: EnvStore\nmetadata:\n  name: catalog-env\n",
+            "spec:\n  data:\n    A: b\n",
+            "---\napiVersion: orchestrator.dev/v2\nkind: SecretStore\nmetadata:\n  name: catalog-secret\n",
+            "spec:\n  data:\n    K: catalog-secret-value\n",
+        );
+        apply_manifests(&state, manifest, false, project, false).expect("seed catalog resources");
+
+        for (query, expected_name) in [
+            ("envstores", "catalog-env"),
+            ("secretstores", "catalog-secret"),
+            ("projects", crate::config::DEFAULT_PROJECT_ID),
+        ] {
+            let page = list_resource_summaries(&state, query, project, None, 50)
+                .unwrap_or_else(|err| panic!("catalog must page {query}: {err:?}"));
+            assert!(
+                page.resources.iter().any(|row| row.name == expected_name),
+                "catalog page for {query} is missing {expected_name}: {:?}",
+                page.resources
+            );
+        }
+
+        // A paged SecretStore row carries no spec, so there is nothing to redact —
+        // asserted rather than assumed, because "the page has no values" is the
+        // property that lets the catalog list secret stores at all.
+        let secret_page = list_resource_summaries(&state, "secretstores", project, None, 50)
+            .expect("page secret stores");
+        let rendered = format!("{:?}", secret_page.resources);
+        assert!(
+            !rendered.contains("catalog-secret-value"),
+            "a catalog page must not carry secret values: {rendered}"
+        );
+
+        let singleton = list_resource_summaries(&state, "runtimepolicies", project, None, 50)
+            .expect_err("RuntimePolicy is not a collection");
+        assert!(
+            singleton.to_string().contains("singleton"),
+            "the refusal must say why, not just refuse: {singleton}"
+        );
+
+        // Trigger exercises the asymmetry between the two registries: it is a
+        // `ResourceKind` with no builtin CRD definition, so the refusal can give
+        // the reason but not the canonical spelling. Asserted as it actually is,
+        // rather than asserting a canonical name the code cannot produce.
+        let no_renderer = list_resource_summaries(&state, "triggers", project, None, 50)
+            .expect_err("Trigger has no typed renderer");
+        let message = no_renderer.to_string();
+        assert!(message.contains("triggers"), "got: {message}");
+        assert!(
+            message.contains("typed renderer"),
+            "the refusal must distinguish itself from the singleton case: {message}"
+        );
+
+        // SourceTaskTemplate does have a CRD definition, so the same refusal
+        // names the canonical kind. Both shapes are covered because they take
+        // different arms.
+        let named_renderer =
+            list_resource_summaries(&state, "sourcetasktemplates", project, None, 50)
+                .expect_err("SourceTaskTemplate has no typed renderer");
+        assert!(
+            named_renderer.to_string().contains("SourceTaskTemplate"),
+            "got: {named_renderer}"
+        );
+
+        let unknown = list_resource_summaries(&state, "nonsuchkind", project, None, 50)
+            .expect_err("an unknown type is still an unknown type");
+        assert!(
+            unknown
+                .to_string()
+                .contains("unknown resource catalog type"),
+            "got: {unknown}"
+        );
+    }
+
+    /// The recognition probes above read a diagnostic, which is a proxy. This
+    /// one observes the fact itself: seed each kind FR-171 added and require the
+    /// resource to come back.
+    #[test]
+    fn kinds_added_by_fr171_are_actually_retrievable() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let project = Some(crate::config::DEFAULT_PROJECT_ID);
+
+        let manifest = concat!(
+            "apiVersion: orchestrator.dev/v2\nkind: EnvStore\nmetadata:\n  name: shared-env\n",
+            "spec:\n  data:\n    LOG_LEVEL: debug\n",
+            "---\napiVersion: orchestrator.dev/v2\nkind: SecretStore\nmetadata:\n  name: api-keys\n",
+            "spec:\n  data:\n    OPENAI_API_KEY: sk-matrix-7c31\n",
+        );
+        apply_manifests(&state, manifest, false, project, false).expect("seed stores");
+
+        let env_listed =
+            get_resource(&state, "envstores", None, "yaml", project).expect("list env stores");
+        assert!(env_listed.contains("shared-env"), "got: {env_listed}");
+
+        let env_single = get_resource(&state, "envstore/shared-env", None, "yaml", project)
+            .expect("get env store");
+        assert!(env_single.contains("LOG_LEVEL"), "got: {env_single}");
+
+        let secret_listed = get_resource(&state, "secretstores", None, "yaml", project)
+            .expect("list secret stores");
+        assert!(secret_listed.contains("api-keys"), "got: {secret_listed}");
+
+        // Listing yields names only, and a single read redacts. Both halves are
+        // asserted: absence of the value alone would also pass if SecretStore
+        // dropped out of the read path entirely.
+        let secret_single = get_resource(&state, "secretstore/api-keys", None, "yaml", project)
+            .expect("get secret store");
+        assert!(
+            !secret_single.contains("sk-matrix-7c31"),
+            "a read must not expose a secret value: {secret_single}"
+        );
+        assert!(
+            secret_single.contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER),
+            "a read must show the placeholder, not omit the key: {secret_single}"
+        );
+        assert!(
+            secret_single.contains("OPENAI_API_KEY"),
+            "a read must still show which keys the store defines: {secret_single}"
+        );
+
+        // Project is the one non-project-scoped kind: it is read from the whole
+        // config, so `--project` does not narrow it.
+        let projects_listed =
+            get_resource(&state, "projects", None, "yaml", project).expect("list projects");
+        assert!(
+            projects_listed.contains(crate::config::DEFAULT_PROJECT_ID),
+            "got: {projects_listed}"
+        );
+
+        // A name that lists must also read. Without this the ruling is only half
+        // asserted, and "listable but reports not-found on a single read" — the
+        // inconsistency FR-171's acceptance names — would pass.
+        let project_single = get_resource(
+            &state,
+            &format!("project/{}", crate::config::DEFAULT_PROJECT_ID),
+            None,
+            "yaml",
+            project,
+        )
+        .expect("get the project that the list just returned");
+        assert!(
+            project_single.contains(crate::config::DEFAULT_PROJECT_ID),
+            "got: {project_single}"
+        );
+        assert!(
+            project_single.contains("Project"),
+            "a single read must render the kind: {project_single}"
+        );
+
+        // Every name the list returns must read, not merely the one this test
+        // happens to name — the difference between an assertion about a fixture
+        // and an assertion about the surface.
+        for line in projects_listed.lines() {
+            let name = line.trim_start_matches("- ").trim();
+            if name.is_empty() || name == "[]" {
+                continue;
+            }
+            get_resource(&state, &format!("project/{name}"), None, "yaml", project)
+                .unwrap_or_else(|err| panic!("listed project {name} must be readable: {err:?}"));
+        }
+
+        // RuntimePolicy resolves for any name and is absent from the list
+        // surface — the two halves of its adjudication, asserted together so
+        // neither can be satisfied alone.
+        let policy = get_resource(&state, "runtimepolicy/effective", None, "yaml", project)
+            .expect("runtime policy resolves for any name");
+        assert!(policy.contains("RuntimePolicy"), "got: {policy}");
+        let policy_list = get_resource(&state, "runtimepolicies", None, "yaml", project);
+        assert!(
+            policy_list
+                .as_ref()
+                .err()
+                .map(|err| err.to_string().contains("unknown list resource type"))
+                .unwrap_or(false),
+            "RuntimePolicy must not be listable: {policy_list:?}"
+        );
+    }
+}
