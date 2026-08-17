@@ -160,12 +160,11 @@ spec:
 
 ## 刚才发生了什么？
 
-1. `orchestratord` 启动了控制面、SQLite 运行时和内嵌 worker
-2. `init` 创建了 SQLite 表结构
-3. `apply` 通过 daemon 将三个资源加载到数据库
-4. `task create` 绑定了工作区和工作流，发现 QA 目标文件作为任务项，并将任务排入 daemon worker 队列
-5. `echo_agent` 被选中（因为它具备 `qa` 能力），其命令针对每个项执行
-6. 结果（退出码、stdout、stderr）被记录到数据库中
+1. `orchestratord` 启动了控制面，跑完全部迁移建出 SQLite 表结构，并启动了内嵌 worker
+2. `apply` 通过 daemon 将三个资源加载到数据库
+3. `task create` 绑定了工作区和工作流，发现 QA 目标文件作为任务项，并将任务排入 daemon worker 队列
+4. `echo_agent` 被选中（因为它具备 `qa` 能力），其命令针对每个项执行
+5. 结果（退出码、stdout、stderr）被记录到数据库中
 
 ## 下一步
 

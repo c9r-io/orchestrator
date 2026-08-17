@@ -46,6 +46,20 @@ orchestrator task list
 orchestrator task logs <task_id>
 ```
 
+## Desktop Console
+
+The CLI is the primary operator interface, but the daemon also has a graphical
+one: the **Agent Process Console**, a Tauri desktop client that reaches the same
+`orchestratord` over the same socket. It exists so that a person is pulled in
+only when an exception needs judgement — approvals, failures and blockages
+collect in **Attention**, and from there you get semantic timelines, evidence,
+handoffs, consequence-previewed recovery, and agent session takeover.
+
+It is **not** installed by `install.sh` or Homebrew. Download the `.dmg`,
+`.AppImage` or `.deb` from [Releases](https://github.com/c9r-io/orchestrator/releases),
+and keep it on the same version as the daemon. [Chapter 08](docs/guide/08-agent-process-console.md)
+is both the first-run walkthrough and the daily triage manual.
+
 ## Why This Exists
 
 - **Harness, not wrapper** — The goal is not to invoke an agent once, but to define the environment, workflow, policy, and feedback loop around agent execution.
@@ -67,17 +81,7 @@ Pre-configured webhook trigger packages for external platforms: **[orchestrator-
 
 Slack, GitHub, LINE — each with per-trigger signature verification, CEL payload filtering, and setup guides. Add new integrations via the `/integration-authoring` skill.
 
-Controlled Slack provider evidence is maintained separately from network-free CI:
-
-| Mode | Last reviewed result | Certified | Expires |
-|---|---|---|---|
-| Shared official App | PASS | 2026-07-22 | 2026-08-21 |
-| Dedicated workspace App | PASS | 2026-07-22 | 2026-08-21 |
-
-Run `./scripts/qa/certify-slack-managed-live.sh status` for the derived
-`fresh`/`stale` interpretation. Expiry means recertification is due, not that a
-product regression has been detected. The allowlisted source record is
-[`docs/qa/evidence/slack-live-certification-latest.json`](docs/qa/evidence/slack-live-certification-latest.json).
+Slack's managed modes are certified against a real provider outside network-free CI. Run `./scripts/qa/certify-slack-managed-live.sh status` for the current `fresh`/`stale` verdict — it derives it from [`docs/qa/evidence/slack-live-certification-latest.json`](docs/qa/evidence/slack-live-certification-latest.json), which is the record rather than a copy of it. Staleness means recertification is due, not that a regression was found.
 
 ## Key Features
 
@@ -100,6 +104,7 @@ Full documentation: **[docs.c9r.io](https://docs.c9r.io)** (EN / ZH)
 - [Advanced Features](docs/guide/05-advanced-features.md)
 - [Self-Bootstrap](docs/guide/06-self-bootstrap.md)
 - [CLI Reference](docs/guide/07-cli-reference.md)
+- [Agent Process Console](docs/guide/08-agent-process-console.md)
 - [Architecture](docs/architecture.md)
 
 ## Build from Source
