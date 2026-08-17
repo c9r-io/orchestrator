@@ -90,6 +90,36 @@ orchestrator task list
 - **Async safety**: `std::sync::RwLock` restricted to approved files (see `scripts/check-async-lock-governance.sh`)
 - **Commits**: conventional format — `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
 
+## Regenerated Artifacts
+
+Five tracked files are generated from the tree rather than written by hand, and each has a gate
+that compares the file against what the tree currently produces. The four Ruby regenerators refuse
+to run under `CI`; the schema snapshot has no such guard, because its regeneration is gated by the
+`UPDATE_SCHEMA_SNAPSHOT` variable itself rather than by a flag a script can refuse.
+
+| Artifact | Regenerate with | Record |
+|---|---|---|
+| `config/governance/coordination-collapse-ledger.json` | `ruby scripts/qa/coordination-governance.rb --emit-inventory --write` | [DD-140](docs/design_doc/orchestrator/140-governance-ledger-regeneration.md) |
+| `config/governance/core-boundary-ledger.json` | `ruby scripts/qa/core-boundary.rb --emit-baseline --write` | [DD-142](docs/design_doc/orchestrator/142-core-boundary-freeze.md) |
+| `config/governance/schema-snapshot.sql` | `UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p agent-orchestrator schema_snapshot` | [DD-142](docs/design_doc/orchestrator/142-core-boundary-freeze.md) |
+| `config/governance/doc-lifecycle-index.json` | `ruby scripts/qa/doc-lifecycle.rb --emit-index --write` | [DD-144](docs/design_doc/orchestrator/144-doc-lifecycle-governance.md) |
+| `docs/feature_request/README.md` (generated block only) | `ruby scripts/lib/fr_registry.rb write` | FR-155 |
+
+**Commit the regenerated artifact in the same commit as the change that caused it.** This is a
+constraint, not a convention, and the reason is shared: splitting it leaves an intermediate
+revision that fails the gate, which is a revision nobody can bisect through. The first four
+artifacts each have a second, specific reason recorded in their own section below.
+
+The FR registry has no section of its own, and one property worth stating here: it is derived from
+the `HEAD` ancestry rather than from the working tree, so a new FR file does not enter the table
+until it is committed. The gate therefore goes red *because of* the commit that adds an FR, and
+regeneration necessarily follows it. Amend that commit rather than adding a second one — this is
+the one artifact where "same commit" cannot be satisfied by ordering alone.
+
+Regenerating is not reviewing. `--write` produces a candidate; the diff is the thing a human is
+accountable for, and for the ledgers that carry judgement fields it is the only place the
+judgement is visible.
+
 ## Changing A Production Agent
 
 Production Agents under `docs/workflow/` are pinned by fingerprint in
@@ -110,10 +140,8 @@ ruby scripts/qa/coordination-governance.rb --emit-inventory --write   # apply it
 `retainedCarrier`, the code-level blockers — is a reviewed judgement about what the count *means*,
 and a tool that rewrote it would be deciding rather than measuring.
 
-**Commit the ledger update in the same commit as the change that caused it.** This is a constraint,
-not a convention: the mismatch report derives the previous spec from `git show HEAD:<file>`, so
-splitting the commit both breaks the diagnosis and leaves the intermediate revision failing the gate.
-See [DD-140](docs/design_doc/orchestrator/140-governance-ledger-regeneration.md).
+The specific reason this one must not be split: the mismatch report derives the previous spec from
+`git show HEAD:<file>`, so a separate commit breaks the diagnosis as well as the gate.
 
 ## Changing The Core Crate Or A Migration
 
@@ -137,10 +165,8 @@ cargo test -p agent-orchestrator schema_snapshot                        # verify
 UPDATE_SCHEMA_SNAPSHOT=1 cargo test -p agent-orchestrator schema_snapshot   # regenerate
 ```
 
-**Commit the regenerated ledger or snapshot in the same commit as the change that caused it.**
-The snapshot diff is the only place a schema change is legible to a reviewer, and an
-intermediate revision that fails the gate is one nobody can bisect through. `--write` refuses
-to run under `CI`. See [DD-142](docs/design_doc/orchestrator/142-core-boundary-freeze.md).
+The specific reason for the snapshot: its diff is the only place a schema change is legible to a
+reviewer at all.
 
 ## Adding Or Retiring A Design Doc Or QA Doc
 
@@ -170,8 +196,8 @@ received a post-release update is still active.
 `lifecycle` is not the `**Status**:` header some design docs carry: that one records implementation
 maturity, and a `Released` document can be superseded.
 
-**Commit the regenerated index in the same commit as the document change.** `--write` refuses to
-run under `CI`. See [DD-144](docs/design_doc/orchestrator/144-doc-lifecycle-governance.md).
+This index carries no judgement fields — it is derived wholly from the frontmatter, so the diff to
+read is the frontmatter change that caused it.
 
 ## Adding A Resource Kind Or A Top-Level Command
 
