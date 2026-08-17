@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 487,
-    "active": 472,
+    "documents": 489,
+    "active": 474,
     "superseded": 15,
-    "withRelatedFr": 330
+    "withRelatedFr": 332
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -558,6 +558,12 @@
     },
     "docs/design_doc/orchestrator/188-driver-signal-channel.md": {
       "lifecycle": "active"
+    },
+    "docs/design_doc/orchestrator/189-resource-observability-tiers.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-171"
+      ]
     },
     "docs/design_doc/orchestrator/19-parallel-item-execution.md": {
       "lifecycle": "active"
@@ -1982,6 +1988,12 @@
     "docs/qa/orchestrator/226-driver-signal-channel.md": {
       "lifecycle": "active"
     },
+    "docs/qa/orchestrator/227-resource-observability-tiers.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-171"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3131,6 +3143,10 @@
     "FR-170": [
       "docs/design_doc/orchestrator/186-daemon-artifact-ownership.md",
       "docs/qa/orchestrator/224-daemon-artifact-ownership.md"
+    ],
+    "FR-171": [
+      "docs/design_doc/orchestrator/189-resource-observability-tiers.md",
+      "docs/qa/orchestrator/227-resource-observability-tiers.md"
     ]
   },
   "supersedes": {

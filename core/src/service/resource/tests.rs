@@ -997,6 +997,96 @@ mod resource_observability_matrix {
         }
     }
 
+    /// The GUI's resource catalog (`list_resource_summaries`) renders every row
+    /// through `describe_builtin_resource`, so it can only page kinds with a typed
+    /// renderer — eight of twelve. Before FR-171 it served five and answered the
+    /// other seven with `unsupported expert resource catalog type`, which reports
+    /// "the product has not decided" as "you typed something invalid".
+    ///
+    /// The three excluded-but-readable kinds and the singleton now get distinct
+    /// diagnostics. Asserting the diagnostics rather than the exit code is the
+    /// point: three refusals that differ only in exit status cannot tell an
+    /// operator which of three reasons applies.
+    #[test]
+    fn the_resource_catalog_pages_eight_kinds_and_explains_the_rest() {
+        let mut fixture = TestState::new();
+        let state = fixture.build();
+        let project = Some(crate::config::DEFAULT_PROJECT_ID);
+
+        let manifest = concat!(
+            "apiVersion: orchestrator.dev/v2\nkind: EnvStore\nmetadata:\n  name: catalog-env\n",
+            "spec:\n  data:\n    A: b\n",
+            "---\napiVersion: orchestrator.dev/v2\nkind: SecretStore\nmetadata:\n  name: catalog-secret\n",
+            "spec:\n  data:\n    K: catalog-secret-value\n",
+        );
+        apply_manifests(&state, manifest, false, project, false).expect("seed catalog resources");
+
+        for (query, expected_name) in [
+            ("envstores", "catalog-env"),
+            ("secretstores", "catalog-secret"),
+            ("projects", crate::config::DEFAULT_PROJECT_ID),
+        ] {
+            let page = list_resource_summaries(&state, query, project, None, 50)
+                .unwrap_or_else(|err| panic!("catalog must page {query}: {err:?}"));
+            assert!(
+                page.resources.iter().any(|row| row.name == expected_name),
+                "catalog page for {query} is missing {expected_name}: {:?}",
+                page.resources
+            );
+        }
+
+        // A paged SecretStore row carries no spec, so there is nothing to redact —
+        // asserted rather than assumed, because "the page has no values" is the
+        // property that lets the catalog list secret stores at all.
+        let secret_page = list_resource_summaries(&state, "secretstores", project, None, 50)
+            .expect("page secret stores");
+        let rendered = format!("{:?}", secret_page.resources);
+        assert!(
+            !rendered.contains("catalog-secret-value"),
+            "a catalog page must not carry secret values: {rendered}"
+        );
+
+        let singleton = list_resource_summaries(&state, "runtimepolicies", project, None, 50)
+            .expect_err("RuntimePolicy is not a collection");
+        assert!(
+            singleton.to_string().contains("singleton"),
+            "the refusal must say why, not just refuse: {singleton}"
+        );
+
+        // Trigger exercises the asymmetry between the two registries: it is a
+        // `ResourceKind` with no builtin CRD definition, so the refusal can give
+        // the reason but not the canonical spelling. Asserted as it actually is,
+        // rather than asserting a canonical name the code cannot produce.
+        let no_renderer = list_resource_summaries(&state, "triggers", project, None, 50)
+            .expect_err("Trigger has no typed renderer");
+        let message = no_renderer.to_string();
+        assert!(message.contains("triggers"), "got: {message}");
+        assert!(
+            message.contains("typed renderer"),
+            "the refusal must distinguish itself from the singleton case: {message}"
+        );
+
+        // SourceTaskTemplate does have a CRD definition, so the same refusal
+        // names the canonical kind. Both shapes are covered because they take
+        // different arms.
+        let named_renderer =
+            list_resource_summaries(&state, "sourcetasktemplates", project, None, 50)
+                .expect_err("SourceTaskTemplate has no typed renderer");
+        assert!(
+            named_renderer.to_string().contains("SourceTaskTemplate"),
+            "got: {named_renderer}"
+        );
+
+        let unknown = list_resource_summaries(&state, "nonsuchkind", project, None, 50)
+            .expect_err("an unknown type is still an unknown type");
+        assert!(
+            unknown
+                .to_string()
+                .contains("unknown resource catalog type"),
+            "got: {unknown}"
+        );
+    }
+
     /// The recognition probes above read a diagnostic, which is a proxy. This
     /// one observes the fact itself: seed each kind FR-171 added and require the
     /// resource to come back.
@@ -1052,6 +1142,38 @@ mod resource_observability_matrix {
             projects_listed.contains(crate::config::DEFAULT_PROJECT_ID),
             "got: {projects_listed}"
         );
+
+        // A name that lists must also read. Without this the ruling is only half
+        // asserted, and "listable but reports not-found on a single read" — the
+        // inconsistency FR-171's acceptance names — would pass.
+        let project_single = get_resource(
+            &state,
+            &format!("project/{}", crate::config::DEFAULT_PROJECT_ID),
+            None,
+            "yaml",
+            project,
+        )
+        .expect("get the project that the list just returned");
+        assert!(
+            project_single.contains(crate::config::DEFAULT_PROJECT_ID),
+            "got: {project_single}"
+        );
+        assert!(
+            project_single.contains("Project"),
+            "a single read must render the kind: {project_single}"
+        );
+
+        // Every name the list returns must read, not merely the one this test
+        // happens to name — the difference between an assertion about a fixture
+        // and an assertion about the surface.
+        for line in projects_listed.lines() {
+            let name = line.trim_start_matches("- ").trim();
+            if name.is_empty() || name == "[]" {
+                continue;
+            }
+            get_resource(&state, &format!("project/{name}"), None, "yaml", project)
+                .unwrap_or_else(|err| panic!("listed project {name} must be readable: {err:?}"));
+        }
 
         // RuntimePolicy resolves for any name and is absent from the list
         // surface — the two halves of its adjudication, asserted together so

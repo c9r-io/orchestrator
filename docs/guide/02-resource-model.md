@@ -238,9 +238,39 @@ spec:
   description: "Frontend rewrite project"
 ```
 
+List and read them like any other kind:
+
+```bash
+orchestrator get projects
+orchestrator get project/my-project
+```
+
+Project is the one kind that is **not** project-scoped, so `--project` does not
+narrow either query — the list is the same whatever scope you ask from. The
+project whose name is empty is skipped: a blank id is a structural artefact, not
+a project someone created.
+
 ## 6. RuntimePolicy
 
 A RuntimePolicy configures runner behavior, resume strategy, and observability.
+
+It is a **resolved singleton**, not a collection, and that changes how you read
+it. A single read always answers — with the policy actually in effect for the
+project, resolved as project → `_system` → built-in defaults — whatever name you
+ask for:
+
+```bash
+orchestrator get runtimepolicy/default   # the effective policy
+```
+
+There is deliberately no `orchestrator get runtimepolicies`. Stored records do
+exist — one per scope, since a project may override `_system` — but listing them
+would not answer the question anyone actually asks. What governs a task is the
+*resolved* policy, and no stored row holds it: it is composed from the chain at
+read time, which is why a single read answers for any name and why a
+RuntimePolicy cannot be deleted. A list of rows would show you the overrides
+while leaving the effective policy unstated. For the same reason it does not
+appear in the Console's resource catalog.
 
 ```yaml
 apiVersion: orchestrator.dev/v2

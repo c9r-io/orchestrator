@@ -533,10 +533,67 @@ pub fn list_resource_summaries(
             "executionprofile",
             project.execution_profiles.keys().cloned().collect(),
         ),
+        "envstore" | "env-store" | "env_store" | "envstores" => (
+            "EnvStore",
+            "envstore",
+            project.env_stores.keys().cloned().collect(),
+        ),
+        // Names only, like every other row here: the page carries name, revision
+        // and source, never a spec. A single read of one of these redacts.
+        "secretstore" | "secret-store" | "secret_store" | "secretstores" => (
+            "SecretStore",
+            "secretstore",
+            project.secret_stores.keys().cloned().collect(),
+        ),
+        // Project is not project-scoped, so its names come from the whole config
+        // and `--project` does not narrow the page.
+        "project" | "projects" => (
+            "Project",
+            "project",
+            config
+                .projects
+                .keys()
+                .filter(|name| !name.is_empty())
+                .cloned()
+                .collect(),
+        ),
+        // This catalog covers the kinds with a typed renderer, because it renders
+        // every row through `describe_builtin_resource` and treats `None` as a
+        // missing resource. That is eight of twelve: Trigger, SourceTaskTemplate
+        // and SourceTaskBinding are readable through `get` but have no typed
+        // renderer, and adding one changes how `describe` renders them — the
+        // rendering convergence FR-171 deliberately left out of scope. RuntimePolicy
+        // is absent for the reason it is absent from `get_list_resource`: it is a
+        // resolved singleton, not a collection.
+        //
+        // The message says which of those two reasons applies rather than
+        // reporting every unsupported kind as bad input, which is what
+        // "unsupported expert resource catalog type" did for all seven.
         other => {
+            // Two registries are consulted because neither covers all twelve
+            // kinds. `find_crd_by_kind_or_alias` yields the canonical kind name
+            // but has no definition for Trigger; `is_builtin_alias` knows every
+            // kind's singular and plural but returns only a bool. So a Trigger
+            // query is correctly told *why* it is refused and cannot be told the
+            // canonical spelling — a user-visible consequence of the asymmetry,
+            // recorded rather than papered over.
+            let canonical = crate::crd::resolve::find_crd_by_kind_or_alias(config, other)
+                .map(|crd| crd.kind.clone());
+            let builtin_name = canonical.is_some() || crate::crd::resolve::is_builtin_alias(other);
             return Err(classify_resource_error(
                 "resource.list",
-                anyhow::anyhow!("unsupported expert resource catalog type: {other}"),
+                match canonical.as_deref() {
+                    Some("RuntimePolicy") => anyhow::anyhow!(
+                        "RuntimePolicy is a resolved singleton, not a collection; read it with `get runtimepolicy/<name>`"
+                    ),
+                    Some(kind) => anyhow::anyhow!(
+                        "{kind} is not in the resource catalog: it has no typed renderer, so it is readable through `get {other}/<name>` but not browsable here"
+                    ),
+                    None if builtin_name => anyhow::anyhow!(
+                        "{other} names a builtin resource with no typed renderer, so it is readable through `get` but not browsable here"
+                    ),
+                    None => anyhow::anyhow!("unknown resource catalog type: {other}"),
+                },
             ));
         }
     };

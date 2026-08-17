@@ -10,12 +10,22 @@ import type {
 } from "../lib/types";
 import ReviewedActionDialog from "./ReviewedActionDialog";
 
+// FR-171: the eight kinds the daemon's resource catalog can page. It is a list,
+// and the daemon is the authority — an entry the catalog does not serve now gets
+// an error saying *why* (no typed renderer, or a resolved singleton) rather than
+// being reported as bad input, so a list that falls behind is visible rather than
+// silent. Trigger, SourceTaskTemplate and SourceTaskBinding are readable through
+// `get` but absent here: they have no typed renderer, and adding one changes how
+// `describe` renders them. RuntimePolicy is absent because it is a singleton.
 const RESOURCE_KINDS = [
   { query: "workspaces", label: "Workspaces" },
   { query: "workflows", label: "Workflows" },
   { query: "agents", label: "Agents" },
   { query: "steptemplates", label: "Step Templates" },
   { query: "executionprofiles", label: "Execution Profiles" },
+  { query: "projects", label: "Projects" },
+  { query: "envstores", label: "Env Stores" },
+  { query: "secretstores", label: "Secret Stores" },
 ] as const;
 
 function errorMessage(error: unknown): string {

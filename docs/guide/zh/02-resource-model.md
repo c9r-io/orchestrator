@@ -238,9 +238,34 @@ spec:
   description: "前端重写项目"
 ```
 
+像其他 kind 一样列举与读取：
+
+```bash
+orchestrator get projects
+orchestrator get project/my-project
+```
+
+Project 是唯一**不**受 project 作用域限定的 kind，因此 `--project` 不会收窄这两个
+查询——无论从哪个作用域问，列表都一样。名字为空的那个 project 会被跳过：空 id 是
+结构产物，不是谁创建出来的 project。
+
 ## 6. RuntimePolicy（运行时策略）
 
 RuntimePolicy 配置运行器行为、恢复策略和可观测性。
+
+它是一个**解析出来的单例**，不是集合，这改变了读它的方式。单条读取总会有答案——
+返回该 project 实际生效的策略，按 project → `_system` → 内建默认值解析——无论你
+问的是哪个名字：
+
+```bash
+orchestrator get runtimepolicy/default   # 生效中的策略
+```
+
+刻意没有 `orchestrator get runtimepolicies`。存储记录确实存在——每个作用域一条，
+因为 project 可以覆盖 `_system`——但列举它们回答不了任何人真正会问的问题。支配任务
+的是**解析后**的策略，而没有任何一条存储记录持有它：它在读取时由整条链组合而成，
+这也是为什么任何名字都能读到、以及为什么 RuntimePolicy 不可删除。列出记录只会给你
+那些覆盖项，而生效策略仍未被陈述。Console 的资源目录不收录它，理由相同。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
