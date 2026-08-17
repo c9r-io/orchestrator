@@ -413,6 +413,88 @@ else
   cat "$WORK/fr-shallow.err" >&2
 fi
 
+# ── FR-172: the closure-note bound ──
+#
+# A closure note is a pointer to the DD and QA that carry the FR. Left unbounded
+# they grew from 212 to 3,284 characters per note and reached 90% of the file,
+# duplicating design records in a file `doc-lifecycle.rb` does not govern and can
+# therefore never mark stale.
+
+if ruby "$REPO_ROOT/$FR_REGISTRY" notes "$REPO_ROOT" >"$WORK/notes.out" 2>&1; then
+  pass "every closure note is within the 400-character bound"
+else
+  fail "closure notes exceed the bound"
+  cat "$WORK/notes.out" >&2
+fi
+
+# The three cases below build their own README rather than copying the tracked
+# one. `notes` reads only that file, so nothing else is needed — and isolating it
+# means each case fails for its own reason instead of inheriting whatever state
+# the real file happens to be in.
+synth_readme() {
+  local dir="$WORK/$1"
+  mkdir -p "$dir/docs/feature_request"
+  {
+    # One preamble line far longer than the bound, mirroring the real file's.
+    printf -- '%s\n\n' "$(head -c 1400 /dev/zero | tr '\0' 'p')"
+    printf -- '%s\n' "<!-- BEGIN GENERATED FR REGISTRY -->"
+    printf -- '%s\n' "| FR-001 | t | P1 | Closed | git history |"
+    printf -- '%s\n\n' "<!-- END GENERATED FR REGISTRY -->"
+    printf -- '%s\n' "- FR-001 已闭环删除；其设计与验证信息现由 docs/design_doc/x.md 承载。"
+  } >"$dir/docs/feature_request/README.md"
+  echo "$dir"
+}
+
+# A note over the bound must fail *and name itself*. An exit code alone cannot
+# tell an author which note to shorten.
+NOTES_OVER="$(synth_readme fr-notes-over)"
+python3 - "$NOTES_OVER/docs/feature_request/README.md" <<'PY'
+import io, sys
+p = sys.argv[1]
+note = "- FR-999 " + "x" * (510 - len("- FR-999 "))
+assert len(note) == 510
+with io.open(p, "a", encoding="utf-8") as fh:
+    fh.write(note + "\n")
+PY
+if ruby "$REPO_ROOT/$FR_REGISTRY" notes "$NOTES_OVER" >"$WORK/notes-over.out" 2>&1; then
+  fail "a 510-character closure note passed the bound"
+elif grep -q "FR-999 closure note is 510 characters" "$WORK/notes-over.out"; then
+  pass "an over-long note fails and the diagnostic names it and its length"
+else
+  fail "the over-long note failed for the wrong reason"
+  cat "$WORK/notes-over.out" >&2
+fi
+
+# Scope. The preamble carries a single 1,400-character line, and the check must
+# not see it: a gate that failed on any long line in this file would be measuring
+# the file, not the notes.
+NOTES_SCOPE="$(synth_readme fr-notes-scope)"
+if ruby "$REPO_ROOT/$FR_REGISTRY" notes "$NOTES_SCOPE" >"$WORK/notes-scope.out" 2>&1; then
+  pass "a 1,400-character preamble line above the generated block is out of scope"
+else
+  fail "the check reaches outside the closure-note section"
+  cat "$WORK/notes-scope.out" >&2
+fi
+
+# Characters, not bytes. These notes are mostly Chinese — three bytes per
+# character in UTF-8 — so a byte-counting implementation fails them at a third of
+# their real length. 399 Chinese characters is ~1,197 bytes and must pass.
+NOTES_CJK="$(synth_readme fr-notes-cjk)"
+python3 - "$NOTES_CJK/docs/feature_request/README.md" <<'PY'
+import io, sys
+p = sys.argv[1]
+note = "- FR-998 " + "闭" * (399 - len("- FR-998 "))
+assert len(note) == 399 and len(note.encode("utf-8")) > 400
+with io.open(p, "a", encoding="utf-8") as fh:
+    fh.write(note + "\n")
+PY
+if ruby "$REPO_ROOT/$FR_REGISTRY" notes "$NOTES_CJK" >"$WORK/notes-cjk.out" 2>&1; then
+  pass "a 399-character Chinese note passes, so the bound counts characters"
+else
+  fail "a 399-character Chinese note failed; the bound is counting bytes"
+  cat "$WORK/notes-cjk.out" >&2
+fi
+
 echo ""
 echo "FR-128 governance ledger tooling: $PASS passed, $FAIL failed"
 [[ "$FAIL" -eq 0 ]] || exit 1

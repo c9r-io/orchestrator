@@ -194,10 +194,61 @@ def replace_registry(readme, block)
   readme.sub(pattern) { "#{$1}\n#{block}\n" }
 end
 
+# FR-172: a closure note is a pointer, and this is the bound that keeps it one.
+#
+# The note's job is to say an FR closed and name the documents that carry it.
+# `.claude/skills/fr-governance/SKILL.md` shows the template; with two real paths
+# it runs about 150 characters, and a sentence in this repository's documentation
+# style runs 60–120. 400 admits the template plus at most two sentences and
+# admits nothing more.
+#
+# 400 is a judgement, not a measurement, and it was chosen with the existing
+# distribution already in hand — the contamination FR-140 warns about. The
+# derivation above does not use that distribution; whoever revisits this should
+# re-derive rather than inherit. See DD-190.
+NOTE_LIMIT = 400
+
+# Counted in characters, never bytes. These notes are mostly Chinese, which is
+# three bytes per character in UTF-8, so a byte bound would fail them at a third
+# of their real length.
+def closure_note_violations(readme)
+  after = readme.split(END_MARK, 2)[1]
+  return [] if after.nil?
+
+  # `each_with_object` rather than `filter_map`: macOS ships Ruby 2.6 and
+  # filter_map arrived in 2.7 (the same note manual-gate-freshness.rb and
+  # persistence-dependency.rb carry).
+  after.lines.each_with_object([]) do |line, found|
+    text = line.chomp
+    next unless text.start_with?("- FR-")
+    next if text.length <= NOTE_LIMIT
+
+    found << [text[/FR-\d+/], text.length]
+  end
+end
+
 mode = ARGV.shift
 root = Pathname(ARGV.shift || Dir.pwd).expand_path
-block = render(root)
 readme_path = root.join(README)
+
+# `notes` reads the file and nothing else. It deliberately runs before the
+# history walk below, so that it costs nothing and so that a shallow clone —
+# which cannot be asked about history — can still be asked whether its closure
+# notes are within bounds.
+if mode == "notes"
+  violations = closure_note_violations(File.read(readme_path))
+  if violations.empty?
+    puts("closure notes: #{NOTE_LIMIT}-character bound holds")
+    exit(0)
+  end
+  violations.each do |id, length|
+    warn("#{README}: #{id} closure note is #{length} characters, over the #{NOTE_LIMIT} bound")
+  end
+  warn("#{violations.length} closure note(s) over bound; move the excess into the design record")
+  exit(1)
+end
+
+block = render(root)
 
 case mode
 when "render"
@@ -214,5 +265,5 @@ when "write"
   expected = replace_registry(actual, block)
   File.write(readme_path, expected)
 else
-  fail!("usage: fr_registry.rb {render|check|write} [repo-root]")
+  fail!("usage: fr_registry.rb {render|check|write|notes} [repo-root]")
 end

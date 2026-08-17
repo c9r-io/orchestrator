@@ -225,3 +225,27 @@ fails; fixture 32 adds a path that is not a ci-required gate and the check fails
 - **Cargo.toml manifests are counted unmasked** — there is no TOML lexer — so a
   `#` comment naming a coordinate in a manifest still counts toward
   `celInterpreter`.
+
+## Certification record
+
+Moved here from the FR-158 closure note by FR-172, which found it recorded
+nowhere else. It is evidence that one full sweep met §4.6's validity conditions,
+not a procedure to repeat.
+
+At `5faa8835`, same revision before and after, worktree clean at both ends. The
+gate set was **derived, not typed**: `jq '.scripts[]|select(.enforcement=="ci-required").path'`
+gave **53** paths (52 before this FR), and `workflow_model.rb run-commands` was
+read back per workflow/job, giving 58 lines touching `scripts/**` of which **54
+invocations** referenced a ci-required path — variants (`--fixture-test`,
+`--tool-fixtures`, and `certify-slack-managed-live.sh status`, which exits 2 when
+run bare) included. Of the 53 paths, 44 were invoked directly and 9 through a
+declared `invokedBy` wrapper; **the uncovered set was empty**. Each ran as
+`bash -c "$cmd" > log 2>&1` with `$?` taken directly, never through a pipe.
+
+Total 2,699s (45.0 minutes). The three slowest: `test-ci-environment-parity.sh`
+952s, `test-agent-driver-execution-migration.sh` 413s, `test-filesystem-trigger.sh`
+359s — the measurement FR-174 later builds its critical-path argument on.
+
+`cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D
+warnings` were clean, and `cargo test --workspace` was **2,859 passed / 0 failed
+/ 2 ignored** across 39 suites, all three exit codes taken directly from `$?`.

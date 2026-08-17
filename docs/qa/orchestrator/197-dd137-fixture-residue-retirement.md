@@ -291,3 +291,24 @@ between a workflow edit and the next merged CI run they report the edit rather
 than a defect. FR-149 added a governance step, so both applied; the cost ledger
 records the new step under `pendingMeasurement` and the liveness ledger is
 refreshed from the run that certifies this change.
+
+## Certification record
+
+Moved here from the FR-149 closure note by FR-172, which found it recorded
+nowhere else. It is evidence that one full sweep met §4.6's validity conditions,
+not a procedure to repeat.
+
+At `de0f8b8e`, same revision before and after, worktree clean at both ends. The
+gate set was **derived, not typed**: `jq '.scripts[]|select(.enforcement=="ci-required").path'`
+gave 43 paths, and `workflow_model.rb run-commands` was read back per workflow/job
+for the real invocation lines, giving **46 invocations** — variants such as
+`--fixture-test` and `certify-slack-managed-live.sh status` (which exits 2 when
+run bare) included. Of the 43 paths, 36 were invoked directly and 7 through a
+declared `invokedBy` wrapper; the difference set was empty. Each ran as
+`bash <inv> > log 2>&1` with `$?` taken directly, never through a pipe.
+
+**46/46 completed, 2 red, neither a regression from this FR**: `ci-liveness.rb`
+(this FR changed ci.yml and the ledger stopped at `2b2e5cab`; `--refresh` reads
+`gh run` on main and can only be refreshed after a push — verified green before
+this FR) and `test-dependency-policy.sh --tool-fixtures` (no `cargo-deny` on the
+machine; that variant runs from `security.yml` and is revision-independent).

@@ -238,6 +238,21 @@ at once.
 5. Update `docs/feature_request/README.md`:
    - Remove the FR row from the table (or mark status)
    - Add a closure note following the existing pattern: `FR-XXX 已闭环删除；其设计与验证信息现由 docs/design_doc/... 与 docs/qa/... 承载`
+
+     **The note is a pointer, bounded at 400 characters** and enforced by
+     `fr_registry.rb notes` from the ledger-tooling gate. It says the FR closed
+     and names the documents that carry it; at most one further sentence, and
+     only for something those documents do not already say. Rulings, step 0
+     corrections, mutation evidence, certification records and known limits all
+     belong in the design record — the note is read by someone deciding which
+     document to open, not by someone who wants the answer.
+
+     This bound exists because the template alone did not hold. Notes grew from
+     212 to 3,284 characters and reached 90% of the file, duplicating design
+     records in a file `doc-lifecycle.rb` does not govern and can therefore never
+     mark stale. If the excess will not fit the note, that is the signal it was
+     never the note's to carry: put it in the DD and point at the DD. See
+     [DD-190](../../../docs/design_doc/orchestrator/190-governance-record-compaction.md).
 6. Regenerate `config/governance/doc-lifecycle-index.json` (§5.1) so the new DD/QA pair is indexed
 7. Commit all closure artifacts together
 
