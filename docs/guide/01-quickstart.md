@@ -162,12 +162,11 @@ Then start it manually:
 
 ## What Just Happened?
 
-1. `orchestratord` started the control plane, SQLite-backed runtime, and embedded workers
-2. `init` created the SQLite schema
-3. `apply` loaded three resources into the database through the daemon
-4. `task create` bound a workspace + workflow, discovered QA target files as task items, and enqueued work for the daemon workers
-5. The `echo_agent` was selected (it has the `qa` capability) and its command was executed for each item
-6. Results (exit code, stdout, stderr) were captured in the database
+1. `orchestratord` started the control plane, ran every migration to create the SQLite schema, and started the embedded workers
+2. `apply` loaded three resources into the database through the daemon
+3. `task create` bound a workspace + workflow, discovered QA target files as task items, and enqueued work for the daemon workers
+4. The `echo_agent` was selected (it has the `qa` capability) and its command was executed for each item
+5. Results (exit code, stdout, stderr) were captured in the database
 
 ## Next Steps
 
