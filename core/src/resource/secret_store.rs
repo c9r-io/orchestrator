@@ -24,6 +24,34 @@ impl Resource for SecretStoreResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
+        // Reads render secret values as `ENCRYPTED_PLACEHOLDER`, and a described
+        // resource stays an apply-compatible manifest by design
+        // (`get_resource_supports_named_queries_describe_and_selector_helpers`
+        // asserts that). Those two facts together make describe -> edit -> apply
+        // a way to overwrite real secrets with the literal placeholder, silently
+        // and irreversibly. Applying a redacted manifest is therefore rejected
+        // rather than treated as an edit: the manifest does not carry the value
+        // it appears to carry, so no interpretation of it is safe.
+        //
+        // Deliberately not implemented as "placeholder means keep the stored
+        // value": that would make a manifest's meaning depend on prior state,
+        // and these manifests are declarative.
+        if let Some(key) = self
+            .spec
+            .data
+            .iter()
+            .find(|(_, value)| value.as_str() == crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER)
+            .map(|(key, _)| key)
+        {
+            return Err(anyhow!(
+                "[secret_value_placeholder_rejected] SecretStore '{}' key '{}' carries the redaction placeholder '{}' rather than a value. \
+                 Reads redact secret values, so a manifest obtained from `get` or `describe` cannot be applied back. \
+                 Supply the real value for every key: apply replaces the whole store, so a key omitted here is deleted, not preserved.",
+                self.name(),
+                key,
+                crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER
+            ));
+        }
         Ok(())
     }
 
@@ -163,6 +191,53 @@ mod tests {
     fn secret_store_validate_rejects_empty_name() {
         let store = make_secret_store("");
         assert!(store.validate().is_err());
+    }
+
+    #[test]
+    fn secret_store_validate_rejects_the_redaction_placeholder() {
+        let store = SecretStoreResource {
+            metadata: super::super::metadata_with_name("round-trip"),
+            spec: SecretStoreSpec {
+                data: [(
+                    "API_KEY".to_string(),
+                    crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string(),
+                )]
+                .into(),
+            },
+        };
+        let error = store
+            .validate()
+            .expect_err("a redacted manifest must not apply back over real values");
+        let message = error.to_string();
+        assert!(message.contains("secret_value_placeholder_rejected"));
+        // The diagnostic has to name the offending key: a store with twenty
+        // keys and one placeholder is the case where "somewhere in this
+        // manifest" costs the operator the most.
+        assert!(message.contains("API_KEY"));
+    }
+
+    #[test]
+    fn secret_store_validate_accepts_a_value_merely_containing_the_placeholder() {
+        // The check is equality, not `contains`. A real secret that happens to
+        // embed the placeholder text is still a real secret, and rejecting it
+        // would make a legitimate value unstorable — the over-reaching half of
+        // the matcher, which costs nothing until someone writes that value.
+        let store = SecretStoreResource {
+            metadata: super::super::metadata_with_name("substring"),
+            spec: SecretStoreSpec {
+                data: [(
+                    "API_KEY".to_string(),
+                    format!(
+                        "prefix-{}-suffix",
+                        crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER
+                    ),
+                )]
+                .into(),
+            },
+        };
+        store
+            .validate()
+            .expect("a value containing the placeholder is not a redacted value");
     }
 
     #[test]
