@@ -175,7 +175,7 @@
 | FR-168 | Task 删除的引用处置策略 —— 级联清 1/8，其余七表无裁决 | P1 | Closed | git history |
 | FR-169 | 数据目录消失后守护进程不自证死亡 —— 22 小时、零日志、服务零客户端 | P2 | Closed | git history |
 | FR-170 | 单例守卫把证据存在它必须幸存的那个目录里 | P2 | Closed | git history |
-| FR-171 | 资源可观测面的三级断层 —— 12 种可 apply，8 种可 list，5 种可 describe | P1 | Proposed | git history |
+| FR-171 | 四种资源可以写入但读不出来 | P1 | Proposed | git history |
 | FR-172 | 治理记录只增不减 —— 闭环尾注 17 倍膨胀与 superseded 文档的无限留存 | P1 | Proposed | git history |
 | FR-173 | v0.7 兼容层退休窗口 —— 六个 legacy 码、两个别名，以及「可解析拒绝」自身何时退休 | P2 | Proposed | git history |
 | FR-174 | PR 反馈延迟由治理决定 —— 关键路径 24 分钟，其中产品验证 5 分钟 | P2 | Proposed | git history |
