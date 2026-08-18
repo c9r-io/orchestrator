@@ -94,25 +94,54 @@ pass "EN/ZH guides, architecture, authoring skill, design records, and governanc
 
 # One invocation per package, several filters each — after the `--`, because
 # cargo itself accepts a single TESTNAME and it is libtest that ORs a filter
-# list. The same nine tests run and the same single exit status certifies
-# them; the one-filter-per-invocation form paid a cargo start-up and
-# fingerprint pass per test in a step whose cost is recorded against the
-# FR-140 budget.
-cargo test -p orchestrator-config \
-  shell_cli_factory_is_explicit_and_safe_by_default >/dev/null
-cargo test -p orchestrator-runner -- \
+# list. The same tests run and the same single exit status certifies them; the
+# one-filter-per-invocation form paid a cargo start-up and fingerprint pass per
+# test in a step whose cost is recorded against the FR-140 budget.
+#
+# Every invocation goes through run_named_tests, because a filter that matches
+# nothing is not an error to cargo: `cargo test -- a_name_that_no_longer_exists`
+# runs zero tests and exits 0, so a renamed or deleted test leaves this block
+# green while certifying nothing (§4.4 shape 5 — a check that can report PASS
+# having read no input). FR-173 renamed two of the names below and this is how
+# it was found: the expected count is stated per invocation and the observed
+# count is read out of libtest's own summary.
+run_named_tests() {
+  local expected="$1"; shift
+  local out status observed
+  out="$("$@" 2>&1)"; status=$?
+  if [[ "$status" -ne 0 ]]; then
+    printf '%s\n' "$out" >&2
+    fail "named-test fingerprint failed: $*"
+    return 1
+  fi
+  observed="$(
+    printf '%s\n' "$out" |
+      rg -o '^test result: ok\. ([0-9]+) passed' -r '$1' |
+      awk '{total += $1} END {print total + 0}'
+  )"
+  if [[ "$observed" -ne "$expected" ]]; then
+    printf '%s\n' "$out" >&2
+    fail "expected $expected named test(s) to run, libtest reported $observed: $*"
+    return 1
+  fi
+  return 0
+}
+
+run_named_tests 1 cargo test -p orchestrator-config \
+  shell_cli_factory_is_explicit_and_safe_by_default
+run_named_tests 2 cargo test -p orchestrator-runner -- \
   shell_driver_delivers_stdin_payload_and_closes_stdin \
-  command_rules_are_only_supported_by_shell_driver >/dev/null
-cargo test -p agent-orchestrator -- \
-  apply_legacy_command_agent_warns_and_persists_shell_driver \
-  validate_rejects_removed_streaming_executor >/dev/null
-cargo test -p orchestrator-scheduler -- \
+  command_rules_are_only_supported_by_shell_driver
+run_named_tests 5 cargo test -p agent-orchestrator -- \
+  apply_command_only_agent_is_rejected_and_not_persisted \
+  fr173_retirement
+run_named_tests 3 cargo test -p orchestrator-scheduler -- \
   tty_is_only_supported_by_typed_shell_cli_driver \
   failed_driver_terminal_is_a_hard_validation_failure \
-  execute_cycle_graph_persists_replay_and_skips_prehook_false_nodes >/dev/null
-cargo test -p orchestrator-integration-tests --test workflow_loop \
-  workflow_failing_step >/dev/null
-pass "promotion, stdin, command-rules, streaming rejection, TTY, failure propagation, and engine-command boundaries pass"
+  execute_cycle_graph_persists_replay_and_skips_prehook_false_nodes
+run_named_tests 1 cargo test -p orchestrator-integration-tests --test workflow_loop \
+  workflow_failing_step
+pass "refusal, stdin, command-rules, retirement mechanisms, TTY, failure propagation, and engine-command boundaries pass"
 
 FR116_ALLOW_DIRTY=1 KEEP_FR116_QA="${KEEP_FR126_QA:-0}" \
   "$SCRIPT_DIR/test-agent-driver-abstraction.sh" \

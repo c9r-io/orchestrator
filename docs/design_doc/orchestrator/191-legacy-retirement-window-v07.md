@@ -223,6 +223,23 @@ find and replace, so it is filed as
 `docs/ticket/fixtures-workflow_ungoverned-dead-blueprints_260818_071500.md` rather
 than done here under cover of a retirement.
 
+## A fingerprint block that could not tell a renamed test from a passing one
+
+`test-agent-driver-execution-migration.sh` re-runs a named set of tests as a
+fingerprint, one `cargo test` invocation per package with several filters after
+the `--`. FR-173 renamed two of the names. **Nothing failed.** `cargo test --
+a_name_that_no_longer_exists` runs zero tests and exits 0, so the block stays
+green while certifying nothing — §4.4 shape 5, a check that can report PASS
+having read no input, in the one place where the input is the evidence.
+
+It surfaced by accident: the gate was killed by a wall-clock limit, and reading
+why showed the filter matching nothing. Had it completed it would have passed.
+
+Each invocation now goes through `run_named_tests`, which states the expected
+count and reads the observed one out of libtest's own summary (1, 2, 5, 3, 1 —
+each measured, not assumed). A renamed test is now a named failure rather than a
+silent subtraction from what the gate covers.
+
 ## Ledgers re-derived rather than rewritten
 
 `fixture-bundle-validity.json` records the diagnostic each intentionally-invalid
