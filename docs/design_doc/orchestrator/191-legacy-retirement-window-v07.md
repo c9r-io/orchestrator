@@ -240,6 +240,22 @@ count and reads the observed one out of libtest's own summary (1, 2, 5, 3, 1 —
 each measured, not assumed). A renamed test is now a named failure rather than a
 silent subtraction from what the gate covers.
 
+## A third gate held the surface, through a fixture it derives
+
+`test-coordination-strangler.sh` builds its tool fixture by filtering
+`coordination-strangler-parity.yaml`, keeping every non-Workflow document. Two of
+those are command-only Agents, so the derived fixture stopped applying — the gate
+found the retirement through a file it does not own. Both Agents now declare
+`driver: {provider: shell, transport: cli}`, and their `fixture-driverless-exempt`
+comments went with the form they authorised.
+
+Its other assertion required the legacy fixture to fail *with*
+`[legacy_coordination_removed]` or `[legacy_json_path_removed]`. It now requires
+`[parse_error]` and `unknown field \`captures\``, which is what
+`deny_unknown_fields` emits — still a named diagnostic rather than a bare exit
+code, because an exit code cannot distinguish this rejection from a typo in the
+fixture path.
+
 ## Ledgers re-derived rather than rewritten
 
 `fixture-bundle-validity.json` records the diagnostic each intentionally-invalid
