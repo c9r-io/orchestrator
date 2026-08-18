@@ -11,9 +11,10 @@ kind: Workspace
 metadata:
   name: default
 spec:
-  root_path: "."
-  qa_targets: []
-  ticket_dir: ""
+  work_dir: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
 ---
 apiVersion: orchestrator.dev/v2
 kind: Agent
@@ -38,8 +39,11 @@ metadata:
   name: hello
 spec:
   steps:
+    # scope: task is what makes "runs once" true. Steps default to item scope,
+    # which would dispatch the agent once per file under qa_targets.
     - id: greet
       type: general
+      scope: task
       required_capability: general
       enabled: true
       repeatable: false

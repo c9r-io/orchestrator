@@ -110,20 +110,31 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 
 ### Steps
 
-1. Verify the timeout guidance exists in the self-bootstrap workflow fixture:
+1. Verify the timeout guidance exists in the self-bootstrap workflow manifest:
    ```bash
-   rg -n "timeout" fixtures/workflow/self-bootstrap.yaml
+   rg -n "timeout" docs/workflow/self-bootstrap.yaml
    ```
-2. Code review — confirm the `qa_testing` step template in `fixtures/workflow/self-bootstrap.yaml` (lines 165-167):
+2. Code review — confirm the `qa_testing` step template in `docs/workflow/self-bootstrap.yaml`:
    - Template prompt contains guidance about using `--timeout` where available
    - Template prompt wraps with shell `timeout` command to prevent indefinite blocking
    - Example command uses `--timeout` flag: `orchestrator task watch <task_id> --interval 1 --timeout 30`
 
 ### Expected
 
-- `rg` output shows 3+ matches for `timeout` in the fixture file
+- `rg` output shows 3+ matches for `timeout` in the manifest
 - The template prompt contains guidance about using `--timeout` or `timeout` wrapper for streaming commands
 - Example command in prompt uses `--timeout` flag
+
+> **Read the production manifest, not the fixture fork.** This scenario used to
+> point at `fixtures/workflow/self-bootstrap.yaml`, a copy forked in `71f8bf3b`
+> solely to redirect `ticket_dir` away from `docs/ticket`. The fork was never
+> re-synced and no longer applies at all — `manifest validate` refuses it with
+> `[parse_error] unknown field 'captures'`. Nothing parses that directory, which
+> is the gap [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md) exists
+> to close; until it lands, the fork's fate is undecided. Grep for the guidance
+> rather than citing line numbers — the previous `lines 165-167` citation was
+> carried over from the production file when the path was switched, so it named
+> a location in a file the scenario had stopped reading.
 
 ---
 

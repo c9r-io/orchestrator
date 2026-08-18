@@ -53,7 +53,7 @@ Expected:
 
 ## Scenario 4: Self-Evolution Manifest Uses Worktree Isolation
 
-1. Open `fixtures/workflow/self-evolution.yaml`.
+1. Open `docs/workflow/self-evolution.yaml`.
 2. Confirm workflow spec contains:
    - `item_isolation.strategy: git_worktree`
    - `cleanup: after_workflow`
@@ -63,6 +63,15 @@ Expected:
 
 - workflow is configured for physical item isolation
 - agents are not instructed to interfere with engine-managed git state
+
+> **Read the production manifest, not the fixture fork.** This scenario used to
+> point at `fixtures/workflow/self-evolution.yaml`, a copy forked in `71f8bf3b`
+> solely to redirect `ticket_dir` away from `docs/ticket`. The fork was never
+> re-synced and no longer applies at all — `manifest validate` refuses it with
+> `[parse_error] unknown variant 'generate_items'`. Nothing parses that directory,
+> which is the gap [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md)
+> exists to close; until it lands, the fork's fate is undecided. The assertions
+> above are unchanged and all three hold against the production manifest.
 
 ---
 
