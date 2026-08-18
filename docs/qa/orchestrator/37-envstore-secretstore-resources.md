@@ -159,3 +159,42 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 | 3 | Delete EnvStore and SecretStore | PASS | 2026-04-01 | Claude | 2/2 unit tests passed |
 | 4 | Validate rejects empty resource name | PASS | 2026-04-01 | Claude | 2/2 unit tests passed |
 | 5 | EnvStore/SecretStore isolation — cross-kind get/delete | PASS | 2026-04-01 | Claude | 5/5 tests passed: cross-kind coexistence + YAML export verified |
+
+---
+
+## Known Limitations
+
+### `manifest export` and `debug --component config` emit SecretStore values in cleartext
+
+**This is a design gap, not a test error.** The implementation follows the design:
+`docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md` bounds redaction
+to *at rest* (`:132`) and *in logs* (`:140`, `:175`), and lists export as an
+acceptance criterion (`:171`). Nothing in the design says an authorized read command
+redacts. Routed to
+[FR-175](../../feature_request/FR-175-secret-redaction-at-egress.md).
+
+Measured end-to-end at `e6081c6d` against an isolated daemon — a real SecretStore
+applied, then each read path grepped:
+
+| Read path | Cleartext? |
+|---|---|
+| `manifest export -o yaml` | **yes** |
+| `manifest export -o json` | **yes** |
+| `debug --component config` | **yes** |
+| GUI `manifest_export` Tauri command | **yes** (same RPC) |
+| `get secretstore <name>` / `get secretstores` | no |
+| `debug --component state` / `--component dag` | no |
+| database at rest | no |
+
+Until FR-175 lands, treat the output of those three as secret material: do not
+redirect it into a file you will commit, attach, or paste.
+
+### No scenario covers what `manifest export` actually emits
+
+This document's **Scope** names export, and the five scenarios above check apply,
+idempotency, delete, name validation and cross-kind isolation — none reads the
+export output's *content*. That absence is why the leak above survived unnoticed,
+and it is why FR-175 carries a requirement for the coverage rather than leaving it
+to be added here: this document is already at the five-scenario ceiling that
+`qa-doc-lint` enforces, so adding one means replacing one, which is a decision for
+that FR's governance.
