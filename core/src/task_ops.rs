@@ -183,9 +183,7 @@ fn validate_task_workspace_compatibility(
     execution_plan: &crate::config::TaskExecutionPlan,
     project: &crate::config::ResolvedProject,
 ) -> Result<()> {
-    use crate::config::{
-        CheckpointStrategy, ExecutionFsMode, ExecutionProfileMode, PostAction, WorkspaceKind,
-    };
+    use crate::config::{CheckpointStrategy, ExecutionFsMode, ExecutionProfileMode, WorkspaceKind};
     if workspace.kind != WorkspaceKind::Task {
         return Ok(());
     }
@@ -197,14 +195,16 @@ fn validate_task_workspace_compatibility(
             "[TASK_WORKSPACE_GIT_CHECKPOINT_FORBIDDEN] task workspace cannot use git_tag or git_stash checkpoints"
         );
     }
-    if execution_plan.item_isolation.is_some()
-        || execution_plan.steps.iter().any(|step| {
-            step.behavior
-                .post_actions
-                .iter()
-                .any(|action| matches!(action, PostAction::GenerateItems(_)))
-        })
-    {
+    // FR-173 removed the `GenerateItems` post-action, which this condition also
+    // tested. That half was already unreachable: a workflow declaring it was
+    // rejected at apply by `[legacy_json_path_removed]`, so task creation never
+    // saw one. Removing it changes no behaviour.
+    //
+    // Known gap, pre-dating this change and not closed by it: the
+    // `generate_items` coordination tool creates dynamic items with no
+    // task-workspace guard of its own, so this invariant is enforced only
+    // against the declarative surface.
+    if execution_plan.item_isolation.is_some() {
         anyhow::bail!(
             "[TASK_WORKSPACE_DYNAMIC_ITEMS_FORBIDDEN] task workspace must retain one implicit item"
         );
@@ -824,9 +824,6 @@ mod tests {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         }
     }
 

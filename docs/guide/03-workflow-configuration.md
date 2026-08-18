@@ -211,17 +211,6 @@ behavior:
     status: "verified"
 ```
 
-### captures
-
-Extract values from step results into pipeline variables:
-
-```yaml
-behavior:
-  captures:
-    - var: build_output
-      source: stdout       # stdout | stderr | exit_code | failed_flag | success_flag
-```
-
 ### post_actions
 
 Run actions after a step completes:
@@ -234,9 +223,13 @@ behavior:
     - type: spawn_task             # spawn a child task (WP02)
       goal: "verify-changes"
       workflow: verify_workflow
-    - type: generate_items         # generate dynamic items (WP03)
-      from_var: candidates
 ```
+
+These three are the whole set. `behavior.captures`, `generate_items`, `spawn_tasks`
+and `store_put` were retired with the coordination collapse and removed at the v0.7
+window; a step declaring any of them is refused by name. A step that needs a value
+from an earlier step reads it from the store itself — `orchestrator store get
+<store> <key> --project {project_id}` — rather than having the engine route it.
 
 ## Where Failures Go
 

@@ -30,9 +30,12 @@ impl Resource for AgentResource {
 
     fn validate(&self) -> Result<()> {
         super::validate_resource_name(self.name())?;
-        if self.spec.command.trim().is_empty() && self.spec.driver.is_none() {
+        if self.spec.driver.is_none() {
+            // FR-173: command-only Agents were accepted and promoted to
+            // shell/cli at persist time. That promotion is gone, so the manifest
+            // has to say which driver it means.
             return Err(anyhow!(
-                "agent.spec.command or agent.spec.driver is required"
+                "agent.spec.driver is required; a command-only Agent is no longer promoted to shell/cli — declare `driver: {{provider: shell, transport: cli}}` explicitly"
             ));
         }
         if let Some(driver) = self.spec.driver.as_ref() {
@@ -87,21 +90,6 @@ impl Resource for AgentResource {
         project_id: Option<&str>,
     ) -> bool {
         super::helpers::delete_from_store_project(config, "Agent", name, project_id)
-    }
-}
-
-impl AgentResource {
-    /// Returns compatibility warnings that are safe to surface before apply
-    /// normalization persists an explicit typed driver.
-    pub fn collect_warnings(&self) -> Vec<String> {
-        if self.spec.driver.is_none() && !self.spec.command.trim().is_empty() {
-            vec![format!(
-                "[legacy_agent_command_deprecated] Agent '{}' omits spec.driver; applying it promotes the Agent to driver shell/cli",
-                self.name()
-            )]
-        } else {
-            Vec::new()
-        }
     }
 }
 
@@ -239,14 +227,29 @@ mod tests {
         assert_eq!(loaded.kind(), ResourceKind::Agent);
     }
 
+    /// The empty command is refused by the shell driver's own check now, not by
+    /// the "command or driver" alternative FR-173 removed. The driver has to be
+    /// declared for the assertion to reach that check at all — without one,
+    /// validate stops at `driver is required` and this test would be measuring
+    /// the wrong refusal.
     #[test]
-    fn agent_validate_rejects_empty_command() {
+    fn agent_validate_rejects_empty_command_under_a_shell_driver() {
         let agent = AgentResource {
             metadata: super::super::metadata_with_name("ag-empty-cmd"),
             spec: AgentSpec {
                 enabled: None,
                 command: "  ".to_string(),
-                driver: None,
+                driver: Some(crate::config::AgentDriverConfig {
+                    provider: crate::config::DriverProvider::Shell,
+                    transport: crate::config::DriverTransport::Cli,
+                    binary: None,
+                    options: Default::default(),
+                    claude: None,
+                    codex: None,
+                    shell: None,
+                    raw_args: vec![],
+                    unsafe_raw_args: false,
+                }),
                 capabilities: None,
                 metadata: None,
                 selection: None,
@@ -257,7 +260,39 @@ mod tests {
             },
         };
         let err = agent.validate().expect_err("operation should fail");
-        assert!(err.to_string().contains("command or agent.spec.driver"));
+        let message = err.to_string();
+        assert!(
+            message.contains("driver shell/cli requires agent.spec.command"),
+            "{message}"
+        );
+    }
+
+    /// The other half: no driver at all is its own refusal, and it must not be
+    /// reported as a missing command.
+    #[test]
+    fn agent_validate_rejects_a_driverless_agent_by_name() {
+        let agent = AgentResource {
+            metadata: super::super::metadata_with_name("ag-driverless"),
+            spec: AgentSpec {
+                enabled: None,
+                command: "echo {prompt}".to_string(),
+                driver: None,
+                capabilities: None,
+                metadata: None,
+                selection: None,
+                env: None,
+                prompt_delivery: None,
+                health_policy: None,
+                command_rules: vec![],
+            },
+        };
+        let err = agent.validate().expect_err("a driverless Agent is refused");
+        let message = err.to_string();
+        assert!(
+            message.contains("agent.spec.driver is required"),
+            "{message}"
+        );
+        assert!(message.contains("provider: shell"), "{message}");
     }
 
     #[test]
@@ -277,9 +312,17 @@ mod tests {
                 command_rules: vec![],
             },
         };
-        assert!(agent.validate().is_ok());
-        assert_eq!(agent.collect_warnings().len(), 1);
-        assert!(agent.collect_warnings()[0].contains("legacy_agent_command_deprecated"));
+        // FR-173: this used to apply with a `[legacy_agent_command_deprecated]`
+        // warning and be promoted to shell/cli at persist time. Both are gone,
+        // so the manifest has to say which driver it means — and the diagnostic
+        // has to say so too, since an author who wrote `command:` and nothing
+        // else needs the next step, not just a refusal.
+        let error = agent
+            .validate()
+            .expect_err("a command-only Agent is no longer promoted")
+            .to_string();
+        assert!(error.contains("agent.spec.driver is required"), "{error}");
+        assert!(error.contains("provider: shell"), "{error}");
     }
 
     #[test]

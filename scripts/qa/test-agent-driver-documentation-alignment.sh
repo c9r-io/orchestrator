@@ -49,15 +49,30 @@ if rg -n -i "$STALE_PATTERN" ${ALIGNMENT_TARGETS[@]+"${ALIGNMENT_TARGETS[@]}"}; 
 fi
 pass "retired runner and command-only authoring phrases are absent from every tracked Markdown surface"
 
-rg -q 'legacy_runner_executor_removed' docs/guide/02-resource-model.md ||
-  fail "English resource guide omits the streaming executor rejection"
-rg -q 'legacy_runner_executor_removed' docs/guide/zh/02-resource-model.md ||
-  fail "Chinese resource guide omits the streaming executor rejection"
+# FR-173 deleted runner.executor and the command-only promotion. These four
+# assertions used to require the guides to name the [legacy_*] codes that
+# announced them; naming a retired code is the drift this gate exists to catch,
+# so they now require the two statements a reader still needs — the field is
+# gone and a manifest carrying it is refused by name, and a command without a
+# driver is refused rather than promoted. The second pair is not redundant with
+# STALE_PATTERN above: that scan removes the old sentence, this one requires a
+# replacement, and a guide that simply deleted the paragraph would satisfy the
+# scan while telling an author nothing.
+rg -q 'runner.executor` no longer exists' docs/guide/02-resource-model.md ||
+  fail "English resource guide does not state that runner.executor is gone"
+rg -q 'runner.executor` 已不存在' docs/guide/zh/02-resource-model.md ||
+  fail "Chinese resource guide does not state that runner.executor is gone"
 rg -q 'parse-only compatibility field' docs/guide/02-resource-model.md ||
   fail "English resource guide omits parse-only executor semantics"
 rg -q 'parse-only 兼容字段' docs/guide/zh/02-resource-model.md ||
   fail "Chinese resource guide omits parse-only executor semantics"
-pass "EN/ZH resource guides describe parse-only shell and streaming rejection"
+pass "EN/ZH resource guides state that runner.executor was removed and why"
+
+rg -q 'refused, not promoted' docs/guide/02-resource-model.md ||
+  fail "English resource guide still describes command-only promotion"
+rg -q '会被拒绝，不再被提升' docs/guide/zh/02-resource-model.md ||
+  fail "Chinese resource guide still describes command-only promotion"
+pass "EN/ZH resource guides describe the command-only Agent as refused"
 
 for guide in docs/guide/04-cel-prehooks.md docs/guide/zh/04-cel-prehooks.md; do
   rg -q 'driver_terminal' "$guide" ||
@@ -158,13 +173,18 @@ rg -q 'legacy_agent_command_deprecated' <<< "$RETIREMENT_SECTIONS" ||
   fail "CHANGELOG [Unreleased]/[0.4.0] does not record the command-only compatibility window"
 pass "CHANGELOG records the retirement and its breaking manifest change"
 
-rg -q 'legacy_runner_executor_removed' core/src crates --glob '*.rs' ||
-  fail "documented runner rejection code is absent from source"
-rg -q 'legacy_agent_command_deprecated' core/src crates --glob '*.rs' ||
-  fail "documented command-only warning code is absent from source"
-rg -q 'legacy_agent_execution_removed' core/src crates --glob '*.rs' ||
-  fail "documented scheduler rejection code is absent from source"
-pass "documented stable diagnostics exist in production source"
+# These three used to require the [legacy_*] codes to exist in source, and
+# FR-173 deleted all three codes. The general obligation they served — a code
+# the guides name must exist in production source — is covered in derived form
+# by test-error-code-glossary.sh, which walks both directions over a set it
+# scans rather than a set someone typed here. What is left is the one binding
+# specific to this gate: the guides now tell an author the refusal names the
+# block to write, and that sentence is only true while the diagnostic does.
+rg -q 'agent.spec.driver is required' core/src crates --glob '*.rs' ||
+  fail "the driver-required diagnostic the guides describe is absent from source"
+rg -q 'provider: shell' core/src crates --glob '*.rs' ||
+  fail "the driver-required diagnostic does not show the block to write"
+pass "the refusal the guides describe exists in production source, with its remedy"
 
 if [[ "$FIXTURE_TEST" == "1" ]]; then
   fixture_file="$(mktemp)"

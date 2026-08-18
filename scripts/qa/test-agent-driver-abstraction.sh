@@ -87,21 +87,39 @@ fi
 
 PROJECT="qa-agent-driver"
 "$ORCH" apply --project "$PROJECT" -f "$FIXTURE" > "$QA_ROOT/apply.out" 2>&1
-if rg -q 'agent/(legacy-shell-pilot|explicit-shell-pilot|claude-driver|codex-driver)' \
+if rg -q 'agent/(second-shell-pilot|explicit-shell-pilot|claude-driver|codex-driver)' \
   "$QA_ROOT/apply.out"; then
-  pass "all three driver providers and the compatibility pilot apply successfully"
+  pass "all three driver providers and both shell pilots apply successfully"
 else
   fail "driver fixture apply output is incomplete"
 fi
-if rg -q 'legacy_agent_command_deprecated.*shell/cli' "$QA_ROOT/apply.out"; then
-  pass "command-only compatibility fixture emits the stable promotion warning"
+# FR-173 retired the command-only compatibility window. The promotion warning is
+# gone because the promotion is gone: an Agent without spec.driver is refused at
+# apply. Asserting the refusal is what keeps this gate about the behaviour rather
+# than about a string that no longer exists.
+COMMAND_ONLY="$QA_ROOT/command-only.yaml"
+cat > "$COMMAND_ONLY" <<'YAML'
+apiVersion: orchestrator.dev/v2
+kind: Agent
+metadata:
+  name: command-only-probe
+spec:
+  capabilities: [driver_legacy_pilot]
+  command: "true"
+YAML
+if "$ORCH" apply --project "$PROJECT" -f "$COMMAND_ONLY" > "$QA_ROOT/command-only.out" 2>&1; then
+  fail "a command-only Agent was accepted after the FR-173 retirement"
+elif rg -q 'agent.spec.driver is required' "$QA_ROOT/command-only.out" \
+  && rg -q 'provider: shell' "$QA_ROOT/command-only.out"; then
+  pass "a command-only Agent is refused and the diagnostic says what to declare"
 else
-  fail "command-only Agent promotion warning is missing"
+  fail "command-only refusal did not name the field or the remedy"
+  cat "$QA_ROOT/command-only.out" >&2
 fi
-"$ORCH" describe agent/legacy-shell-pilot --project "$PROJECT" \
+"$ORCH" describe agent/second-shell-pilot --project "$PROJECT" \
   > "$QA_ROOT/legacy-agent.out"
 if rg -q 'provider: shell' "$QA_ROOT/legacy-agent.out"; then
-  pass "command-only compatibility fixture persists as typed shell/cli"
+  pass "an explicitly declared shell/cli Agent describes as typed shell/cli"
 else
   fail "promoted Agent does not describe as typed shell/cli"
 fi
@@ -127,7 +145,7 @@ create_and_run() {
   printf '%s|%s\n' "$task_id" "$status"
 }
 
-LEGACY="$(create_and_run legacy-shell-pilot legacy-shell)"
+LEGACY="$(create_and_run second-shell-pilot legacy-shell)"
 EXPLICIT="$(create_and_run explicit-shell-pilot explicit-shell)"
 LEGACY_ID="${LEGACY%%|*}"
 EXPLICIT_ID="${EXPLICIT%%|*}"

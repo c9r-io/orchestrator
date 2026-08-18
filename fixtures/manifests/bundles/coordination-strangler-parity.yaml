@@ -10,23 +10,23 @@ spec:
   ticket_dir: docs/ticket
   self_referential: false
 ---
-# fixture-driverless-exempt: FR-124 legacy half of the coordination strangler parity matrix; test-coordination-strangler.sh replays it against the typed half
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: legacy-status
 spec:
   capabilities: [legacy_status]
+  driver: {provider: shell, transport: cli}
   command: >-
     printf '%s\n' '{"passed":true,"session":"legacy-private","total_score":91}'
 ---
-# fixture-driverless-exempt: FR-124 legacy half of the coordination strangler parity matrix; test-coordination-strangler.sh replays it against the typed half
 apiVersion: orchestrator.dev/v2
 kind: Agent
 metadata:
   name: legacy-dynamic
 spec:
   capabilities: [legacy_dynamic]
+  driver: {provider: shell, transport: cli}
   command: >-
     printf '%s\n' '{"regression_targets":[{"id":"docs/qa/pilot.md","name":"docs/qa/pilot.md"}],"platforms":[{"id":"devto","name":"Dev.to","content_type":"blog_post","api_publishable":"false","priority":"5"}],"candidates":[{"id":"approach-a","name":"Approach A","description":"minimal","strategy":"small change"},{"id":"approach-b","name":"Approach B","description":"thorough","strategy":"full validation"}]}'
 ---

@@ -167,25 +167,26 @@ loop:
 
 ## 课题自动发现
 
-通过 agent step + `spawn_tasks` post-action 实现，**无需核心代码改动**：
+通过 agent step 调用 `spawn_task` 协调工具实现，**无需核心代码改动**：
 
 ```yaml
 - id: discover_topics
   required_capability: plan
   template: topic_discovery    # prompt 引导 agent 分析代码库找改进点
-  behavior:
-    post_actions:
-      - type: spawn_tasks
-        from_var: discover_output
-        json_path: "$.topics"
-        mapping:
-          goal: "$.description"
-          workflow: "self-evolution"
-          name: "$.slug"
-        max_tasks: 3
 ```
 
-agent 分析代码库输出 JSON 列表 → `spawn_tasks` 自动创建子任务。配合 Trigger 资源可形成持续发现闭环。
+agent 分析代码库后，对找到的每个主题调用一次 `spawn_task`，直接把目标与工作流传进去：
+
+```json
+{"name": "spawn_task", "arguments": {"goal": "<description>", "workflow": "self-evolution", "name": "<slug>"}}
+```
+
+配合 Trigger 资源可形成持续发现闭环。
+
+> 本展示原先使用的 `spawn_tasks` post-action —— 对捕获到的 JSON 数组做 JSONPath 映射
+> —— 已在 v0.7 窗口被移除。现在 agent 直接持有自己产出的列表，不再由引擎从 stdout 里
+> 重新解析；`max_tasks` 由下方的 `safety.max_spawned_tasks` 取代，后者对任何派生路径
+> 都生效。
 
 ---
 

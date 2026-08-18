@@ -26,9 +26,9 @@
       "path": "fixtures/manifests/bundles/coordination-legacy-baseline.yaml",
       "status": "intentional",
       "expect": [
-        "[legacy_coordination_removed] workflow 'coordination-legacy' step 'legacy_test'"
+        "unknown field `captures`"
       ],
-      "reason": "Rollback evidence for DD-137: the pre-decommission shape of a coordination workflow, kept so the removal stays reversible. test-coordination-collapse.sh reads it as text and asserts the daemon rejects it.",
+      "reason": "Rollback evidence for DD-137: the pre-decommission shape of a coordination workflow, kept so the removal stays reversible. test-coordination-collapse.sh reads it as text and asserts the daemon rejects it. FR-173 retired the named codes at the v0.7 window; the bundle is still refused, now by serde through deny_unknown_fields rather than by a [legacy_*] diagnostic. The declaration records what the product actually says, which is why it had to be re-observed rather than rewritten from the old wording.",
       "consumers": [
         "scripts/qa/test-coordination-collapse.sh",
         "docs/qa/orchestrator/168-coordination-collapse-mcp-tools.md",
@@ -41,15 +41,9 @@
       "path": "fixtures/manifests/bundles/coordination-strangler-parity.yaml",
       "status": "intentional",
       "expect": [
-        "[legacy_coordination_removed] workflow 'parity-command-legacy' step 'create_session'",
-        "[legacy_coordination_removed] workflow 'parity-qa-legacy' step 'qa'",
-        "[legacy_coordination_removed] workflow 'parity-plan-legacy' step 'plan'",
-        "[legacy_json_path_removed] workflow 'parity-bootstrap-legacy' step 'select_qa'",
-        "[legacy_json_path_removed] workflow 'parity-promotion-legacy' step 'analyze'",
-        "[legacy_json_path_removed] workflow 'parity-evolution-legacy' step 'plan'",
-        "[legacy_pipeline_variables_removed] workflow 'parity-command-legacy' step 'continue_session' uses step_vars; put the value in the step's own command or prompt"
+        "unknown field `captures`"
       ],
-      "reason": "Deliberately mixed: the `-tools` workflows are the live contract and the `-legacy` ones are rejection evidence. test-coordination-strangler.sh (ci-required) asserts the whole file fails with a [legacy_*_removed] diagnostic, and separately filters out the `-tools` documents to exercise the typed path.",
+      "reason": "Deliberately mixed: the `-tools` workflows are the live contract and the `-legacy` ones are rejection evidence. test-coordination-strangler.sh (ci-required) asserts the whole file fails with a [legacy_*_removed] diagnostic, and separately filters out the `-tools` documents to exercise the typed path. FR-173 retired the named codes at the v0.7 window; the bundle is still refused, now by serde through deny_unknown_fields rather than by a [legacy_*] diagnostic. The declaration records what the product actually says, which is why it had to be re-observed rather than rewritten from the old wording.",
       "consumers": [
         "scripts/qa/test-coordination-strangler.sh",
         "scripts/qa/test-qa-gate-surface.sh",
@@ -101,13 +95,9 @@
       "path": "fixtures/manifests/bundles/fr156-pipeline-variable-parity.yaml",
       "status": "intentional",
       "expect": [
-        "[legacy_pipeline_variables_removed] workflow 'fr156-gather-updates-legacy' step 'gather_updates' uses store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'fr156-apply-winner-legacy' step 'evo_apply_winner' uses store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'fr156-store-outputs-legacy' step 'plan' uses store_outputs; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
-        "[legacy_pipeline_variables_removed] workflow 'fr156-step-vars-legacy' step 'plan' uses step_vars; put the value in the step's own command or prompt",
-        "[legacy_pipeline_variables_removed] workflow 'fr156-store-put-legacy' step 'plan' uses a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`"
+        "unknown variant `store_put`"
       ],
-      "reason": "Deliberately mixed, like coordination-strangler-parity: the `-legacy` workflows hold the pre-migration shape of the two production store_inputs consumers plus one isolated case per other retired kind, and the `-migrated` ones hold the shape that must still apply. test-pipeline-variable-retirement.sh splits it and runs each half. The `-legacy` half is also the rollback evidence for FR-156, kept so the removal stays reversible. The gate that applied it, test-pipeline-variable-retirement.sh, was retired on 2026-08-16; the bundle stays because core's every_tracked_bundle_is_accepted_or_declared derives its corpus from git ls-files and so still asserts that each declared diagnostic fires — a cheaper and less enumerated check than the gate it outlived.",
+      "reason": "Deliberately mixed, like coordination-strangler-parity: the `-legacy` workflows hold the pre-migration shape of the two production store_inputs consumers plus one isolated case per other retired kind, and the `-migrated` ones hold the shape that must still apply. test-pipeline-variable-retirement.sh splits it and runs each half. The `-legacy` half is also the rollback evidence for FR-156, kept so the removal stays reversible. The gate that applied it, test-pipeline-variable-retirement.sh, was retired on 2026-08-16; the bundle stays because core's every_tracked_bundle_is_accepted_or_declared derives its corpus from git ls-files and so still asserts that each declared diagnostic fires — a cheaper and less enumerated check than the gate it outlived. FR-173 retired the named codes at the v0.7 window; the bundle is still refused, now by serde through deny_unknown_fields rather than by a [legacy_*] diagnostic. The declaration records what the product actually says, which is why it had to be re-observed rather than rewritten from the old wording.",
       "consumers": [
         "fixtures/qa/fr156-pipeline-variable-baseline.json",
         "docs/qa/orchestrator/207-pipeline-variable-surface-retirement.md",

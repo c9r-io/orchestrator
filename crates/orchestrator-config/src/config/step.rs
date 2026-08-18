@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{GenerateItemsAction, SpawnTaskAction, SpawnTasksAction, WorkflowStepConfig};
+use super::{SpawnTaskAction, WorkflowStepConfig};
 
 /// Execution scope for a workflow step
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -41,7 +41,13 @@ impl SideEffectClass {
 // ── Step Behavior declarations ─────────────────────────────────────
 
 /// Declarative behavior attached to each workflow step.
+///
+/// FR-173 retired `captures` and the JSONPath-backed post-actions. This struct
+/// has no flattened catch-all, so unknown keys inside `behavior:` reach no
+/// warning path — `deny_unknown_fields` is what makes a manifest still carrying
+/// them fail with a stated error instead of having them silently dropped.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct StepBehavior {
     /// Declares the strongest side effect this step may produce. Defaults fail closed.
     #[serde(default)]
@@ -52,9 +58,6 @@ pub struct StepBehavior {
     /// Action to apply when the step succeeds.
     #[serde(default)]
     pub on_success: OnSuccessAction,
-    /// Variables to capture from the step result.
-    #[serde(default)]
-    pub captures: Vec<CaptureDecl>,
     /// Follow-up actions triggered after the step completes.
     #[serde(default)]
     pub post_actions: Vec<PostAction>,
@@ -140,19 +143,6 @@ pub enum PostAction {
     ScanTickets,
     /// WP02: Spawn a single child task.
     SpawnTask(SpawnTaskAction),
-    /// WP02: Spawn multiple child tasks from a JSON array.
-    SpawnTasks(SpawnTasksAction),
-    /// WP03: Generate dynamic task items from step output.
-    GenerateItems(GenerateItemsAction),
-    /// WP01: Write a pipeline variable to a workflow store.
-    StorePut {
-        /// Workflow store resource name.
-        store: String,
-        /// Entry key to update.
-        key: String,
-        /// Pipeline variable whose value should be written.
-        from_var: String,
-    },
 }
 
 /// How a step is executed.
@@ -477,34 +467,6 @@ json_path: $.total_score
             let scope: StepScope = serde_json::from_str(scope_str).expect("deserialize step scope");
             let json = serde_json::to_string(&scope).expect("serialize step scope");
             assert_eq!(&json, scope_str);
-        }
-    }
-
-    #[test]
-    fn test_post_action_store_put_serde_round_trip() {
-        let action = PostAction::StorePut {
-            store: "metrics".to_string(),
-            key: "bench_result".to_string(),
-            from_var: "qa_score".to_string(),
-        };
-        let json = serde_json::to_string(&action).expect("serialize StorePut");
-        assert!(json.contains("\"type\":\"store_put\""));
-        assert!(json.contains("\"store\":\"metrics\""));
-        assert!(json.contains("\"key\":\"bench_result\""));
-        assert!(json.contains("\"from_var\":\"qa_score\""));
-
-        let deserialized: PostAction = serde_json::from_str(&json).expect("deserialize StorePut");
-        match deserialized {
-            PostAction::StorePut {
-                store,
-                key,
-                from_var,
-            } => {
-                assert_eq!(store, "metrics");
-                assert_eq!(key, "bench_result");
-                assert_eq!(from_var, "qa_score");
-            }
-            _ => panic!("expected StorePut variant"),
         }
     }
 }

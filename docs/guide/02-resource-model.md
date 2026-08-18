@@ -64,7 +64,7 @@ If `work_dir` is omitted, the daemon creates a private `0700` HOME/cwd for each 
 
 ## 2. Agent
 
-An Agent is an execution unit with declared capabilities and an explicit provider driver. Historical command-only manifests are accepted only at the runtime compatibility ingress, where Apply emits `[legacy_agent_command_deprecated]` and persists an explicit `shell/cli` driver.
+An Agent is an execution unit with declared capabilities and an explicit provider driver. `spec.driver` is required: FR-173 removed the promotion that used to accept a command-only manifest, so Apply now refuses one and the diagnostic names the block to write.
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -102,8 +102,8 @@ spec:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `capabilities` | Yes | What this agent can do (matched against step `required_capability`) |
-| `command` | Conditional | Shell command template; required for an explicit `shell/cli` driver and omitted for Claude/Codex drivers. Command-only input is compatibility-only and is promoted with a warning |
-| `driver` | Yes for new manifests | Typed provider/transport adapter (`shell`, `claude`, or `codex`; CLI transport is executable) |
+| `command` | Conditional | Shell command template; required for an explicit `shell/cli` driver and omitted for Claude/Codex drivers. A `command` without a `driver` is refused, not promoted |
+| `driver` | Yes | Typed provider/transport adapter (`shell`, `claude`, or `codex`; CLI transport is executable) |
 | `metadata.cost` | No | Used by agent selection strategy for cost-aware routing |
 | `metadata.description` | No | Human-readable description of the agent |
 | `selection` | No | Agent selection strategy override (see below) |
@@ -286,7 +286,7 @@ spec:
   observability: { ... }
 ```
 
-Do not set **`runner.executor`** in new manifests. It is a parse-only compatibility field: `shell` is accepted solely for historical round-trip compatibility, while `streaming` is rejected during Apply with `[legacy_runner_executor_removed]`. Provider execution belongs to each Agent's `spec.driver`; use `shell/cli`, `claude/cli`, or `codex/cli`.
+`runner.executor` no longer exists. It was a parse-only compatibility field whose only accepted value selected nothing, and FR-173 removed it at the v0.7 window; `RunnerSpec` now declares `deny_unknown_fields`, so a manifest still carrying it is refused by name rather than having the key quietly dropped. Provider execution belongs to each Agent's `spec.driver`; use `shell/cli`, `claude/cli`, or `codex/cli`.
 
 ## 7. ExecutionProfile
 

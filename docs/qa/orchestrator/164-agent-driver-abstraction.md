@@ -111,13 +111,20 @@ GROUP BY event_type;
 
 ## Scenario 5: Shell Pilot Equivalence And Repository Regression
 
+> FR-173 retired the command-only compatibility window at the v0.7 window, so
+> the pilot formerly named `legacy-shell-pilot` now declares its driver like any
+> other Agent and is named `second-shell-pilot`. What this scenario compares is
+> two explicitly declared shell agents; the command-only form is covered by the
+> refusal assertion in step 4 rather than by an equivalence.
+
 ### Steps
 
 1. Apply the FR-116 fixture in the isolated daemon.
-2. Create and start one task with the command-only compatibility
-   `legacy-shell-pilot` and one with `explicit-shell-pilot`.
+2. Create and start one task with `second-shell-pilot` and one with
+   `explicit-shell-pilot`.
 3. Compare task terminal state, command-run exit code, and event evidence.
-4. Count the Agent YAML lines for legacy and explicit shell forms.
+4. Confirm a command-only Agent is refused, and that the refusal names both the
+   missing field and the driver to declare.
 5. Run workspace build/tests, strict Clippy, and documentation lint.
 
 ### Expected

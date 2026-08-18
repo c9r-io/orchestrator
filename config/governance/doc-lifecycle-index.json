@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 491,
-    "active": 476,
+    "documents": 493,
+    "active": 478,
     "superseded": 15,
-    "withRelatedFr": 334
+    "withRelatedFr": 336
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -572,6 +572,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-172"
+      ]
+    },
+    "docs/design_doc/orchestrator/191-legacy-retirement-window-v07.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-173"
       ]
     },
     "docs/design_doc/orchestrator/20-workflow-primitives-wp02-wp03-wp04.md": {
@@ -2006,6 +2012,12 @@
         "FR-172"
       ]
     },
+    "docs/qa/orchestrator/229-legacy-retirement-window-v07.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-173"
+      ]
+    },
     "docs/qa/orchestrator/23-dynamic-plan-step-exec-tty.md": {
       "lifecycle": "active"
     },
@@ -3163,6 +3175,10 @@
     "FR-172": [
       "docs/design_doc/orchestrator/190-governance-record-compaction.md",
       "docs/qa/orchestrator/228-governance-record-compaction.md"
+    ],
+    "FR-173": [
+      "docs/design_doc/orchestrator/191-legacy-retirement-window-v07.md",
+      "docs/qa/orchestrator/229-legacy-retirement-window-v07.md"
     ]
   },
   "supersedes": {

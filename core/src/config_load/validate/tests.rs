@@ -1,7 +1,7 @@
 use super::*;
 use crate::config::{
-    CaptureDecl, CaptureSource, ConvergenceExprEntry, LoopMode, OrchestratorConfig, StepBehavior,
-    StepHookEngine, StepScope, WorkflowConfig, WorkflowStepConfig,
+    ConvergenceExprEntry, LoopMode, OrchestratorConfig, StepBehavior, StepHookEngine, StepScope,
+    WorkflowConfig, WorkflowStepConfig,
 };
 use crate::config_load::tests::{
     make_builtin_step, make_command_step, make_config_with_agent, make_config_with_default_project,
@@ -36,9 +36,6 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test_recover".to_string(),
@@ -62,9 +59,6 @@ fn validate_workflow_config_allows_multiple_self_test_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -122,9 +116,6 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "implement_phase_two".to_string(),
@@ -148,9 +139,6 @@ fn validate_workflow_config_allows_multiple_implement_steps() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -208,9 +196,6 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "duplicate_step".to_string(),
@@ -234,9 +219,6 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),
@@ -274,70 +256,6 @@ fn validate_workflow_config_rejects_duplicate_step_ids() {
 }
 
 #[test]
-fn validate_workflow_config_rejects_json_path_on_exit_code_capture() {
-    let workflow = WorkflowConfig {
-        steps: vec![WorkflowStepConfig {
-            id: "qa".to_string(),
-            description: None,
-            builtin: None,
-            required_capability: None,
-            execution_profile: None,
-            enabled: true,
-            repeatable: false,
-            is_guard: false,
-            cost_preference: None,
-            prehook: None,
-            tty: false,
-            template: None,
-            command: Some("echo benchmark".to_string()),
-            chain_steps: vec![],
-            scope: Some(StepScope::Task),
-            behavior: StepBehavior {
-                captures: vec![CaptureDecl {
-                    var: "score".to_string(),
-                    source: CaptureSource::ExitCode,
-                    json_path: Some("$.total_score".to_string()),
-                }],
-                ..StepBehavior::default()
-            },
-            max_parallel: None,
-            stagger_delay_ms: None,
-            timeout_secs: None,
-            stall_timeout_secs: None,
-            item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
-        }],
-        execution: Default::default(),
-        loop_policy: crate::config::WorkflowLoopConfig {
-            mode: LoopMode::Once,
-            guard: crate::config::WorkflowLoopGuardConfig {
-                enabled: false,
-                ..crate::config::WorkflowLoopGuardConfig::default()
-            },
-            convergence_expr: None,
-        },
-        finalize: crate::config::WorkflowFinalizeConfig { rules: vec![] },
-        qa: None,
-        fix: None,
-        retest: None,
-        dynamic_steps: vec![],
-        adaptive: None,
-        safety: crate::config::SafetyConfig::default(),
-        max_parallel: None,
-        stagger_delay_ms: None,
-        item_isolation: None,
-    };
-
-    let config = make_config_with_default_project();
-    let err = validate_workflow_config(&config, &workflow, "test-workflow")
-        .expect_err("json_path on exit_code should be rejected");
-
-    assert!(err.to_string().contains("[legacy_coordination_removed]"));
-}
-
-#[test]
 fn validate_self_referential_safety_errors_missing_self_test() {
     let workflow = WorkflowConfig {
         steps: vec![WorkflowStepConfig {
@@ -362,9 +280,6 @@ fn validate_self_referential_safety_errors_missing_self_test() {
             timeout_secs: None,
             stall_timeout_secs: None,
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
         }],
         execution: Default::default(),
         loop_policy: crate::config::WorkflowLoopConfig {
@@ -428,9 +343,6 @@ fn validate_self_referential_safety_passes_with_self_test() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
             WorkflowStepConfig {
                 id: "self_test".to_string(),
@@ -454,9 +366,6 @@ fn validate_self_referential_safety_passes_with_self_test() {
                 timeout_secs: None,
                 stall_timeout_secs: None,
                 item_select_config: None,
-                store_inputs: vec![],
-                store_outputs: vec![],
-                step_vars: None,
             },
         ],
         execution: Default::default(),

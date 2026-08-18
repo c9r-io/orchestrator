@@ -1,7 +1,7 @@
 use super::common::AgentLookup;
 use crate::cli_types::WorkflowStepSpec;
 use crate::config::{
-    CancelSemantics, DriverTransport, PostAction, SideEffectClass, StepSemanticKind, ToolHosting,
+    CancelSemantics, DriverTransport, SideEffectClass, StepSemanticKind, ToolHosting,
     WorkflowStepConfig, WorkspaceAccess, resolve_step_semantic_kind,
 };
 use anyhow::Result;
@@ -54,7 +54,6 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
         if !is_self_contained {
             validate_driver_candidates(step, workflow_id, key, agents)?;
         }
-        reject_retired_authoring(step, workflow_id)?;
         if let Some(prehook) = step.prehook.as_ref() {
             crate::prehook::validate_step_prehook(prehook, workflow_id, key)?;
         }
@@ -67,96 +66,6 @@ pub(super) fn validate_workflow_steps<A: AgentLookup>(
 
 /// Reject every retired step-level authoring construct, at any nesting depth.
 ///
-/// The recursion is the point. `chain_steps` children are dispatched through
-/// the same `execute_step` path as top-level steps, so a retired field one
-/// level down runs exactly as it always did — while a validator that walks only
-/// `spec.steps` reports the workflow clean. That is a guard covering the shapes
-/// its author had in mind and silently missing the next one, and it applied to
-/// the two pre-existing checks here as much as to the FR-156 one they now sit
-/// beside.
-fn reject_retired_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Result<()> {
-    if !step.behavior.captures.is_empty() {
-        anyhow::bail!(
-            "[legacy_coordination_removed] workflow '{}' step '{}' uses behavior.captures; use typed driver/tool results",
-            workflow_id,
-            step.id
-        );
-    }
-    if step.behavior.post_actions.iter().any(|action| {
-        matches!(
-            action,
-            PostAction::SpawnTasks(_) | PostAction::GenerateItems(_)
-        )
-    }) {
-        anyhow::bail!(
-            "[legacy_json_path_removed] workflow '{}' step '{}' uses a JSONPath-backed post-action; use typed daemon tools",
-            workflow_id,
-            step.id
-        );
-    }
-    reject_pipeline_variable_authoring(step, workflow_id)?;
-    for child in &step.chain_steps {
-        reject_retired_authoring(child, workflow_id)?;
-    }
-    Ok(())
-}
-
-/// Reject the retired step-level pipeline-variable authoring surface (FR-156).
-///
-/// Each of these routes an author-chosen value through `PipelineVariables.vars`,
-/// the generic map the coordination collapse retired: `store_inputs` reads a
-/// store into it, `store_outputs` and the `store_put` post-action write a
-/// variable out of it, and `step_vars` overlays it for one step. Steps address
-/// project-scoped state directly now — the CLI, or a typed daemon tool — so
-/// none has a live consumer.
-///
-/// The spec types stay deserializable on purpose (DD-137): a removed field that
-/// still parses can be answered with a stable retirement diagnostic naming it,
-/// where a deleted field would surface as an opaque unknown-key error.
-///
-/// One arm per field rather than one combined predicate, so the diagnostic
-/// always names the field the author actually wrote. A single message covering
-/// all of them would be satisfied by a validator that detected the wrong one.
-///
-/// This set must stay equal to `pipeline_consumer_kinds` in
-/// `scripts/qa/coordination-governance.rb`. A kind that gate counts but this
-/// function does not reject would let the ledger record a surface as closed
-/// while it is merely unread.
-fn reject_pipeline_variable_authoring(step: &WorkflowStepConfig, workflow_id: &str) -> Result<()> {
-    let retired = if !step.store_inputs.is_empty() {
-        Some(
-            "store_inputs; read the store from the step instead, e.g. `orchestrator store get <store> <key> --project {project_id}`",
-        )
-    } else if !step.store_outputs.is_empty() {
-        Some(
-            "store_outputs; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
-        )
-    } else if step.step_vars.as_ref().is_some_and(|vars| !vars.is_empty()) {
-        Some("step_vars; put the value in the step's own command or prompt")
-    } else if step
-        .behavior
-        .post_actions
-        .iter()
-        .any(|action| matches!(action, PostAction::StorePut { .. }))
-    {
-        Some(
-            "a store_put post-action; write from the step instead, e.g. `orchestrator store put <store> <key> <value> --project {project_id}`",
-        )
-    } else {
-        None
-    };
-
-    if let Some(retired) = retired {
-        anyhow::bail!(
-            "[legacy_pipeline_variables_removed] workflow '{}' step '{}' uses {}",
-            workflow_id,
-            step.id,
-            retired
-        );
-    }
-    Ok(())
-}
-
 fn validate_driver_candidates<A: AgentLookup>(
     step: &WorkflowStepConfig,
     workflow_id: &str,
@@ -270,7 +179,6 @@ fn driver_error(
 /// "Did you mean" suggestions for commonly misplaced step-level fields.
 fn did_you_mean(key: &str) -> Option<&'static str> {
     match key {
-        "capture" | "captures" => Some("behavior.captures"),
         "on_failure" => Some("behavior.on_failure"),
         "on_success" => Some("behavior.on_success"),
         "post_actions" => Some("behavior.post_actions"),
@@ -313,8 +221,13 @@ const BUILTIN_CEL_VARS: &[&str] = &[
     "self_test_exit_code",
     "self_referential_safe",
     "self_referential_safe_scenarios",
-    "steps",
 ];
+// `steps` was listed here until FR-173, alongside a skip for prior step ids, so
+// that `steps.<id>.<captured_var>` would lint clean. `build_step_prehook_cel_context`
+// binds no variable named `steps` and never has — the form fails at execution with
+// "no such variable", and only `captures` made it look like a mechanism. Captured
+// variables were reachable by their bare name, which `bind_compatibility_vars`
+// still does for whatever populates `vars`. No tracked blueprint uses the form.
 
 /// CEL keywords, literals, and built-in functions that are not variable references.
 const CEL_KEYWORDS: &[&str] = &[
@@ -406,8 +319,6 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
     let builtin_vars: HashSet<&str> = BUILTIN_CEL_VARS.iter().copied().collect();
     let cel_keywords: HashSet<&str> = CEL_KEYWORDS.iter().copied().collect();
     let mut warnings = Vec::new();
-    let mut captured_vars: HashSet<String> = HashSet::new();
-    let mut prior_step_ids: HashSet<String> = HashSet::new();
 
     for step in steps {
         // 1. Unknown field detection
@@ -439,25 +350,11 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
                 if id.len() <= 1 {
                     continue;
                 }
-                // Skip prior step IDs (used in `steps.<step_id>.<var>` access)
-                if prior_step_ids.contains(id) {
-                    continue;
-                }
-                if !captured_vars.contains(id) {
-                    warnings.push(format!(
-                        "workflow '{}' step '{}' prehook references '{}' but no prior step captures this variable",
-                        workflow_id, step.id, id
-                    ));
-                }
+                warnings.push(format!(
+                    "workflow '{}' step '{}' prehook references '{}', which is not a builtin CEL variable",
+                    workflow_id, step.id, id
+                ));
             }
-        }
-
-        // Track step ID for subsequent steps (for `steps.<id>.<var>` access)
-        prior_step_ids.insert(step.id.clone());
-
-        // Accumulate captured vars for subsequent steps
-        for capture in &step.behavior.captures {
-            captured_vars.insert(capture.var.clone());
         }
 
         // Recurse into chain_steps
@@ -468,110 +365,6 @@ pub fn collect_step_warnings(steps: &[WorkflowStepSpec], workflow_id: &str) -> V
     }
 
     warnings
-}
-
-#[cfg(test)]
-mod retirement_tests {
-    use super::*;
-    use crate::config::{StoreInputConfig, StoreOutputConfig};
-    use crate::config_load::tests::make_step;
-    use std::collections::HashMap;
-
-    fn reject(step: WorkflowStepConfig) -> String {
-        reject_retired_authoring(&step, "wf")
-            .expect_err("retired construct must be rejected")
-            .to_string()
-    }
-
-    fn with_store_inputs() -> WorkflowStepConfig {
-        let mut step = make_step("plan", true);
-        step.store_inputs = vec![StoreInputConfig {
-            store: "promotion".to_string(),
-            key: "last_published_sha".to_string(),
-            as_var: "last_published_sha".to_string(),
-            required: false,
-        }];
-        step
-    }
-
-    #[test]
-    fn store_inputs_is_rejected_and_the_diagnostic_names_it() {
-        let error = reject(with_store_inputs());
-        assert!(
-            error.contains("[legacy_pipeline_variables_removed]"),
-            "{error}"
-        );
-        assert!(error.contains("step 'plan' uses store_inputs"), "{error}");
-    }
-
-    #[test]
-    fn store_outputs_is_rejected_and_the_diagnostic_names_it() {
-        let mut step = make_step("plan", true);
-        step.store_outputs = vec![StoreOutputConfig {
-            store: "promotion".to_string(),
-            key: "recorded".to_string(),
-            from_var: "sha".to_string(),
-        }];
-        let error = reject(step);
-        assert!(error.contains("step 'plan' uses store_outputs"), "{error}");
-    }
-
-    #[test]
-    fn step_vars_is_rejected_and_the_diagnostic_names_it() {
-        let mut step = make_step("plan", true);
-        step.step_vars = Some(HashMap::from([("depth".to_string(), "deep".to_string())]));
-        let error = reject(step);
-        assert!(error.contains("step 'plan' uses step_vars"), "{error}");
-    }
-
-    #[test]
-    fn store_put_post_action_is_rejected_and_the_diagnostic_names_it() {
-        let mut step = make_step("plan", true);
-        step.behavior.post_actions = vec![PostAction::StorePut {
-            store: "promotion".to_string(),
-            key: "recorded".to_string(),
-            from_var: "sha".to_string(),
-        }];
-        let error = reject(step);
-        assert!(
-            error.contains("step 'plan' uses a store_put post-action"),
-            "{error}"
-        );
-    }
-
-    #[test]
-    fn a_retired_field_nested_in_chain_steps_is_rejected_too() {
-        // The parent is clean, so a validator walking only spec.steps reports
-        // this workflow valid -- while execute_step dispatches chain children
-        // through the same path and runs the binding. This is the case the
-        // recursion exists for.
-        let mut parent = make_step("chain", true);
-        parent.chain_steps = vec![with_store_inputs()];
-
-        let error = reject(parent);
-        assert!(
-            error.contains("[legacy_pipeline_variables_removed]"),
-            "{error}"
-        );
-        assert!(error.contains("step 'plan' uses store_inputs"), "{error}");
-    }
-
-    #[test]
-    fn an_empty_step_vars_map_is_not_a_retired_construct() {
-        // `step_vars: {}` deserializes to Some(empty), not None. Rejecting on
-        // Some alone would fail a manifest that authors nothing, which is the
-        // false-positive half of this check.
-        let mut step = make_step("plan", true);
-        step.step_vars = Some(HashMap::new());
-        assert!(reject_retired_authoring(&step, "wf").is_ok());
-    }
-
-    #[test]
-    fn a_step_authoring_none_of_them_is_accepted() {
-        let mut parent = make_step("chain", true);
-        parent.chain_steps = vec![make_step("child", true)];
-        assert!(reject_retired_authoring(&parent, "wf").is_ok());
-    }
 }
 
 #[cfg(test)]
@@ -706,7 +499,6 @@ mod tests {
         };
         let warnings = collect_step_warnings(&[step], "test-wf");
         assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("did you mean 'behavior.captures'"));
         assert!(warnings[0].contains("workflow 'test-wf'"));
     }
 
@@ -769,16 +561,11 @@ mod tests {
     }
 
     #[test]
-    fn prehook_warns_on_uncaptured_variable() {
-        let capture_step = WorkflowStepSpec {
+    fn prehook_warns_on_a_variable_nothing_binds() {
+        let prior_step = WorkflowStepSpec {
             id: "qa_doc_gen".to_string(),
             step_type: "qa_doc_gen".to_string(),
             behavior: crate::config::StepBehavior {
-                captures: vec![crate::config::CaptureDecl {
-                    var: "other_var".to_string(),
-                    source: crate::config::CaptureSource::Stdout,
-                    json_path: None,
-                }],
                 ..Default::default()
             },
             ..default_step_spec()
@@ -795,40 +582,38 @@ mod tests {
             }),
             ..default_step_spec()
         };
-        let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-wf");
-        assert_eq!(warnings.len(), 1);
-        assert!(warnings[0].contains("regression_target_ids"));
-        assert!(warnings[0].contains("no prior step captures"));
+        let warnings = collect_step_warnings(&[prior_step, prehook_step], "test-wf");
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("regression_target_ids"),
+            "{warnings:?}"
+        );
+        assert!(
+            warnings[0].contains("not a builtin CEL variable"),
+            "{warnings:?}"
+        );
     }
 
+    /// The negative half. It used to be "a variable a prior step captured does
+    /// not warn"; FR-173 removed captures, so the only variables that do not
+    /// warn are the ones the evaluator actually binds. Without this case an
+    /// implementation that warned about every identifier would satisfy the
+    /// positive test above.
     #[test]
-    fn prehook_no_warning_when_variable_captured() {
-        let capture_step = WorkflowStepSpec {
-            id: "qa_doc_gen".to_string(),
-            step_type: "qa_doc_gen".to_string(),
-            behavior: crate::config::StepBehavior {
-                captures: vec![crate::config::CaptureDecl {
-                    var: "regression_target_ids".to_string(),
-                    source: crate::config::CaptureSource::Stdout,
-                    json_path: None,
-                }],
-                ..Default::default()
-            },
-            ..default_step_spec()
-        };
+    fn prehook_does_not_warn_about_builtin_variables() {
         let prehook_step = WorkflowStepSpec {
             id: "qa_testing".to_string(),
             step_type: "qa_testing".to_string(),
             prehook: Some(crate::cli_types::WorkflowPrehookSpec {
                 engine: "cel".to_string(),
-                when: "qa_file_path in regression_target_ids".to_string(),
+                when: "qa_failed && qa_exit_code != 0 && !is_last_cycle".to_string(),
                 reason: None,
                 ui: None,
                 extended: false,
             }),
             ..default_step_spec()
         };
-        let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-wf");
+        let warnings = collect_step_warnings(&[prehook_step], "test-wf");
         assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
     }
 
@@ -855,31 +640,43 @@ mod tests {
             steps[0].extra.keys().collect::<Vec<_>>()
         );
         let warnings = collect_step_warnings(&steps, "test-wf");
+        // `capture` used to earn a "did you mean 'behavior.captures'?" hint.
+        // FR-173 deleted that field, so the hint would now point at nothing; the
+        // unknown field is still named, and the absence of the hint is asserted
+        // rather than left unstated, because a hint naming a deleted field is
+        // the failure this pair exists to catch.
         assert!(
             warnings
                 .iter()
-                .any(|w| w.contains("capture") && w.contains("behavior.captures")),
-            "expected 'did you mean' warning, got: {warnings:?}"
+                .any(|w| w.contains("unknown field 'capture'")),
+            "expected the unknown field to be named, got: {warnings:?}"
         );
         assert!(
-            warnings.iter().any(
-                |w| w.contains("regression_target_ids") && w.contains("no prior step captures")
-            ),
-            "expected uncaptured var warning, got: {warnings:?}"
+            !warnings.iter().any(|w| w.contains("behavior.captures")),
+            "no warning may suggest a field FR-173 deleted: {warnings:?}"
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("regression_target_ids")
+                    && w.contains("not a builtin CEL variable")),
+            "expected unbound var warning, got: {warnings:?}"
         );
     }
 
+    /// This asserted the opposite until FR-173: `steps.<id>.<var>` was linted
+    /// clean, on the strength of `steps` sitting in BUILTIN_CEL_VARS and a skip
+    /// for prior step ids. `build_step_prehook_cel_context` binds no `steps`
+    /// variable, so the expression fails at execution with "no such variable" —
+    /// the lint was certifying a form that does not run. Warning is the correct
+    /// outcome, and the diagnostic has to name `steps` itself: naming only the
+    /// trailing member would send an author looking for the wrong mistake.
     #[test]
-    fn prehook_no_warning_for_steps_dot_step_id_access() {
-        let capture_step = WorkflowStepSpec {
+    fn prehook_warns_on_the_steps_dot_step_id_form_the_evaluator_never_bound() {
+        let prior_step = WorkflowStepSpec {
             id: "step_a".to_string(),
             step_type: "qa_doc_gen".to_string(),
             behavior: crate::config::StepBehavior {
-                captures: vec![crate::config::CaptureDecl {
-                    var: "regression_target_ids".to_string(),
-                    source: crate::config::CaptureSource::Stdout,
-                    json_path: None,
-                }],
                 ..Default::default()
             },
             ..default_step_spec()
@@ -896,10 +693,10 @@ mod tests {
             }),
             ..default_step_spec()
         };
-        let warnings = collect_step_warnings(&[capture_step, prehook_step], "test-workflow");
+        let warnings = collect_step_warnings(&[prior_step, prehook_step], "test-workflow");
         assert!(
-            warnings.is_empty(),
-            "expected no warnings for steps.step_a.var access, got: {warnings:?}"
+            warnings.iter().any(|w| w.contains("'steps'")),
+            "the unbound root must be named: {warnings:?}"
         );
     }
 
@@ -926,10 +723,76 @@ mod tests {
             stall_timeout_secs: None,
             behavior: Default::default(),
             item_select_config: None,
-            store_inputs: vec![],
-            store_outputs: vec![],
-            step_vars: None,
             extra: Default::default(),
         }
+    }
+}
+
+/// FR-173 retired five compatibility surfaces at the v0.7 window. What replaces
+/// each named rejection is asserted here, because deleting a check without
+/// asserting what happens instead leaves no evidence that the retirement told
+/// anyone anything.
+///
+/// Two mechanisms answer, and which one applies depends on the struct:
+/// `WorkflowStepSpec` carries a flattened `extra` catch-all, so a retired field
+/// at step level becomes a named apply-time warning; `StepBehavior` and
+/// `RunnerSpec` have no catch-all, so they carry `deny_unknown_fields` and a
+/// retired field there is a hard deserialisation error. Without the attribute
+/// serde's default would drop the key in silence, which is worse than the named
+/// rejection it replaced — that is the property these cases exist to hold.
+#[cfg(test)]
+mod fr173_retirement {
+    use crate::cli_types::WorkflowStepSpec;
+
+    fn warnings_for(yaml: &str) -> Vec<String> {
+        let spec: WorkflowStepSpec =
+            serde_yaml::from_str(yaml).expect("step-level retired fields must still deserialize");
+        super::collect_step_warnings(&[spec], "wf")
+    }
+
+    #[test]
+    fn step_level_retired_fields_become_named_warnings() {
+        for field in ["store_inputs", "store_outputs", "step_vars"] {
+            let warnings = warnings_for(&format!("id: s1\ntype: qa\n{field}: {{}}\n"));
+            assert!(
+                warnings.iter().any(|w| w.contains(field)),
+                "retiring {field} must still name it: {warnings:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_level_retired_fields_are_a_stated_error_not_a_dropped_key() {
+        // `captures` and the JSONPath post-actions lived on StepBehavior, which
+        // has no catch-all. deny_unknown_fields is the only thing standing
+        // between a retired field and silence.
+        let err = serde_yaml::from_str::<WorkflowStepSpec>(
+            "id: s1\ntype: qa\nbehavior:\n  captures:\n    - var: x\n      source: stdout\n",
+        )
+        .expect_err("a retired behavior field must not be silently dropped");
+        assert!(
+            err.to_string().contains("captures"),
+            "the error must name the field: {err}"
+        );
+    }
+
+    #[test]
+    fn a_retired_post_action_variant_is_a_stated_error() {
+        let err = serde_yaml::from_str::<WorkflowStepSpec>(
+            "id: s1\ntype: qa\nbehavior:\n  post_actions:\n    - type: generate_items\n",
+        )
+        .expect_err("a retired post-action must not deserialize");
+        assert!(
+            err.to_string().contains("generate_items"),
+            "the error must name the variant: {err}"
+        );
+    }
+
+    #[test]
+    fn a_step_using_none_of_them_still_parses_and_warns_about_nothing() {
+        // The negative half. Without it, an implementation that rejected every
+        // step would satisfy all three cases above.
+        let warnings = warnings_for("id: s1\ntype: qa\nenabled: true\n");
+        assert!(warnings.is_empty(), "clean step warned: {warnings:?}");
     }
 }

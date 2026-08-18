@@ -56,9 +56,6 @@ fn command_step(
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
-        store_inputs: vec![],
-        store_outputs: vec![],
-        step_vars: None,
     }
 }
 
@@ -85,9 +82,6 @@ fn loop_guard_step() -> WorkflowStepConfig {
         timeout_secs: None,
         stall_timeout_secs: None,
         item_select_config: None,
-        store_inputs: vec![],
-        store_outputs: vec![],
-        step_vars: None,
     }
 }
 

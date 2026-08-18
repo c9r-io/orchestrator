@@ -200,9 +200,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -253,9 +250,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -306,9 +300,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -359,9 +350,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -412,9 +400,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {
@@ -538,9 +523,6 @@ mod tests {
                     stall_timeout_secs: None,
                     behavior: Default::default(),
                     item_select_config: None,
-                    store_inputs: vec![],
-                    store_outputs: vec![],
-                    step_vars: None,
                     extra: Default::default(),
                 }],
                 loop_policy: WorkflowLoopSpec {

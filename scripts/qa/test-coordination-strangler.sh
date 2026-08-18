@@ -165,8 +165,13 @@ fi
 
 if "$ORCH" manifest validate -f "$FIXTURE" >"$QA_ROOT/legacy-validate.out" 2>&1; then
   fail "legacy capture/JSONPath parity fixture unexpectedly validates"
-elif rg -q '\[legacy_(coordination|json_path)_removed\]' \
-  "$QA_ROOT/legacy-validate.out"; then
+# Until FR-173 this required `[legacy_coordination_removed]` or
+# `[legacy_json_path_removed]`. Both codes are gone with the checks that emitted
+# them, and the refusal now comes from `StepBehavior`'s `deny_unknown_fields`.
+# The assertion still names a diagnostic rather than settling for "it failed":
+# an exit code cannot distinguish this rejection from a typo in the fixture path.
+elif rg -q '\[parse_error\]' "$QA_ROOT/legacy-validate.out" &&
+  rg -q 'unknown field `captures`' "$QA_ROOT/legacy-validate.out"; then
   pass "legacy fixture is retained as rollback evidence and rejected by production validation"
 else
   cat "$QA_ROOT/legacy-validate.out" >&2

@@ -3,8 +3,7 @@ use std::str::FromStr;
 
 use super::{
     CostPreference, ItemIsolationConfig, ItemSelectConfig, SafetyConfig, StepBehavior,
-    StepHookEngine, StepPrehookConfig, StepScope, StoreInputConfig, StoreOutputConfig,
-    WorkflowFinalizeConfig,
+    StepHookEngine, StepPrehookConfig, StepScope, WorkflowFinalizeConfig,
 };
 
 /// Workflow step configuration.
@@ -53,7 +52,7 @@ pub struct WorkflowStepConfig {
     /// Execution scope (defaults based on step id)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scope: Option<StepScope>,
-    /// Declarative step behavior (on_failure, captures, post_actions, etc.)
+    /// Declarative step behavior (on_failure, post_actions, etc.)
     #[serde(default)]
     pub behavior: StepBehavior,
     /// Maximum parallel items for item-scoped steps (per-step override)
@@ -71,16 +70,6 @@ pub struct WorkflowStepConfig {
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<ItemSelectConfig>,
-    /// Store inputs: read values from workflow stores before step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_inputs: Vec<StoreInputConfig>,
-    /// Store outputs: write pipeline vars to workflow stores after step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_outputs: Vec<StoreOutputConfig>,
-    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
-    /// variables during this step's execution. Does not modify global pipeline state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub step_vars: Option<std::collections::HashMap<String, String>>,
 }
 
 fn default_true() -> bool {

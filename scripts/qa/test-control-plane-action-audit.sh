@@ -125,7 +125,6 @@ printf '%s\n' \
   '    shell: /bin/bash' \
   '    shell_arg: -lc' \
   '    policy: allowlist' \
-  '    executor: shell' \
   '    allowed_shells: [/bin/bash, /bin/sh, sh]' \
   '    allowed_shell_args: [-lc, -c]' \
   '  resume:' \

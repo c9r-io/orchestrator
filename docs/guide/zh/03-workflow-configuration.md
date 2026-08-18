@@ -211,17 +211,6 @@ behavior:
     status: "verified"
 ```
 
-### captures（捕获）
-
-从步骤结果中提取值到管道变量：
-
-```yaml
-behavior:
-  captures:
-    - var: build_output
-      source: stdout       # stdout | stderr | exit_code | failed_flag | success_flag
-```
-
 ### post_actions（后置动作）
 
 步骤完成后运行的动作：
@@ -234,9 +223,12 @@ behavior:
     - type: spawn_task             # 派生子任务（WP02）
       goal: "verify-changes"
       workflow: verify_workflow
-    - type: generate_items         # 生成动态项（WP03）
-      from_var: candidates
 ```
+
+这三个就是全集。`behavior.captures`、`generate_items`、`spawn_tasks` 与 `store_put`
+随协调收敛退休，并在 v0.7 窗口被移除；声明其中任何一个的步骤会被具名拒绝。需要读取
+前序步骤产出的步骤，请自己从 store 读 —— `orchestrator store get <store> <key>
+--project {project_id}` —— 而不是让引擎代为传递。
 
 ## 失败去了哪里
 

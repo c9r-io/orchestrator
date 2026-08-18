@@ -470,7 +470,6 @@ async fn enforced_mode_refuses_a_mutation_that_falls_back_to_legacy_client() {
         "    shell: /bin/bash\n",
         "    shell_arg: -lc\n",
         "    policy: allowlist\n",
-        "    executor: shell\n",
         "    allowed_shells: [/bin/bash, /bin/sh, sh]\n",
         "    allowed_shell_args: [-lc, -c]\n",
         "  resume:\n",

@@ -287,7 +287,14 @@ pub struct RuntimePolicySpec {
 }
 
 /// Runner-policy manifest payload.
+///
+/// FR-173 retired `runner.executor`. It was parse-only compatibility with a
+/// single accepted value that selected nothing, and `deny_unknown_fields` is
+/// what turns a manifest still carrying it into a stated error rather than a
+/// silently ignored key — this struct has no flattened catch-all, so without
+/// the attribute the field would simply vanish.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RunnerSpec {
     /// Shell binary used to execute command templates.
     pub shell: String,
@@ -297,9 +304,6 @@ pub struct RunnerSpec {
     /// Runner policy mode such as `allowlist`.
     #[serde(default = "default_runner_policy")]
     pub policy: String,
-    /// Executor implementation kind.
-    #[serde(default = "default_runner_executor")]
-    pub executor: String,
     /// Allowed shell binaries when allowlist enforcement is enabled.
     #[serde(default = "default_allowed_shells")]
     pub allowed_shells: Vec<String>,
@@ -319,10 +323,6 @@ pub struct RunnerSpec {
 // two defaults stay local to the manifest surface.
 fn default_runner_policy() -> String {
     "allowlist".to_string()
-}
-
-fn default_runner_executor() -> String {
-    "shell".to_string()
 }
 
 /// Resume-policy manifest payload.
@@ -1135,19 +1135,6 @@ pub struct WorkflowStepSpec {
     /// WP03: Configuration for item_select builtin step
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_select_config: Option<crate::config::ItemSelectConfig>,
-
-    /// WP01: Store inputs — read values from workflow stores before step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_inputs: Vec<crate::config::StoreInputConfig>,
-
-    /// WP01: Store outputs — write pipeline vars to workflow stores after step execution
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub store_outputs: Vec<crate::config::StoreOutputConfig>,
-
-    /// Step-scoped variable overrides applied as a temporary overlay on pipeline
-    /// variables during this step's execution. Does not modify global pipeline state.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub step_vars: Option<std::collections::HashMap<String, String>>,
 
     /// Captures unknown YAML fields for apply-time warning diagnostics.
     #[serde(flatten, default, skip_serializing)]

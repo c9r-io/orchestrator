@@ -100,8 +100,8 @@ When a typed driver emits normalized tool artifacts and a `driver_terminal`
 artifact, Orchestrator derives structured signals and injects them as pipeline
 variables. Coordination can therefore be driven by what the agent *did* rather
 than by scraping stdout. A plain shell output without a structured terminal
-artifact does not create these signals. The removed global `streaming` executor
-is not a configuration prerequisite.
+artifact does not create these signals. The global executor switch, removed
+along with `runner.executor`, is not a configuration prerequisite.
 
 | Variable | CEL Type | Meaning |
 |---|---|---|

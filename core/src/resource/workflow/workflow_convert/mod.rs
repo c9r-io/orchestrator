@@ -238,9 +238,6 @@ fn workflow_step_spec_to_config(step: &WorkflowStepSpec) -> Result<WorkflowStepC
         timeout_secs: step.timeout_secs,
         stall_timeout_secs: step.stall_timeout_secs,
         item_select_config: step.item_select_config.clone(),
-        store_inputs: step.store_inputs.clone(),
-        store_outputs: step.store_outputs.clone(),
-        step_vars: step.step_vars.clone(),
     };
     normalize_step_execution_mode(&mut config_step).map_err(|e| anyhow!(e))?;
     Ok(config_step)
@@ -302,9 +299,6 @@ fn workflow_step_config_to_spec(step: &WorkflowStepConfig) -> WorkflowStepSpec {
         stall_timeout_secs: step.stall_timeout_secs,
         behavior: step.behavior.clone(),
         item_select_config: step.item_select_config.clone(),
-        store_inputs: step.store_inputs.clone(),
-        store_outputs: step.store_outputs.clone(),
-        step_vars: step.step_vars.clone(),
         extra: Default::default(),
     }
 }

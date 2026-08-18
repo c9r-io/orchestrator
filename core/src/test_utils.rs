@@ -106,9 +106,6 @@ fn create_minimal_test_config(temp_root: &Path) -> OrchestratorConfig {
                                     timeout_secs: None,
                                     stall_timeout_secs: None,
                                     item_select_config: None,
-                                    store_inputs: vec![],
-                                    store_outputs: vec![],
-                                    step_vars: None,
                                 }],
                                 execution: Default::default(),
                                 loop_policy: WorkflowLoopConfig {

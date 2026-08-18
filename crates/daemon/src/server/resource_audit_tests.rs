@@ -222,7 +222,6 @@ spec:
     shell: /bin/bash
     shell_arg: -lc
     policy: allowlist
-    executor: shell
     allowed_shells: [/bin/bash, /bin/sh, sh]
     allowed_shell_args: [-lc, -c]
 "#,
@@ -296,7 +295,7 @@ async fn every_resource_kind_records_its_named_action() {
         (
             "resource.runtime_policy.apply",
             "runtime_policy",
-            "apiVersion: orchestrator.dev/v2\nkind: RuntimePolicy\nmetadata:\n  name: default\nspec:\n  resume:\n    auto: false\n  runner:\n    shell: /bin/bash\n    shell_arg: -lc\n    policy: allowlist\n    executor: shell\n    allowed_shells: [/bin/bash, /bin/sh, sh]\n    allowed_shell_args: [-lc, -c]\n".into(),
+            "apiVersion: orchestrator.dev/v2\nkind: RuntimePolicy\nmetadata:\n  name: default\nspec:\n  resume:\n    auto: false\n  runner:\n    shell: /bin/bash\n    shell_arg: -lc\n    policy: allowlist\n    allowed_shells: [/bin/bash, /bin/sh, sh]\n    allowed_shell_args: [-lc, -c]\n".into(),
         ),
         (
             "resource.step_template.apply",

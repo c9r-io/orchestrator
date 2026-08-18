@@ -1893,7 +1893,7 @@ fn topic_entries() -> Vec<GuideEntry> {
         category: GuideCategory::SystemAdmin,
         summary: "Bracketed machine error codes reference",
         description: "Errors and warnings carry bracketed machine codes such as \
-                      [legacy_agent_command_deprecated], [driver_config_invalid], and the \
+                      [driver_config_invalid], [secret_value_placeholder_rejected], and the \
                       driver requirement family ([driver_multi_turn_required], ...). \
                       docs/guide/error-codes.md is the glossary: each code's meaning, \
                       trigger, and remedy. The glossary's entry set is compared against \
