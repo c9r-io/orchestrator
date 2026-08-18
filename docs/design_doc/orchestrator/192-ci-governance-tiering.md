@@ -221,7 +221,7 @@ ceiling.
 
 - The roster lives in four places — the `if:` conditions, `ci.yml`'s `META`, the
   nightly's steps, the nightly's `META` — plus `tieredBy` in the gate manifest.
-  `test-ci-tier.sh` cases 19–21 derive all five from the files and compare, so
+  `test-ci-tier.sh` cases 19–22 derive all five from the files and compare, so
   they cannot drift apart silently, but the duplication is real and a sixth copy
   would need a sixth comparison.
 - The tier predicate reads `git diff base...HEAD`. A force-push that rewrites the

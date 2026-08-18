@@ -40,7 +40,7 @@ GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=nope \
 
 ### Expected
 
-- Exit 0, summary `FR-174 meta-verification tier: 22 passed, 0 failed`.
+- Exit 0, summary `FR-174 meta-verification tier: 23 passed, 0 failed`.
 - Cases 1–4 pass individually, one per tiered root — a single case covering all
   four would pass while three patterns were wrong.
 - Case 0 (the control) passes: a changeset touching only `src/` **defers**.
@@ -100,7 +100,7 @@ Five places name the tiered set: the `if:` conditions in `ci.yml`, `ci.yml`'s
 
 ### Steps
 
-Cases 19–21 of `test-ci-tier.sh`, plus the count:
+Cases 19–22 of `test-ci-tier.sh`, plus the count:
 
 ```bash
 ruby -rjson -e 'puts JSON.parse(File.read("config/governance/qa-gate-surface.json"))["scripts"]
@@ -125,6 +125,11 @@ cp /tmp/ci.bak .github/workflows/ci.yml
 - A step made tier-conditional that also belongs to the tiering mechanism fails
   case 20. A gate that can defer its own verification is the deadlock this FR
   must not build.
+- Case 22 ties the three names that must be one name: the tier step's `id`, the
+  `steps.<id>.outputs.<key>` the conditions read, and the `<key>=` line
+  `ci-tier.sh` writes. Renaming either end leaves every condition resolving to an
+  empty string and skipping all 19 gates; the aggregator's unset-tier check is a
+  backstop, not a diagnosis. Verified against both drift directions.
 - The count is **61**, against 58 before FR-174 (`ci-tier.sh`,
   `governance-result.sh`, `test-ci-tier.sh`), and must never fall — FR-174's
   negative acceptance criterion. 19 entries carry `tieredBy`; without it the
@@ -200,7 +205,7 @@ the gate passes here and fails in CI.
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S1 predicate returns work, and fails closed | ☑ | 22/22; one case per root; four fail-closed paths |
+| 1 | S1 predicate returns work, and fails closed | ☑ | 23/23; one case per root; four fail-closed paths |
 | 2 | S2 deferral asserted in both directions | ☑ | 11 aggregator states exercised on bash 3.2 |
 | 3 | S3 rosters cannot drift; coverage did not shrink | ☑ | 3 mutations, each named; 58 → 61 ci-required |
 | 4 | S4 critical path recomputed | ☑ | 12/12; 1335s full / 774s deferred |

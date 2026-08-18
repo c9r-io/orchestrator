@@ -411,6 +411,49 @@ case "$MANIFEST_REPORT" in
     ;;
 esac
 
+# 22. The three names that have to be the same name. The `if:` conditions read
+#     `steps.<step-id>.outputs.<key>`; the step that produces it has an `id:`;
+#     and ci-tier.sh writes a `<key>=` line into GITHUB_OUTPUT. Nothing else
+#     compares them, and each pair can drift silently: rename the step's id and
+#     every condition resolves against a step that does not exist, rename the
+#     output key and they resolve against a key nobody writes. Both yield an
+#     empty string, both skip all nineteen gates, and the aggregator's
+#     unset-tier check is the only thing between that and a green job — a
+#     backstop, not a diagnosis. Derived from all three files.
+NAMES_REPORT="$(ruby -ryaml -e '
+  ci = YAML.load_file(ARGV[0])["jobs"]["governance"]["steps"]
+  producer = ci.find { |s| s["run"].to_s.include?("ci-tier.sh") }
+  problems = []
+  if producer.nil?
+    problems << "no step in the governance job runs ci-tier.sh"
+  else
+    step_id = producer["id"].to_s
+    problems << "the step running ci-tier.sh has no id" if step_id.empty?
+
+    refs = ci.map { |s| s["if"].to_s }.grep(/tier\.outputs\./).uniq
+    problems << "no step reads the tier output" if refs.empty?
+    refs.each do |expr|
+      m = expr.match(/steps\.([A-Za-z0-9_-]+)\.outputs\.([A-Za-z0-9_-]+)/)
+      if m.nil?
+        problems << "cannot read a steps.<id>.outputs.<key> reference out of #{expr.inspect}"
+        next
+      end
+      problems << "#{expr.inspect} names step #{m[1].inspect}, but ci-tier.sh runs in #{step_id.inspect}" if m[1] != step_id
+      key = m[2]
+      written = File.read(ARGV[1]).include?("printf %s\x27#{key}=" % "")
+      problems << "#{expr.inspect} reads output #{key.inspect}, which ci-tier.sh never writes" unless written
+    end
+  end
+  puts(problems.empty? ? "OK" : problems.map { |p| "PROBLEM #{p}" }.join("\n"))
+' "$CI_YML" "$REPO_ROOT/scripts/qa/ci-tier.sh" 2>&1)"
+
+if [ "$NAMES_REPORT" = "OK" ]; then
+  pass "the tier step's id, the if: references and the output ci-tier.sh writes are one name"
+else
+  fail "the tier output is read under a name nothing produces"
+  printf '%s\n' "$NAMES_REPORT" | sed 's/^/      /' >&2
+fi
+
 echo ""
 SUMMARY_REACHED=1
 echo "FR-174 meta-verification tier: $PASS passed, $FAIL failed"
