@@ -223,43 +223,24 @@ jobs:
       - name: Decide meta-verification tier
         id: tier
         shell: bash
-        run: |
-          set -uo pipefail
-          decide() {
-            if [[ "${GITHUB_EVENT_NAME:-}" != "pull_request" ]]; then
-              echo "full"; echo "event is '${GITHUB_EVENT_NAME:-unset}', not pull_request" >&2; return
-            fi
-            local base="${GITHUB_BASE_REF:-}"
-            if [[ -z "$base" ]]; then
-              echo "full"; echo "no GITHUB_BASE_REF" >&2; return
-            fi
-            if ! git fetch --no-tags --depth=0 origin "$base" >/dev/null 2>&1; then
-              echo "full"; echo "could not fetch base ref '$base'" >&2; return
-            fi
-            local changed
-            if ! changed="$(git diff --name-only "origin/$base...HEAD" 2>/dev/null)"; then
-              echo "full"; echo "git diff against origin/$base failed" >&2; return
-            fi
-            if [[ -z "$changed" ]]; then
-              echo "full"; echo "empty diff — refusing to infer 'no gates touched' from no data" >&2; return
-            fi
-            printf '%s\n' "$changed" > /tmp/fr174-changed.txt
-            if grep -qE '^(scripts/qa/|scripts/lib/|config/governance/|\.github/workflows/)' /tmp/fr174-changed.txt; then
-              echo "full"; echo "changeset touches a gate root" >&2; return
-            fi
-            echo "deferred"
-          }
-          tier="$(decide 2>/tmp/fr174-why.txt)"
-          reason="$(cat /tmp/fr174-why.txt 2>/dev/null || true)"
-          [[ "$tier" == "full" || "$tier" == "deferred" ]] || tier=full
-          echo "tier=$tier" >> "$GITHUB_OUTPUT"
-          echo "meta-verification tier: $tier${reason:+ — $reason}"
+        run: ./scripts/qa/ci-tier.sh
 
       # Every step below reports independently. A serial job stops at its first
       # failure, so one red gate hides every diagnosis after it: FR-134's
       # workspace-scope defect sat invisible behind the ledger tooling's
       # self-lock for two runs. `continue-on-error` lets one run surface every
       # problem, and the aggregate step at the end is what fails the job.
+
+      # First, because it governs the condition every meta gate below is
+      # deferred by. Deliberately *not* tier-conditional: a gate that can defer
+      # its own verification is the deadlock FR-174 must not build, and
+      # test-ci-tier.sh case 20 asserts that this stays true of the tier step,
+      # the aggregator and itself.
+      - name: Meta-verification tier and aggregator fixtures
+        id: ci-tier
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-tier.sh
+
       - name: Verify CI job liveness
         id: liveness
         continue-on-error: true
@@ -626,6 +607,7 @@ jobs:
             dependency-policy-fixtures
             pipefail-short-circuit-fixtures
           OUTCOMES: |
+            ci-tier=${{ steps.ci-tier.outcome }}
             liveness=${{ steps.liveness.outcome }}
             liveness-fixtures=${{ steps.liveness-fixtures.outcome }}
             surface=${{ steps.surface.outcome }}
