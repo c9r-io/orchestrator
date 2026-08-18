@@ -2,7 +2,12 @@
 
 ## 优先级: P2
 
-## 状态: Proposed
+## 状态: In Progress
+
+五条验收标准中四条已完成；未完成的是需求 2 —— `nightly-governance.yml` 尚未运行过，
+因而 `ci-job-liveness.json` 中没有它的记录。设计与验证信息由
+[DD-192](../design_doc/orchestrator/192-ci-governance-tiering.md) 与
+[QA 230](../qa/orchestrator/230-ci-governance-tiering.md) 承载。
 
 ## 背景
 
@@ -155,17 +160,39 @@ FR-163/FR-165 落地后没有人跑 `--refresh --write`。本 FR 写于 2026-08-
 
 ## 验收标准
 
-- [ ] 分层规则从变更集派生并失败关闭；反例 fixture 覆盖
+- [x] 分层规则从变更集派生并失败关闭；反例 fixture 覆盖
       「改动 `scripts/qa/**` 时元验证确实回到 PR 路径」
+      —— `scripts/qa/ci-tier.sh` + `scripts/qa/test-ci-tier.sh`（22/22），
+      四个根各一个 case，另有 push / 空 base / 不可解析 base / 空 diff 四条
+      失败关闭。**外加 FR 未预见的一项**：聚合步骤原先接受 `skipped`，19 个
+      步骤变成条件式之后这条容忍就是 §4.4 shape 5 —— 谓词误判 `deferred` 会
+      跳过全部 19 个、打印 19 行、退出 0，验证归零而日志无异常。现在两个方向
+      逐门禁断言：`deferred` 下 `success` 与 `failure` 同样是违规
 - [ ] 每一个移出 PR 路径的步骤在新位置有执行证据，且纳入
       `ci-job-liveness.json` 的活性检查
-- [ ] 分层后 PR 关键路径秒数可报出确切数值，并与**最长的那个产品 job**
+      —— **未完成，且这是唯一未完成项。** `nightly-governance.yml` 已建立并
+      与 `ci.yml` 的 19 个步骤逐条比对（id 与命令双向相等），但它**从未运行
+      过**，因此 `ci-job-liveness.json` 里没有它的记录。该台账里每一条都是真实
+      运行；为一次没有发生的运行写下 headSha，正是这个台账存在的意义所要阻止
+      的那种条目。DD-159 的先例说明这一条不是形式：一个门禁自 2026-03-26 起已
+      死而无人察觉。补齐路径：push → dispatch nightly → 真实结论 →
+      `ci-liveness.rb --refresh --write` 与 `ci-cost.rb --refresh --write`
+- [x] 分层后 PR 关键路径秒数可报出确切数值，并与**最长的那个产品 job**
       （`test`，324 秒）对照说明差距来自什么。**不与产品 job 的秒数之和对照** ——
       并行 job 的和不是任何关键路径的界，见 step 0 更正 4。同时记下真正的结构
       下界是 `ci-environment-parity` 的 577 秒，以及分层为什么到不了 324 秒
-- [ ] `ci-step-cost.json` 记录关键路径，且 DD-153 的预算条款按分层后的
+      —— 实测 **1335s full / 774s deferred**，链条
+      1335 → 774（本 FR）→ 577（parity）→ 324（`test`），写入 DD-192
+- [x] `ci-step-cost.json` 记录关键路径，且 DD-153 的预算条款按分层后的
       结构复核（预算若继续只约束绝对秒数，写明为什么这仍然够）
-- [ ] 门禁**总数不减少**（负向验收：证明这是调度改变，不是覆盖削减）
+      —— `criticalPath` 由 `ci-cost.rb` 从 `needs` 图**每次重算并比对**，
+      不是写死的数；反例 fixture 变的是图（加一条 `needs` 边）而不是那个数，
+      因为后者没人会误提交。DD-153 补第六个采样：14→13→12→11→9→**29%**，
+      五个采样建立的单调下降被反向推翻
+- [x] 门禁**总数不减少**（负向验收：证明这是调度改变，不是覆盖削减）
+      —— ci-required **58 → 61**（新增 `ci-tier.sh`、`governance-result.sh`、
+      `test-ci-tier.sh`）。另外 19 条加了 `tieredBy` 标注：`ci-required` 的定义
+      是「每次 push/PR 都跑」，对这 19 条已不成立，不标注就是台账在说假话
 
 ## 依赖与关联
 
