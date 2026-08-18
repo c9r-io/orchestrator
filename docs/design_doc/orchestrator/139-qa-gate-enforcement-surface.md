@@ -34,6 +34,7 @@ The design decision is to treat **enforcement status as a first-class artifact**
 - `enforcement`: `ci-required` | `manual-runbook` | `scheduled`
 - `ci-required` additionally requires `workflow`, `job`, and `providerIsolation`; optionally `invokedBy` when a workflow runs the gate through a wrapper.
 - `manual-runbook` and `scheduled` additionally require a non-empty `reason` and an `owner` document that exists on disk.
+- `tieredBy` (FR-174, optional, `ci-required` only) names the script whose verdict decides whether the gate's step runs on this PR. `ci-required` means "on every push/PR", and for the 19 meta-verification gates that is no longer true — they run inline when the changeset touches a gate root and in `nightly-governance.yml` otherwise. The entry stays `ci-required` because the gate is still required; what changed is when it is cheap to ask, not whether the answer is enforced. Without the field the manifest would assert something false about a fifth of its ci-required population, and the enforcement-surface report would overstate what any given PR ran. `scripts/qa/test-ci-tier.sh` asserts the marked set equals the set `ci.yml` actually gates, both derived, so the annotation cannot drift from the workflow in either direction. See [DD-192](192-ci-governance-tiering.md).
 
 The manifest lives beside `coordination-collapse-ledger.json` under `config/governance/`, following the established convention that governance ledgers are machine-readable JSON checked by a script rather than prose in a design document.
 

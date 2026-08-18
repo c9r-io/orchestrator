@@ -13,9 +13,9 @@
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
         "date": "2026-08-18",
-        "revision": "ece7a77ae33438c12de5fa11458a8e74bfd6b9ce",
+        "revision": "b5287e06570650020cb15023a3fa1f22c5c8b1be",
         "exitStatus": 0,
-        "worktreeDirty": false
+        "worktreeDirty": true
       }
     },
     "scripts/qa/test-agent-session-control-plane.sh": {
