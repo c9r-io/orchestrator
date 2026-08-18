@@ -292,7 +292,8 @@ fi
 #     `cost-fixtures-extra`; a substring test would silently reclassify.
 out="$(TIER=deferred META='cost-fixtures' \
   OUTCOMES=$'cost-fixtures=skipped\ncost-fixtures-extra=success' "$RESULT_SH" 2>&1)"
-if [ $? -eq 0 ] && printf '%s' "$out" | grep -q 'cost-fixtures-extra *success$'; then
+rc=$?
+if [ "$rc" -eq 0 ] && grep -q 'cost-fixtures-extra *success$' <<< "$out"; then
   pass "roster membership matches whole ids, not prefixes"
 else
   fail "a prefix of a META id was treated as a member"

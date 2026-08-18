@@ -13,10 +13,29 @@
     "reviewWhen": "A new gate that does not fit is not a reason to raise this silently. Whoever adds it either makes room or raises the ceiling in this file with a written reason and a new date. Revisit unconditionally if the runner class changes, since the number assumes GitHub-hosted ubuntu-latest."
   },
   "pendingMeasurement": {
+    "Decide meta-verification tier": "Added by FR-174 and not yet run by CI, so it has no measured cost. Runs scripts/qa/ci-tier.sh: one `git fetch` of the base ref and one `git diff --name-only` against it, then a grep over the changed paths. No cargo, no npm, no daemon. Locally under 1s on a warm clone; the fetch dominates and is bounded by the base branch's size. Replaced by a number on the next refresh.",
+    "Meta-verification tier and aggregator fixtures": "Added by FR-174 and not yet run by CI. Runs scripts/qa/test-ci-tier.sh: 22 cases, of which nine build small throwaway git repositories under $TMPDIR and the rest drive scripts/qa/governance-result.sh over synthetic outcome tables, plus three ruby passes that parse both workflows and the gate manifest. No cargo, no npm, no daemon, no network. Locally under 3s. Replaced by a number on the next refresh."
   },
   "measurement": {
     "runId": "32099510921",
     "headSha": "e6081c6d8b074fc329c5abb430289d3ca1e0f0b9"
+  },
+  "criticalPath": {
+    "description": "Feedback latency: the longest chain through the `needs` graph, which is what a developer waits for. Not the sum of the jobs — they run in parallel — and not any single job's seconds. Derived from this file's per-job totals and ci.yml's `needs` edges on every run of ci-cost.rb, and compared against what is recorded here, so it cannot describe a graph the workflow no longer has. `deferred` is the same graph with the meta-verification steps FR-174 made tier-conditional subtracted from the job that carries them; it is what a pull request touching no gate root waits for, and `full` is what one touching scripts/qa, scripts/lib, config/governance or .github/workflows waits for. Compare either against the longest *product* job, never against the product jobs' sum.",
+    "full": {
+      "seconds": 1335,
+      "chain": [
+        "governance"
+      ]
+    },
+    "deferred": {
+      "seconds": 774,
+      "chain": [
+        "governance"
+      ]
+    },
+    "tieredSteps": 19,
+    "tieredSeconds": 561
   },
   "jobs": {
     "async-lock-governance": {

@@ -74,7 +74,12 @@ decide() {
     return
   fi
 
-  if printf '%s\n' "$changed" | grep -qE "$TIER_ROOTS_PATTERN"; then
+  # Here-string, not `printf | grep -q`. Under `set -o pipefail` the reader
+  # leaves on the first match, the producer takes EPIPE, and the pipeline
+  # reports failure on a *successful* match — which in this condition inverts
+  # the verdict to `deferred`, the one direction that silently drops
+  # meta-verification. FR-145's defect, in the branch where it fails open.
+  if grep -qE "$TIER_ROOTS_PATTERN" <<< "$changed"; then
     emit full "changeset touches a tiered root"
     return
   fi
