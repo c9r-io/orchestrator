@@ -268,26 +268,35 @@ fi
 #     300 becomes a description of a workflow that no longer exists.
 d="$(new_case critical-path-drift)"
 seed_ledger "$d"
+# Through fixture_mutate, not a bare edit: the mutation target is a statement in
+# a file this fixture does not own, and a `sub!` that stops matching would leave
+# the case asserting nothing while still reporting. The helper requires the file
+# to exist, the command to succeed, and the digest to change — and it reports
+# through fail() rather than aborting, so a stale target costs one assertion
+# instead of the summary line (FR-143, DD-155).
+#
 # ruby, not python3: FR-144 recorded a gate that used python3 in a job which
 # never provided it, and check_command_sources exists because of it.
-ruby -e '
-  path = ARGV[0]
-  text = File.read(path)
-  text.sub!("  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n",
-            "  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n    needs:\n      - governance\n") ||
-    abort("fixture premise gone: the parity job no longer has the shape this mutation edits")
-  File.write(path, text)
-' "$d/.github/workflows/ci.yml"
-git -C "$d" add -A >/dev/null 2>&1
-git -C "$d" commit -qm "add a needs edge" >/dev/null 2>&1
-edit_ledger "$d" ".measurement.headSha = \"$(git -C "$d" rev-parse HEAD)\""
-if run_gate "$d"; then
-  fail "a critical path describing a superseded graph was accepted"
-elif grep -q "criticalPath.full records 300s but the graph gives 400s" "$WORK/out.log"; then
-  pass "a critical path the needs graph no longer produces fails, with both numbers"
-else
-  fail "the gate failed but not because the recorded critical path went stale"
-  cat "$WORK/out.log" >&2
+if fixture_mutate "critical path drift: add a needs edge" "$d/.github/workflows/ci.yml" \
+  ruby -e '
+    path = ARGV[0]
+    text = File.read(path)
+    before = "  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n"
+    after = "  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n    needs:\n      - governance\n"
+    exit 1 unless text.sub!(before, after)
+    File.write(path, text)
+  ' "$d/.github/workflows/ci.yml"; then
+  git -C "$d" add -A >/dev/null 2>&1
+  git -C "$d" commit -qm "add a needs edge" >/dev/null 2>&1
+  edit_ledger "$d" ".measurement.headSha = \"$(git -C "$d" rev-parse HEAD)\""
+  if run_gate "$d"; then
+    fail "a critical path describing a superseded graph was accepted"
+  elif grep -q "criticalPath.full records 300s but the graph gives 400s" "$WORK/out.log"; then
+    pass "a critical path the needs graph no longer produces fails, with both numbers"
+  else
+    fail "the gate failed but not because the recorded critical path went stale"
+    cat "$WORK/out.log" >&2
+  fi
 fi
 
 # 4c. The field missing altogether. Separate from 4b because a ledger written

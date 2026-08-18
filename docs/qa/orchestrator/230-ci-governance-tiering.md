@@ -18,7 +18,7 @@ Design: [DD-192](../../design_doc/orchestrator/192-ci-governance-tiering.md).
 
 ---
 
-## Scenario 1: the tier predicate returns work to the PR path
+## Scenario 1: the tier predicate returns work to the PR path, and fails closed
 
 ### Steps
 
@@ -26,22 +26,7 @@ Design: [DD-192](../../design_doc/orchestrator/192-ci-governance-tiering.md).
 bash scripts/qa/test-ci-tier.sh
 ```
 
-### Expected
-
-- Exit 0, summary line `FR-174 meta-verification tier: 22 passed, 0 failed`.
-- Cases 1–4 pass individually, one per tiered root — a single case covering all
-  four would pass while three patterns were wrong.
-- Case 0 (the control) passes: a changeset touching only `src/` **defers**.
-  Without it, every `full` verdict below could be a predicate that returns `full`
-  unconditionally.
-
----
-
-## Scenario 2: the predicate fails closed
-
-### Steps
-
-Cases 6–9 of the same run. To exercise one by hand:
+To exercise one failure path by hand:
 
 ```bash
 cd "$(mktemp -d)" && git init -q && git config user.email a@b.c && git config user.name a
@@ -55,19 +40,27 @@ GITHUB_EVENT_NAME=pull_request GITHUB_BASE_REF=nope \
 
 ### Expected
 
-- Prints `full`, with the reason on stderr.
-- The same for a `push` event, an empty `GITHUB_BASE_REF`, and an empty diff.
-- **An empty diff must be `full`.** "No files changed" is the question going
-  unanswered, not evidence that no gate changed; a predicate that deferred here
-  would defer every run whose diff computation silently returned nothing.
+- Exit 0, summary `FR-174 meta-verification tier: 22 passed, 0 failed`.
+- Cases 1–4 pass individually, one per tiered root — a single case covering all
+  four would pass while three patterns were wrong.
+- Case 0 (the control) passes: a changeset touching only `src/` **defers**.
+  Without it every `full` verdict could be a predicate returning `full`
+  unconditionally.
+- Cases 6–9 fail closed: a `push`, an empty `GITHUB_BASE_REF`, an unresolvable
+  base ref, and an **empty diff** all yield `full`. The hand-run above prints
+  `full` with its reason on stderr.
+- The empty-diff case is the one a reasonable author gets wrong. "No files
+  changed" is the question going unanswered, not evidence that no gate changed;
+  a predicate that deferred there would defer every run whose diff computation
+  silently returned nothing.
 
 ---
 
-## Scenario 3: a deferral is asserted, not assumed
+## Scenario 2: a deferral is asserted, not assumed
 
-The scenario that matters. A tier predicate that wrongly returns `deferred`
-skips all 19 gates; if the aggregator merely tolerates `skipped`, the job is
-green and no meta-verification ran anywhere.
+The scenario that matters. A predicate wrongly returning `deferred` skips all 19
+gates; if the aggregator merely tolerates `skipped`, the job is green and no
+meta-verification ran anywhere.
 
 ### Steps
 
@@ -93,10 +86,13 @@ TIER=full META='' OUTCOMES='' bash scripts/qa/governance-result.sh; echo "exit=$
   `success` here is a violation**, not a bonus: the tier is a claim about what
   executed, so an unexpected success falsifies it exactly as a failure would.
 - The third reports that OUTCOMES named no gates. Reading nothing is not passing.
+- Note the invocation shape: this script takes its input from the environment, so
+  running it bare exits 1 by design. A sweep that invokes derived *paths* rather
+  than derived *invocations* will read that as a failure.
 
 ---
 
-## Scenario 4: the rosters cannot drift apart
+## Scenario 3: the rosters cannot drift, and coverage did not shrink
 
 Five places name the tiered set: the `if:` conditions in `ci.yml`, `ci.yml`'s
 `META`, the nightly's steps, the nightly's `META`, and `tieredBy` in
@@ -104,9 +100,15 @@ Five places name the tiered set: the `if:` conditions in `ci.yml`, `ci.yml`'s
 
 ### Steps
 
-Cases 19–21 of `test-ci-tier.sh`. To confirm they bite, mutate and re-run —
-comment a line out rather than deleting it, deletion being the case the author
-already had in mind:
+Cases 19–21 of `test-ci-tier.sh`, plus the count:
+
+```bash
+ruby -rjson -e 'puts JSON.parse(File.read("config/governance/qa-gate-surface.json"))["scripts"]
+  .count { |s| s["enforcement"] == "ci-required" }'
+```
+
+To confirm the roster cases bite, mutate and re-run — comment a line out rather
+than deleting it, deletion being the case the author already had in mind:
 
 ```bash
 cp .github/workflows/ci.yml /tmp/ci.bak
@@ -117,17 +119,21 @@ cp /tmp/ci.bak .github/workflows/ci.yml
 
 ### Expected
 
-- Unmutated: all three pass, reporting 19 gates with identical commands.
+- Unmutated: all three cases pass, reporting 19 gates with identical commands.
 - Mutated: a **named diagnostic** — `PROBLEM ci gated steps != ci META: [...]` —
-  not merely a non-zero exit. An exit code cannot say which of the three
-  comparisons fired.
-- A step made tier-conditional that also appears in the tiering mechanism itself
-  fails case 20. A gate that can defer its own verification is the deadlock this
-  FR must not build.
+  not merely a non-zero exit. An exit code cannot say which comparison fired.
+- A step made tier-conditional that also belongs to the tiering mechanism fails
+  case 20. A gate that can defer its own verification is the deadlock this FR
+  must not build.
+- The count is **61**, against 58 before FR-174 (`ci-tier.sh`,
+  `governance-result.sh`, `test-ci-tier.sh`), and must never fall — FR-174's
+  negative acceptance criterion. 19 entries carry `tieredBy`; without it the
+  manifest would claim those 19 run on every push, which is what `ci-required`
+  means and is no longer true of them.
 
 ---
 
-## Scenario 5: the critical path is recomputed, not trusted
+## Scenario 4: the critical path is recomputed, not trusted
 
 ### Steps
 
@@ -138,12 +144,13 @@ bash scripts/qa/test-ci-cost.sh
 
 ### Expected
 
-- The gate prints `critical path: 1335s full / 774s deferred (19 tiered step(s),
-  561s)` and the longest chain.
+- `critical path: 1335s full / 774s deferred (19 tiered step(s), 561s)` plus the
+  longest chain.
 - `test-ci-cost.sh` reports `12 passed, 0 failed`, including the drift case,
   which mutates the **`needs` graph** rather than the recorded number: adding
   `parity needs governance` makes the chain 400s and the recorded 300s stale
-  while every per-job second stays correct.
+  while every per-job second stays correct, so no other check here has an
+  opinion.
 - Compare the deferred figure against the longest **product** job (`test`, 324s),
   never against the product jobs' sum — parallel jobs' seconds do not add into a
   latency. The next bound is `ci-environment-parity` at 577s, which this FR does
@@ -151,7 +158,7 @@ bash scripts/qa/test-ci-cost.sh
 
 ---
 
-## Scenario 6: the deferred gates have a home that runs
+## Scenario 5: the deferred gates have a home that runs
 
 The requirement that decides whether this FR removed work or removed checking.
 DD-159's precedent: a gate dead since 2026-03-26 because it exited before its
@@ -181,34 +188,11 @@ it conclude, then `ci-liveness.rb --refresh --write` and
 `ci-cost.rb --refresh --write`. The second also measures the two steps under
 `pendingMeasurement` and re-arms the cost ceiling.
 
-Expect `ci-liveness.rb` to be red on any commit that touches `ci.yml` until that
+Expect `ci-liveness.rb` to be red on any commit touching `ci.yml` until that
 refresh: a record taken before the workflow last changed describes a pipeline
-that no longer exists, so all 12 records expire at once. Local runs are
-misleading while the change is uncommitted — `ci.yml`'s last-change sha is still
-the old one, so the gate passes here and fails in CI.
-
----
-
-## Scenario 7: coverage did not shrink
-
-FR-174's negative acceptance criterion: this is a scheduling change, not a
-reduction.
-
-### Steps
-
-```bash
-ruby -rjson -e 'd=JSON.parse(File.read("config/governance/qa-gate-surface.json"));
-  puts d["scripts"].count { |s| s["enforcement"] == "ci-required" }'
-```
-
-### Expected
-
-- **61**, against 58 before FR-174 — the three new entries are `ci-tier.sh`,
-  `governance-result.sh` and `test-ci-tier.sh`. The count must never fall.
-- 19 entries carry `tieredBy`, and `test-ci-tier.sh` case 21 asserts that set
-  equals the set `ci.yml` actually gates. Without the marker the manifest would
-  claim those 19 run on every push, which is what `ci-required` means and is no
-  longer true of them.
+that no longer exists, so all 12 records expire at once. Local runs mislead while
+the change is uncommitted — `ci.yml`'s last-change sha is still the old one, so
+the gate passes here and fails in CI.
 
 ---
 
@@ -216,10 +200,8 @@ ruby -rjson -e 'd=JSON.parse(File.read("config/governance/qa-gate-surface.json")
 
 | # | Check | Status | Notes |
 |---|-------|--------|-------|
-| 1 | S1 predicate returns work to the PR path | ☑ | 22/22, one case per root |
-| 2 | S2 fails closed | ☑ | push, empty base, unresolvable base, empty diff |
-| 3 | S3 deferral asserted in both directions | ☑ | 11 aggregator states on bash 3.2 |
-| 4 | S4 rosters cannot drift | ☑ | 3 mutations, each with a named diagnostic |
-| 5 | S5 critical path recomputed | ☑ | 12/12; 1335s full / 774s deferred |
-| 6 | S6 deferred gates have a running home | ☐ | **outstanding** — nightly has never run |
-| 7 | S7 coverage did not shrink | ☑ | 58 → 61 ci-required |
+| 1 | S1 predicate returns work, and fails closed | ☑ | 22/22; one case per root; four fail-closed paths |
+| 2 | S2 deferral asserted in both directions | ☑ | 11 aggregator states exercised on bash 3.2 |
+| 3 | S3 rosters cannot drift; coverage did not shrink | ☑ | 3 mutations, each named; 58 → 61 ci-required |
+| 4 | S4 critical path recomputed | ☑ | 12/12; 1335s full / 774s deferred |
+| 5 | S5 deferred gates have a running home | ☐ | **outstanding** — the nightly has never run |
