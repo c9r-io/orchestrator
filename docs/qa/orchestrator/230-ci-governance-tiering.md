@@ -188,10 +188,28 @@ every entry in that ledger is a real run, and a fabricated `headSha` is the entr
 the ledger exists to prevent. Until this passes, the 19 deferred gates have a
 declared home and no evidence of arriving there, and FR-174 stays In Progress.
 
-Sequence to satisfy it: push the branch, dispatch `nightly-governance.yml`, let
-it conclude, then `ci-liveness.rb --refresh --write` and
-`ci-cost.rb --refresh --write`. The second also measures the two steps under
-`pendingMeasurement` and re-arms the cost ceiling.
+**It cannot be satisfied before the branch merges**, which is a platform
+constraint and was measured rather than assumed:
+
+```bash
+gh workflow run nightly-governance.yml --ref feat/fr174-ci-governance-tiering
+# HTTP 404: workflow nightly-governance.yml not found on the default branch
+gh api repos/c9r-io/orchestrator/actions/workflows --jq '.workflows[].path'
+# does not list it
+```
+
+GitHub registers a `workflow_dispatch` workflow only from the default branch, so
+`--ref` cannot reach one on a feature branch. A bare branch push runs nothing
+either — `ci.yml` triggers on `pull_request` and on pushes to `main`/`master`.
+
+Order, therefore: open the PR (this is what first exercises the tier predicate,
+and it must decide `full` here, since the changeset touches three of the four
+roots) → merge → dispatch the nightly or wait for 03:17 UTC → then
+`ci-liveness.rb --refresh --write` and `ci-cost.rb --refresh --write`. The second
+also measures the two steps under `pendingMeasurement` and re-arms the ceiling.
+
+Between the merge and that refresh, the deferred gates have a home that has never
+run, and `ci-liveness.rb` is red throughout — the correct signal, not a nuisance.
 
 Expect `ci-liveness.rb` to be red on any commit touching `ci.yml` until that
 refresh: a record taken before the workflow last changed describes a pipeline

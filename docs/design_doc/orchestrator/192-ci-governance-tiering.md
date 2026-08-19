@@ -196,10 +196,32 @@ before its first scenario, with nothing looking. Until the nightly has fired onc
 and the ledger records it, the 19 deferred gates have a declared home and no
 evidence of arriving there.
 
-The sequence: push, dispatch `nightly-governance.yml`, let it conclude, then
-`ci-liveness.rb --refresh --write` and `ci-cost.rb --refresh --write`. The second
-also measures the two steps currently under `pendingMeasurement` and re-arms the
-ceiling.
+**And it cannot be satisfied before this branch merges.** Measured, not assumed:
+`gh workflow run nightly-governance.yml --ref feat/fr174-ci-governance-tiering`
+returns `HTTP 404: workflow not found on the default branch`, and the workflow
+does not appear in `gh api .../actions/workflows` at all — GitHub registers a
+`workflow_dispatch` workflow only from the default branch, so `--ref` cannot
+reach one that lives on a feature branch. A bare push to the branch runs nothing
+either: `ci.yml` triggers on `pull_request` and on pushes to `main`/`master`, not
+on arbitrary branches.
+
+So the order is forced, and it is worth stating because it inverts the usual one:
+
+1. Open the PR. That is what first exercises the tier predicate for real, and on
+   this PR it must decide `full` — the changeset touches `scripts/qa/`,
+   `config/governance/` and `.github/workflows/`, three of the four roots. A
+   `deferred` verdict here would be the mechanism failing its own first case.
+2. Merge. Only then does GitHub register the nightly.
+3. Dispatch it, or wait for 03:17 UTC.
+4. `ci-liveness.rb --refresh --write` and `ci-cost.rb --refresh --write`. The
+   second also measures the two steps under `pendingMeasurement` and re-arms the
+   ceiling.
+
+The consequence worth naming: **between step 2 and step 4 the deferred gates have
+a home that has never run**, and `main` is the first place that is true. The
+window is one nightly cycle at most, and `ci-liveness.rb` is red for the whole of
+it — which is the correct signal rather than a nuisance, since it is exactly the
+claim "these gates run somewhere" going unevidenced.
 
 ## Accepted costs
 
