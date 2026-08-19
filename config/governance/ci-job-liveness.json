@@ -8,63 +8,67 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "test": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "governance": {
-          "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "conclusion": "failure",
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99",
+          "knownFailing": {
+            "reference": "docs/feature_request/FR-174-ci-governance-cost-tiering.md",
+            "reason": "Bootstrap, and it closes itself. The governance job's only failing gate is ci-liveness.rb, and it fails for two reasons this branch cannot fix: every ci.yml record expired when FR-174 edited the workflow, and nightly-governance.yml exists on disk having never run. It cannot run until this merges — GitHub registers a workflow_dispatch workflow only from the default branch (measured: HTTP 404, and absent from the workflows API). Every other gate in the job passed, at tier `full`, with 19 meta-verification gates read and none skipped. Remove this annotation in the same commit as the post-merge `ci-liveness.rb --refresh --write`; the gate enforces that itself, since an annotation outliving its failure reports 'marked known-failing but last concluded success'."
+          }
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "31951894167",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794488",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         }
       }
     },
@@ -84,14 +88,18 @@
       "inScope": true,
       "jobs": {
         "cargo-audit": {
-          "conclusion": "success",
-          "runId": "31951894188",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "conclusion": "failure",
+          "runId": "32201794548",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99",
+          "knownFailing": {
+            "reference": "https://rustsec.org/advisories/RUSTSEC-2026-0258",
+            "reason": "RUSTSEC-2026-0258, `h2` 0.4.15, 'unbounded empty DATA frames'; the fix is >=0.4.16 and h2 is transitive. Not caused by this branch, which touches no Cargo.toml or Cargo.lock: cargo audit fetches the advisory database live, so the failure is time-varying rather than branch-varying — the same commit passed on main's last four runs, before this advisory was published. Remove when the h2 bump lands; it needs its own change and must not be absorbed into FR-174."
+          }
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "31951894188",
-          "headSha": "d21990cc068908f38500b9d61903cd1d32549191"
+          "runId": "32201794548",
+          "headSha": "5f3471479cf4c5cc133d11549a9d4db45cc37e99"
         }
       }
     },
@@ -99,6 +107,12 @@
       "path": ".github/workflows/release.yml",
       "inScope": false,
       "reason": "triggered by v* tags and workflow_dispatch only, so it has no last-run-on-main to assert. A release that fails is visible at the moment someone cuts it, and recording a stale tag build here would say less than nothing."
+    },
+    {
+      "path": ".github/workflows/nightly-governance.yml",
+      "inScope": false,
+      "reason": "Added by FR-174 and has never run, so there is no real conclusion to record and this ledger holds only real runs — writing a headSha for a run that did not happen is the entry it exists to prevent. It cannot run before this merges: GitHub registers a workflow_dispatch workflow only from the default branch (measured: `gh workflow run --ref <branch>` returns HTTP 404 'not found on the default branch', and it is absent from the workflows API), and a scheduled trigger fires only on the default branch too. **This exclusion is the exact opposite of what FR-174 requires and must not survive the merge**: requirement 2 is that every gate moved off the PR path has verifiable execution evidence, and an inScope:false nightly is that claim going unchecked — the DD-159 shape, a gate presenting 'unverified' as 'passed'. Flip to inScope:true and record a real run immediately after the first nightly fires. FR-174 stays In Progress until then, and that is what tracks this.",
+      "jobs": {}
     }
   ]
 }
