@@ -194,6 +194,16 @@ else
 # `set -o pipefail` that status reaches `set -e` and ends the run with no summary line
 # (FR-146). Measured: a 129 KB producer into `| head -1` dies 10 times out of 10.
   diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | sed -n '1,20p' >&2
+  # Same reason as test-core-boundary.sh Case 2: the comparison is byte-exact and
+  # `ledger_json` collapses `{\n\n}` to `{}` but not `{\n  }`, so empty objects
+  # render differently across json gem versions. A diff showing only that is an
+  # interpreter difference, not a boundary that moved, and the log has to say
+  # which one it was.
+  {
+    echo "  interpreter: $(ruby -v 2>&1)"
+    echo "  json gem:    $(ruby -rjson -e 'print(Gem.loaded_specs["json"]&.version || JSON::VERSION)' 2>&1)"
+    echo "  empty hash:  $(ruby -rjson -e 'print JSON.pretty_generate({"k" => {}}).inspect' 2>&1)"
+  } >&2
 fi
 echo ""
 

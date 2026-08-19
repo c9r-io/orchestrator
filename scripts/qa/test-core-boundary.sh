@@ -113,6 +113,17 @@ else
   # The `|| true` went with it: it was there to survive `head`'s SIGPIPE, and it also
   # swallowed a real `diff` failure (FR-144's class).
   diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | sed -n '1,20p' >&2
+  # Which interpreter produced that, because this comparison is byte-exact and
+  # `ledger_json` is not version-stable. It collapses `{\n\n}` to `{}` but not
+  # `{\n  }`, so an empty object renders differently across json gem versions and
+  # a ledger regenerated on one Ruby fails byte-comparison on another. A diff
+  # showing only empty-object rendering is that, not a boundary that moved — and
+  # without these three lines the reader cannot tell those apart from the log.
+  {
+    echo "  interpreter: $(ruby -v 2>&1)"
+    echo "  json gem:    $(ruby -rjson -e 'print(Gem.loaded_specs["json"]&.version || JSON::VERSION)' 2>&1)"
+    echo "  empty hash:  $(ruby -rjson -e 'print JSON.pretty_generate({"k" => {}}).inspect' 2>&1)"
+  } >&2
 fi
 echo ""
 
