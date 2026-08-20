@@ -353,3 +353,28 @@ looks like.
   the refresh has no way to tell the difference; the reader does. Re-run the
   cancelled jobs and refresh against a run where every job has a real
   conclusion.
+
+  Sixth sample, run `32099510921`: **1912 s, 29% headroom**. The monotonic
+  decline recorded above **reversed**, and by more than every prior sample moved
+  combined. Subtraction did it, not efficiency: `77ef01c5` retired two gates
+  (`Legacy coordination decommission contracts` at 186 s and the
+  pipeline-variable parity step at 2 s) and the coordination strangler surface
+  went with FR-173. The projection two paragraphs up — "the review condition is
+  one FR away" — was overtaken in the other direction, which is the case the
+  sentence "re-derive the slope rather than trust this sentence" was written for.
+  Five samples of decline were enough to establish a direction and not enough to
+  establish that the direction was a property of the system rather than of the
+  period. **A trend across samples of a quantity that both grows and shrinks is
+  a description of what has happened, never a forecast**, and this record is
+  worth keeping precisely because it went the other way.
+
+  The sample also arrives after the longest disarmament in this file's history.
+  `pendingMeasurement` had been non-empty **continuously from 2026-08-11 to
+  2026-08-19 — 8 days across 5 commits, growing 2→3→4→6** — so the ceiling was
+  switched off that entire time, and the gate said so on every run. Every prior
+  window closed within 0–1 days. The mechanism did exactly what §`pendingMeasurement`
+  designs it to do; what it does not do is bound how long it stays off, and
+  nothing else notices. FR-163 and FR-165 each added steps and neither refreshed.
+  Worth stating plainly because a fail-safe that reports honestly and waits
+  indefinitely is indistinguishable, in a green log, from one that is enforcing:
+  the `NOT ENFORCED` line is printed by a step whose outcome is `success`.

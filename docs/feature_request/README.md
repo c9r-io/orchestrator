@@ -6,7 +6,7 @@
 
 
 <!-- BEGIN GENERATED FR REGISTRY -->
-> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：156 个历史编号 / 161 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
+> 由 `scripts/lib/fr_registry.rb` 从完整 `HEAD` 祖先历史生成：157 个历史编号 / 162 条历史路径，另有 13 条无 FR 文件历史的审阅例外；5 个编号存在多路径碰撞。浅克隆拒绝生成。
 
 | ID | 标题 | 优先级 | 状态 | 来源 / 碰撞 |
 |----|------|--------|------|-------------|
@@ -178,7 +178,8 @@
 | FR-171 | 四种资源可以写入但读不出来 | P1 | Closed | git history |
 | FR-172 | 治理记录只增不减 —— 闭环尾注 17 倍膨胀与 superseded 文档的无限留存 | P1 | Closed | git history |
 | FR-173 | v0.7 兼容层退休窗口 —— 六个 legacy 码、两个别名，以及「可解析拒绝」自身何时退休 | P2 | Closed | git history |
-| FR-174 | PR 反馈延迟由治理决定 —— 关键路径 24 分钟，其中产品验证 5 分钟 | P2 | Proposed | git history |
+| FR-174 | PR 反馈延迟由治理决定 —— 关键路径 22 分钟，其中最长的产品 job 5 分钟 | P2 | In Progress | git history |
+| FR-175 | 脱敏边界画在持久化时，而不是出网时 —— 两条已授权的读命令输出明文密钥 | P2 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明

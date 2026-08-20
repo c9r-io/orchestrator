@@ -86,6 +86,99 @@ def ancestor?(sha)
   ok
 end
 
+# ── Critical path ────────────────────────────────────────────────────────────
+#
+# FR-174 requirement 4. Everything above this line is per-job and per-step
+# seconds, and the number a developer actually waits for is neither: the jobs
+# run in parallel, so feedback latency is the longest chain through the `needs`
+# graph, not the sum. That distinction is the whole of FR-174's argument and it
+# was left for each reader to re-derive from the workflow — which is how the
+# FR's own acceptance criterion came to compare a post-tiering critical path
+# against the *sum* of five parallel jobs, a quantity that bounds nothing.
+# A number an argument rests on belongs in the file the argument cites.
+#
+# Derived on every run and compared, never stored and trusted: a recorded
+# latency that nobody recomputes is a duration pinned to a graph that has since
+# changed, which is the failure `pendingMeasurement` exists to prevent one level
+# down.
+def job_needs(workflow_path, key)
+  definition = WorkflowModel.job(workflow_path, key) || {}
+  Array(definition["needs"]).compact
+end
+
+# Longest chain by seconds. Memoised over the DAG rather than enumerated,
+# because `needs` is a graph and today's single edge is a fact about the
+# workflow now, not about the shape of the answer.
+def longest_chain(key, jobs, workflow_path, seen = {})
+  return seen[key] if seen.key?(key)
+
+  seconds = jobs.dig(key, "seconds").to_i
+  best = { "seconds" => seconds, "chain" => [key] }
+  job_needs(workflow_path, key).each do |dependency|
+    next unless jobs.key?(dependency)
+
+    upstream = longest_chain(dependency, jobs, workflow_path, seen)
+    candidate = upstream["seconds"] + seconds
+    best = { "seconds" => candidate, "chain" => upstream["chain"] + [key] } if candidate > best["seconds"]
+  end
+  seen[key] = best
+  best
+end
+
+# The steps `ci.yml` runs conditionally on the meta-verification tier, and what
+# they cost. Derived from the workflow's `if:` expressions, so a gate added to
+# or removed from the tier moves this number without anyone editing it.
+def tiered_steps(workflow_path, job_key)
+  WorkflowModel.steps(workflow_path, job_key)
+    .select { |step| step["if"].to_s.include?("tier.outputs.tier") }
+    .map { |step| step["name"].to_s }
+end
+
+def critical_path(jobs, workflow_path)
+  return nil if jobs.empty?
+
+  full = jobs.keys.map { |key| longest_chain(key, jobs, workflow_path) }
+    .max_by { |entry| entry["seconds"] }
+
+  # The deferred tier is the same graph with the tier-conditional steps removed
+  # from the job that carries them. Their seconds are subtracted from that job's
+  # total rather than from the step map, because the budget and the latency are
+  # both stated against the total.
+  deferred_jobs = jobs.transform_values { |record| record.dup }
+  tiered_total = 0
+  tiered_count = 0
+  deferred_jobs.each_key do |key|
+    names = tiered_steps(workflow_path, key)
+    next if names.empty?
+
+    measured = (deferred_jobs[key]["steps"] || {}).select { |name, _| names.include?(name) }
+    tiered_total += measured.values.sum
+    tiered_count += names.length
+    deferred_jobs[key] = deferred_jobs[key].merge("seconds" => deferred_jobs[key]["seconds"] - measured.values.sum)
+  end
+
+  deferred = deferred_jobs.keys.map { |key| longest_chain(key, deferred_jobs, workflow_path, {}) }
+    .max_by { |entry| entry["seconds"] }
+
+  {
+    "description" =>
+      "Feedback latency: the longest chain through the `needs` graph, which is what a " \
+      "developer waits for. Not the sum of the jobs — they run in parallel — and not any " \
+      "single job's seconds. Derived from this file's per-job totals and ci.yml's `needs` " \
+      "edges on every run of ci-cost.rb, and compared against what is recorded here, so it " \
+      "cannot describe a graph the workflow no longer has. `deferred` is the same graph with " \
+      "the meta-verification steps FR-174 made tier-conditional subtracted from the job that " \
+      "carries them; it is what a pull request touching no gate root waits for, and `full` is " \
+      "what one touching scripts/qa, scripts/lib, config/governance or .github/workflows waits " \
+      "for. Compare either against the longest *product* job, never against the product jobs' " \
+      "sum.",
+    "full" => full,
+    "deferred" => deferred,
+    "tieredSteps" => tiered_count,
+    "tieredSeconds" => tiered_total
+  }
+end
+
 # The steps that execute a given gate, by name, within its declared job. Uses
 # the same executable-text predicate the enforcement surface gate uses for
 # wiring truth (`WorkflowModel.executes?`), so a commented-out `run:`, an
@@ -223,6 +316,7 @@ if options[:refresh] || options[:emit]
     "budget" => ledger["budget"],
     "pendingMeasurement" => still_pending,
     "measurement" => { "runId" => run["databaseId"].to_s, "headSha" => run["headSha"].to_s },
+    "criticalPath" => critical_path(jobs, workflow_path),
     "jobs" => jobs
   }
 
@@ -302,6 +396,39 @@ elsif !ancestor?(sha)
             "refresh against a run from this history"
 end
 
+# 2b. The critical path, recomputed rather than read. The recorded value is a
+#     function of this file's per-job seconds and ci.yml's `needs` edges, so it
+#     can be re-derived exactly — and a stored latency nobody re-derives is a
+#     duration pinned to a graph that has since changed. Adding one `needs` edge
+#     would silently invalidate it while every other check in this file passed.
+recomputed = critical_path(recorded_jobs, workflow_path)
+recorded_path = ledger["criticalPath"]
+if recorded_path.nil?
+  errors << "the ledger records no criticalPath; feedback latency is the number FR-174 " \
+            "argues from and it was left for each reader to re-derive"
+elsif recomputed
+  %w[full deferred].each do |tier|
+    want = recomputed.dig(tier, "seconds")
+    got = recorded_path.dig(tier, "seconds")
+    if want != got
+      errors << "criticalPath.#{tier} records #{got.inspect}s but the graph gives #{want}s; " \
+                "re-run --refresh --write"
+    end
+    want_chain = recomputed.dig(tier, "chain")
+    got_chain = recorded_path.dig(tier, "chain")
+    if want_chain != got_chain
+      errors << "criticalPath.#{tier} records the chain #{got_chain.inspect} but the graph " \
+                "gives #{want_chain.inspect}"
+    end
+  end
+  %w[tieredSteps tieredSeconds].each do |field|
+    if recomputed[field] != recorded_path[field]
+      errors << "criticalPath.#{field} records #{recorded_path[field].inspect} but ci.yml " \
+                "gives #{recomputed[field].inspect}"
+    end
+  end
+end
+
 # 3. The budget. A ceiling with no written reason is the thing FR-140 forbids —
 #    it would only ratify whatever the cost happened to be the day it was set.
 budget = ledger["budget"] || {}
@@ -356,6 +483,13 @@ if errors.empty?
   else
     puts "  #{budgeted.join(' + ')} = #{total}s against a #{limit}s budget " \
          "(#{((limit - total) * 100.0 / limit).round}% headroom)"
+  end
+  if recomputed
+    full = recomputed.dig("full", "seconds")
+    deferred = recomputed.dig("deferred", "seconds")
+    puts "  critical path: #{full}s full / #{deferred}s deferred " \
+         "(#{recomputed['tieredSteps']} tiered step(s), #{recomputed['tieredSeconds']}s)"
+    puts "    longest chain: #{recomputed.dig('full', 'chain').join(' -> ')}"
   end
   exit 0
 end

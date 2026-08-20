@@ -1,0 +1,230 @@
+name: Nightly governance
+
+# FR-174. The other half of the tiering: ci.yml's governance job defers these 19
+# meta-verification gates when a PR touches no gate, and this is where they run
+# instead. The whole change is worthless — worse than worthless — if this file
+# does not actually execute. DD-159 recorded a gate that had been dead since
+# 2026-03-26 because it exited before its first scenario and nothing looked; a
+# gate moved here and left to rot would present "unverified" as "passed", which
+# is the one outcome strictly worse than waiting 24 minutes.
+#
+# Two things keep that from happening, and neither is this comment.
+# `config/governance/ci-job-liveness.json` records this workflow's last real
+# conclusion and fails when it is stale or red, the same as every push and
+# pull_request job. And the aggregation below is the same script ci.yml uses,
+# run with TIER=full, so a step that silently stops running is a failure here
+# rather than an absence nobody counts.
+#
+# Runs on main. Scheduled workflows execute on the default branch, which is what
+# puts them within reach of `gh run list --branch main` and therefore within the
+# liveness ledger — unlike release.yml, which is excluded because tag runs are
+# not branch runs.
+
+on:
+  schedule:
+    # 03:17 UTC. Not on the hour: GitHub delays scheduled runs under load at
+    # popular times, and this job has no deadline worth competing for one.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-governance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  meta-verification:
+    name: Gate meta-verification
+    runs-on: ubuntu-latest
+    steps:
+      # Full history, for the same reason ci.yml's governance job needs it: the
+      # fixture and parity gates read `git cat-file`, `git merge-base` and a
+      # reverse `git apply`, all of which pass on a developer machine and fail on
+      # the single commit actions/checkout fetches by default.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq ruby ripgrep sqlite3 protobuf-compiler
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # test-docs-publishing-integrity.sh runs scripts/sync-docs.mjs. Without
+      # Node the gate exits on its own missing-command preamble rather than
+      # passing silently.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # test-rollback-contract.sh runs cargo unit tests against doctored schema
+      # snapshots — 144s of this job, and the only reason a governance meta job
+      # needs a Rust cache at all. Same key as the governance job so the two
+      # share a warm target/.
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: governance
+
+      - name: Install failing provider stubs
+        uses: ./.github/actions/provider-stubs
+
+      # Identical shape to ci.yml's governance job: every gate records its real
+      # outcome and keeps going, and the aggregation at the end fails the job.
+      - name: Verify CI job liveness negative fixtures
+        id: liveness-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-liveness.sh
+
+      - name: Verify gate enforcement surface negative fixtures
+        id: surface-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-qa-gate-surface.sh --fixture-test
+
+      - name: Verify skill mirror integrity negative fixtures
+        id: mirror-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
+
+      - name: Verify docs publishing integrity negative fixtures
+        id: publishing-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-docs-publishing-integrity.sh --fixture-test
+
+      - name: Verify release publish surface negative fixtures
+        id: release-surface-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-release-publish-surface.sh --fixture-test
+
+      - name: Verify release tag liveness negative fixtures
+        id: tag-liveness-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-release-tag-liveness.sh --fixture-test
+
+      - name: Verify markdown link integrity fixtures
+        id: links-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-markdown-link-integrity.sh --fixture-test
+
+      - name: QA doc lint workflow-ID scope negative fixtures
+        id: doc-lint-scope
+        continue-on-error: true
+        run: ./scripts/qa/test-qa-doc-lint-workflow-scope.sh
+
+      - name: Manual-gate freshness fixtures
+        id: manual-gate-freshness-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-manual-gate-freshness.sh
+
+      - name: Rollback contract fixtures
+        id: rollback-contract-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-rollback-contract.sh
+        env:
+          PROTOC: /usr/bin/protoc
+
+      - name: Daemon readiness fallback fixtures
+        id: gate-daemon-readiness-fallback
+        continue-on-error: true
+        run: ./scripts/qa/test-gate-daemon-readiness-fallback.sh
+
+      - name: CLI documentation parity fixtures
+        id: cli-doc-parity-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-cli-doc-parity.sh --fixture-test
+
+      - name: Governance execution cost negative fixtures
+        id: cost-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-cost.sh
+
+      - name: JSON read status negative fixtures
+        id: jq-status-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-jq-status-observed.sh
+
+      - name: Negative fixtures prove they applied a mutation
+        id: fixture-drift
+        continue-on-error: true
+        run: ./scripts/qa/fixture-target-drift.rb
+
+      - name: Fixture target drift negative fixtures
+        id: fixture-drift-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-fixture-target-drift.sh
+
+      - name: Runtime layout ledger negative fixtures
+        id: path-single-source-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-connectivity-path-single-source.sh
+
+      - name: Dependency policy negative fixtures
+        id: dependency-policy-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-dependency-policy.sh
+
+      - name: Pipefail short-circuit negative fixtures
+        id: pipefail-short-circuit-fixtures
+        continue-on-error: true
+        run: ./scripts/qa/test-pipefail-short-circuit.sh
+
+      # TIER=full, and the same script ci.yml runs. That is the point: under
+      # `full` the script rejects any META gate reporting `skipped`, so a step
+      # that quietly stops executing here fails this job instead of vanishing
+      # from a report nobody totals. The roster must match ci.yml's exactly, and
+      # scripts/qa/test-ci-tier.sh asserts that it does — a gate deferred by
+      # ci.yml and absent from this file would otherwise run nowhere at all.
+      - name: Nightly governance result
+        if: always()
+        shell: bash
+        env:
+          TIER: full
+          META: |
+            liveness-fixtures
+            surface-fixtures
+            mirror-fixtures
+            publishing-fixtures
+            release-surface-fixtures
+            tag-liveness-fixtures
+            links-fixtures
+            doc-lint-scope
+            manual-gate-freshness-fixtures
+            rollback-contract-fixtures
+            gate-daemon-readiness-fallback
+            cli-doc-parity-fixtures
+            cost-fixtures
+            jq-status-fixtures
+            fixture-drift
+            fixture-drift-fixtures
+            path-single-source-fixtures
+            dependency-policy-fixtures
+            pipefail-short-circuit-fixtures
+          OUTCOMES: |
+            liveness-fixtures=${{ steps.liveness-fixtures.outcome }}
+            surface-fixtures=${{ steps.surface-fixtures.outcome }}
+            mirror-fixtures=${{ steps.mirror-fixtures.outcome }}
+            publishing-fixtures=${{ steps.publishing-fixtures.outcome }}
+            release-surface-fixtures=${{ steps.release-surface-fixtures.outcome }}
+            tag-liveness-fixtures=${{ steps.tag-liveness-fixtures.outcome }}
+            links-fixtures=${{ steps.links-fixtures.outcome }}
+            doc-lint-scope=${{ steps.doc-lint-scope.outcome }}
+            manual-gate-freshness-fixtures=${{ steps.manual-gate-freshness-fixtures.outcome }}
+            rollback-contract-fixtures=${{ steps.rollback-contract-fixtures.outcome }}
+            gate-daemon-readiness-fallback=${{ steps.gate-daemon-readiness-fallback.outcome }}
+            cli-doc-parity-fixtures=${{ steps.cli-doc-parity-fixtures.outcome }}
+            cost-fixtures=${{ steps.cost-fixtures.outcome }}
+            jq-status-fixtures=${{ steps.jq-status-fixtures.outcome }}
+            fixture-drift=${{ steps.fixture-drift.outcome }}
+            fixture-drift-fixtures=${{ steps.fixture-drift-fixtures.outcome }}
+            path-single-source-fixtures=${{ steps.path-single-source-fixtures.outcome }}
+            dependency-policy-fixtures=${{ steps.dependency-policy-fixtures.outcome }}
+            pipefail-short-circuit-fixtures=${{ steps.pipefail-short-circuit-fixtures.outcome }}
+        run: ./scripts/qa/governance-result.sh

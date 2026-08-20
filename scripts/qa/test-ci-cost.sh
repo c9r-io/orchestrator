@@ -131,6 +131,13 @@ seed_ledger() {
   },
   "pendingMeasurement": {},
   "measurement": { "runId": "1", "headSha": "$sha" },
+  "criticalPath": {
+    "description": "fixture",
+    "full": { "seconds": 300, "chain": ["governance"] },
+    "deferred": { "seconds": 300, "chain": ["governance"] },
+    "tieredSteps": 0,
+    "tieredSeconds": 0
+  },
   "jobs": {
     "governance": {
       "seconds": 300,
@@ -246,6 +253,65 @@ elif grep -q "not an ancestor of HEAD" "$WORK/out.log"; then
   pass "a measurement that is not an ancestor of HEAD fails"
 else
   fail "the gate failed but not because of the measurement's provenance"
+  cat "$WORK/out.log" >&2
+fi
+
+# 4b. A recorded critical path that the graph no longer produces (FR-174).
+#
+#     The mutation is a `needs` edge added to the workflow, not an edited
+#     number. Editing the number is the case the author has in mind and it is
+#     the one nobody commits by accident; the way a latency goes stale in
+#     practice is that the graph moves underneath it while every per-job second
+#     stays correct, so nothing else in this ledger changes and no other check
+#     here has an opinion. Here `parity` gains a dependency on `governance`,
+#     which makes the longest chain 300 + 100 rather than 300, and the recorded
+#     300 becomes a description of a workflow that no longer exists.
+d="$(new_case critical-path-drift)"
+seed_ledger "$d"
+# Through fixture_mutate, not a bare edit: the mutation target is a statement in
+# a file this fixture does not own, and a `sub!` that stops matching would leave
+# the case asserting nothing while still reporting. The helper requires the file
+# to exist, the command to succeed, and the digest to change — and it reports
+# through fail() rather than aborting, so a stale target costs one assertion
+# instead of the summary line (FR-143, DD-155).
+#
+# ruby, not python3: FR-144 recorded a gate that used python3 in a job which
+# never provided it, and check_command_sources exists because of it.
+if fixture_mutate "critical path drift: add a needs edge" "$d/.github/workflows/ci.yml" \
+  ruby -e '
+    path = ARGV[0]
+    text = File.read(path)
+    before = "  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n"
+    after = "  parity:\n    name: Parity\n    runs-on: ubuntu-latest\n    needs:\n      - governance\n"
+    exit 1 unless text.sub!(before, after)
+    File.write(path, text)
+  ' "$d/.github/workflows/ci.yml"; then
+  git -C "$d" add -A >/dev/null 2>&1
+  git -C "$d" commit -qm "add a needs edge" >/dev/null 2>&1
+  edit_ledger "$d" ".measurement.headSha = \"$(git -C "$d" rev-parse HEAD)\""
+  if run_gate "$d"; then
+    fail "a critical path describing a superseded graph was accepted"
+  elif grep -q "criticalPath.full records 300s but the graph gives 400s" "$WORK/out.log"; then
+    pass "a critical path the needs graph no longer produces fails, with both numbers"
+  else
+    fail "the gate failed but not because the recorded critical path went stale"
+    cat "$WORK/out.log" >&2
+  fi
+fi
+
+# 4c. The field missing altogether. Separate from 4b because a ledger written
+#     before FR-174 has no `criticalPath` at all, and "absent" must not read as
+#     "nothing to check" — that is how the number FR-174 argues from would go
+#     back to being each reader's problem.
+d="$(new_case critical-path-absent)"
+seed_ledger "$d"
+edit_ledger "$d" 'del(.criticalPath)'
+if run_gate "$d"; then
+  fail "a ledger with no critical path at all was accepted"
+elif grep -q "records no criticalPath" "$WORK/out.log"; then
+  pass "a ledger that records no critical path fails"
+else
+  fail "the gate failed but not because the critical path was missing"
   cat "$WORK/out.log" >&2
 fi
 

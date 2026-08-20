@@ -2195,15 +2195,35 @@ PROBE
     File.write(ARGV[1], step["run"])
   ' "$BASE/.github/workflows/ci.yml" "$AGGREGATE"; then
 
+    # TIER is supplied because FR-174 made the aggregate refuse to run without
+    # one: the tier decides what the skip set is allowed to be, and an aggregate
+    # that guessed would be asserting nothing about the run it is judging. META
+    # is empty here on purpose — the tier-conditional roster and its two-sided
+    # skip rule are scripts/qa/test-ci-tier.sh's subject, and duplicating them
+    # here would give the pair a second copy to drift apart. What this file still
+    # owns is the property it was written for: the outcomes are load-bearing.
     run_aggregate() {
-      OUTCOMES="$1" bash "$AGGREGATE" > "$FIXTURE_ROOT/aggregate.log" 2>&1
+      TIER=full META="" OUTCOMES="$1" bash "$AGGREGATE" > "$FIXTURE_ROOT/aggregate.log" 2>&1
     }
 
-    if run_aggregate "$(printf 'liveness=success\nsurface=skipped')"; then
-      pass "behavioural: the aggregate passes a run whose outcomes are all success or skipped"
+    if run_aggregate "$(printf 'liveness=success\nsurface=success')"; then
+      pass "behavioural: the aggregate passes a run in which every gate succeeded"
     else
       fail "behavioural: the aggregate rejected a run in which every gate passed"
       cat "$FIXTURE_ROOT/aggregate.log" >&2
+    fi
+
+    # This case previously asserted the opposite, and the change is the point.
+    # `skipped` used to pass for any gate, which cost nothing while no gate in
+    # the job was conditional. FR-174 made nineteen of them conditional, so a
+    # skip now carries a claim — that the tier said this one would not run — and
+    # a gate outside the tiered roster has no such licence. A non-meta gate that
+    # was skipped is a step that did not happen for a reason nobody declared.
+    if run_aggregate "$(printf 'liveness=success\nsurface=skipped')"; then
+      fail "behavioural: an unexplained skip still counts as a pass"
+      cat "$FIXTURE_ROOT/aggregate.log" >&2
+    else
+      pass "behavioural: a gate outside the tiered roster may not be skipped"
     fi
 
     if run_aggregate "$(printf 'liveness=success\nsurface=failure')"; then

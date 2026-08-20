@@ -2,7 +2,7 @@
   "version": 1,
   "description": "Explicit enforcement surface for every tracked script under scripts/, at any depth, with a .sh, .rb or .mjs extension. Verified by scripts/qa/test-qa-gate-surface.sh, which runs in the ci.yml governance job. A script on disk that is absent here fails the gate; so does an entry whose script no longer exists; and so does a script any workflow job runs that is declared neither as a gate in scripts[] nor as a non-gate in supportFiles[]. FR-147 added the third direction: the first two are satisfied by a manifest that has never heard of scripts/qa-doc-lint.sh, which ci.yml had been running for months while every scanner deriving its scope from this file read the gate that script invokes and skipped the script itself. FR-158 widened the first direction from scripts/qa to scripts, which brought in 28 files — among them all twelve shared libraries under scripts/lib that the ci-required gates source. Until then the gates were governed and the engine they run on was not, and a defect in a library reaches every caller at once.",
   "enforcementKinds": {
-    "ci-required": "Executed by a GitHub Actions workflow on every push/PR. Requires workflow, job, and providerIsolation. Must never be able to reach a real provider binary.",
+    "ci-required": "Executed by a GitHub Actions workflow on every push/PR. Requires workflow, job, and providerIsolation. Must never be able to reach a real provider binary. An entry carrying `tieredBy` is the FR-174 exception and runs on a subset: its step is conditional on that script's verdict, and the runs it is skipped on are covered by nightly-governance.yml instead. The entry stays ci-required because the gate is still required — what changed is when it is cheap to ask, not whether the answer is enforced. scripts/qa/test-ci-tier.sh asserts this set equals the set of steps ci.yml actually gates.",
     "manual-runbook": "Executed by a human following the owner QA document. Requires reason and owner.",
     "scheduled": "Executed by a scheduled workflow, not on push/PR. Requires reason and owner in addition to workflow and job."
   },
@@ -427,6 +427,28 @@
       "note": "verification is offline: it reads the ledger, the workflows and git. Only --refresh contacts GitHub, and that mode refuses to run unattended."
     },
     {
+      "path": "scripts/qa/ci-tier.sh",
+      "enforcement": "ci-required",
+      "shape": "shape 9 — a defect that fails in whichever direction the data chooses, where only one direction is noisy. This predicate is wrong in two ways with wildly different costs: deferring when it should run silently drops meta-verification on the one PR that could have broken it, while running when it should defer merely costs nine minutes and complains to nobody. Only the harmless direction is visible, so every failure path is written to yield `full` and the empty diff is treated as an unanswered question rather than as evidence that no gate changed — absence of data reading as data being the same shape at the scope level. Behaviourally exercised by test-ci-tier.sh against throwaway repositories rather than read, because a `run:` block in a workflow can only be checked by reading it, which §4.4 calls a proxy.",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Decides whether the governance job runs meta-verification inline or defers it to nightly-governance.yml. Reads GITHUB_EVENT_NAME, GITHUB_BASE_REF and `git diff`; every failure path yields `full`, so the only route to `deferred` is a diff that was read successfully and touched none of scripts/qa, scripts/lib, config/governance or .github/workflows. Offline apart from a best-effort `git fetch` whose failure it tolerates."
+    },
+    {
+      "path": "scripts/qa/connectivity-path-single-source.rb",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 2 — enumeration standing in for coverage, in its most expensive form: the set of places that spell a filename is exactly the set someone remembered, and the second speller is invisible because it breaks nothing today. FR-163 measured three pairs that had already drifted — a layout heuristic sending SecretStore reads and writes to different directories, a watcher skip that never fired in the default deployment, and a client bundle written one character away from where auto-discovery looked — and not one of them failed a test. The scanned set is derived from the tree, never listed, and the mirror condition fails when an allowlisted site stops matching, so the gate cannot go green by going blind.",
+      "note": "Offline: reads tracked Rust source with inline cfg(test) modules stripped. Asserts each runtime-layout name — data dir, socket, pidfile, database, control-plane dir, client dir, data-dir env var — is spelled in exactly one production file. Reads each file twice, masked and raw: the subjects are string literals that masking blanks, while comments must not be counted. Re-derives on every run whether rust_source.rb's test*.rs basename exclusion is hiding a spelling from it, rather than inheriting that known defect silently."
+    },
+    {
       "path": "scripts/qa/coordination-governance.rb",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -476,7 +498,19 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Offline: reads this manifest and the gates own text. Forbids a negative fixture that can report without proving it applied a mutation - an uncaught premise, an in-place rewrite whose landing nobody checks, a pass guarded by an exit code alone (FR-143)."
+      "note": "Offline: reads this manifest and the gates own text. Forbids a negative fixture that can report without proving it applied a mutation - an uncaught premise, an in-place rewrite whose landing nobody checks, a pass guarded by an exit code alone (FR-143).",
+      "tieredBy": "scripts/qa/ci-tier.sh"
+    },
+    {
+      "path": "scripts/qa/governance-result.sh",
+      "enforcement": "ci-required",
+      "shape": "shape 5 — a check that can report PASS having read no input, at the step that decides the whole job. It reads an outcome table it does not produce, and an empty or truncated OUTCOMES would otherwise print a clean report and exit 0; reading nothing is therefore an explicit failure. FR-174 adds the tier assertion on top: the observed skip set must match the declared tier in both directions, so a `success` under `deferred` fails as loudly as a `failure`, and the META roster is cross-checked against OUTCOMES both ways so a renamed id fails instead of silently reclassifying a gate out of the assertion.",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "The step that fails the governance job, and the tier assertion FR-174 needs it to make. Reads TIER, META and OUTCOMES from the environment and requires the observed skip set to match the tier in both directions — under `deferred` a meta gate reporting success is a violation, not a bonus. Also used by nightly-governance.yml with TIER=full. Pure text over environment variables: no daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/jq-status-observed.rb",
@@ -498,39 +532,6 @@
         "mode": "no-provider"
       },
       "reason": "reads two committed JSON files and prints a table; no daemon, no compile, no working-tree write, so no provider binary is reachable. What it enforces is that this manifest and the freshness ledger agree about which gates are manual-runbook — staleness itself is reported and never fails, because a gate that goes red when a human has not run a runbook lately is one more thing to feed, which is the growth FR-158 exists to bound."
-    },
-    {
-      "path": "scripts/qa/test-manual-gate-freshness.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "shape": "shape 6 — a status field reporting something other than what you are asking. manual-gate-freshness.rb judged a gate fresh on recency alone while gate_runlog.sh had been writing exitStatus and worktreeDirty beside every record since the ledger existed; nothing read them, so a gate recorded as having failed printed `ok` and --strict passed it. Measured at FR-165: test-attention-inbox.sh, exit 1, one day old, reading ok. The fixtures mutate a record rather than deleting one, because deletion was the case the original criterion already handled.",
-      "note": "Offline: builds a scratch tree containing only the gate and a two-entry ledger/manifest pair, so the real repository is never mutated. Nine criterion cases (recorded failure, dirty worktree, aged, never recorded, exemption honoured, exemption not leaking to a neighbour, exemption without a reason, reason orphaned by a removed exemption, derived empty-read count) bracketed by a before-run and an after-run. A tenth parses .github/workflows/release.yml and asserts build and gui-build actually name the freshness job in needs: and that its step carries neither continue-on-error nor a pipe — the edge is the enforcement, and a job nothing depends on blocks nothing."
-    },
-    {
-      "path": "scripts/qa/rollback-contract-single-source.rb",
-      "enforcement": "ci-required",
-      "shape": "shape 4 — a text pattern standing in for a semantic property, in the form where the pattern is genuinely ambiguous. `forward-only` names four different things in this tree: the daemon migration rollback contract, the Slack Gateway's own schema in another database, artifact forwarding in orchestrator-collab, and monotonic connection-state CAS. A grep-shaped single-source gate counts all four as contract references. Two of them share a markdown table: threat-model row T8 is the state sense and sits four rows above the A-class row T12, so no file-level or section-level scope predicate separates them, and a path-keyed ledger would satisfy the citation requirement file-wide and bless T8 in silence (shape 3, a whole-file total standing in for a per-object association). Sites are therefore keyed by a digest of the matched line, classification is required rather than inferred from the text, and the scope is every tracked non-binary file rather than two extensions, because a scope sufficient for today's 38 sites is a fact about the tree and not about the check (shape 9). The mirror condition fails when a booked statement stops matching, so the gate cannot go green by going blind.",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "reads tracked text files and config/governance/rollback-contract-sites.json; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
-    },
-    {
-      "path": "scripts/qa/test-rollback-contract.sh",
-      "enforcement": "ci-required",
-      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation, over two guards that were both new and therefore both unexercised. Every case brackets itself with a before-run and asserts the diagnostic rather than the exit code, because the schema guard has three distinct failure branches — a removed object, an unapplicable snapshot, and an empty read — that an exit code cannot tell apart. Writing them contradicted the design twice, which is the argument for having them: a table commented out without its indexes reaches the unapplicable-statement branch and not the removal branch, and a self-citing statement cannot shed its citation without the mirror condition firing first, so reaching the citation-content branch needs a ledger entry repointed at a real line that names nothing.",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "mutates copies of the two schema snapshots and a scratch copy of the tree under a temporary directory, and runs one cargo unit test against them. It starts no daemon and never writes the working tree, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/persistence-api-boundary.rb",
@@ -563,6 +564,17 @@
         "mode": "no-provider"
       },
       "note": "Offline: reads git ls-files and the shell files' own text. Forbids, in any tracked *.sh, a pipeline stage after the first whose command is grep/rg with -q, --quiet, --silent or -m. No exemption for a file that does not enable pipefail itself: shell options are dynamic, and run-cli-probes.sh sources every scenario into a shell that sets it. The reader leaves on the first match, the producer dies of EPIPE, and pipefail makes that the pipeline's answer - so a successful match reports as a failed one, or, where the match feeds the failing branch, a violation reports as clean (FR-145). Scope is git ls-files rather than this manifest, deliberately: the hazard has nothing to do with whether a script is ci-required, and qa-doc-lint.sh, coverage-governance.sh and check-async-lock-governance.sh are run by ci.yml while absent from here."
+    },
+    {
+      "path": "scripts/qa/rollback-contract-single-source.rb",
+      "enforcement": "ci-required",
+      "shape": "shape 4 — a text pattern standing in for a semantic property, in the form where the pattern is genuinely ambiguous. `forward-only` names four different things in this tree: the daemon migration rollback contract, the Slack Gateway's own schema in another database, artifact forwarding in orchestrator-collab, and monotonic connection-state CAS. A grep-shaped single-source gate counts all four as contract references. Two of them share a markdown table: threat-model row T8 is the state sense and sits four rows above the A-class row T12, so no file-level or section-level scope predicate separates them, and a path-keyed ledger would satisfy the citation requirement file-wide and bless T8 in silence (shape 3, a whole-file total standing in for a per-object association). Sites are therefore keyed by a digest of the matched line, classification is required rather than inferred from the text, and the scope is every tracked non-binary file rather than two extensions, because a scope sufficient for today's 38 sites is a fact about the tree and not about the check (shape 9). The mirror condition fails when a booked statement stops matching, so the gate cannot go green by going blind.",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "reads tracked text files and config/governance/rollback-contract-sites.json; it starts no daemon, compiles nothing, and never writes the working tree, so no provider binary is reachable."
     },
     {
       "path": "scripts/qa/test-agent-driver-abstraction.sh",
@@ -614,6 +626,18 @@
       "owner": "docs/qa/orchestrator/143-attention-inbox.md"
     },
     {
+      "path": "scripts/qa/test-attention-routing-doc.sh",
+      "enforcement": "ci-required",
+      "shape": "shape 2 — enumeration standing in for coverage. A hand-written inbox routing table documents exactly the arms its author remembered, and the next arm lands outside it silently; here the table, the resolution rules, and the external-kind list are all derived from the projector source and compared bidirectionally, so an undocumented arm or a documented phantom both fail. Fails closed on zero extracted arms (§4.4 shape 5).",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "invokedBy": "scripts/qa-doc-lint.sh",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Derives the attention routing table (policy_operations match arms incl. the success==false guard and the low-confidence threshold), the completion/resolution rules (event lists, TASK_SWEEP_PRESERVED_KINDS, resolution reasons), and the external task-less kind set (AttentionCandidate literals across non-test production Rust) and asserts docs/guide/03-workflow-configuration.md's three generated blocks document exactly those rows in both directions, with the ZH mirror equal to EN (FR-162). Read-only: ruby over tracked sources plus two markdown files; no daemon, no network, no provider binary."
+    },
+    {
       "path": "scripts/qa/test-bash32-compat.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -641,7 +665,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Negative fixtures for the cost ledger and the budget. Builds scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+      "note": "Negative fixtures for the cost ledger and the budget. Builds scratch trees under TMPDIR; no daemon, no database, no provider, no network.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-ci-environment-parity.sh",
@@ -661,7 +686,19 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub."
+      "note": "each case builds a throwaway git repository under $TMPDIR, because the freshness rule is a statement about history and needs its own history to manipulate. Nothing here contacts GitHub.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
+    },
+    {
+      "path": "scripts/qa/test-ci-tier.sh",
+      "enforcement": "ci-required",
+      "shape": "shape 5 — a check that can report PASS having read no input, created by the change it guards. Before FR-174 no gate in the governance job carried an `if:`, so `skipped` could only mean a cancelled job and the aggregator accepted it for nothing. Nineteen conditional gates turn that tolerance into the defect: a predicate wrongly returning `deferred` skips all nineteen, the aggregator prints nineteen untroubled lines, the job is green, and no meta-verification has run anywhere — the saving real and the checking gone, with nothing in the log to say so. Case 12 is the mutation a tolerant aggregator waves through, and it is not a failure: a meta gate reporting *success* under `deferred` falsifies the tier claim exactly as a failure would, because the tier is a statement about what executed. Cases 19 and 20 answer shape 7 by deriving four rosters from the two workflows instead of holding a fifth copy that would go stale the day a gate is added, and by asserting the diagnostic rather than the exit code — mutations comment lines out rather than deleting them, deletion being the case the author already had in mind.",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "Fixtures for FR-174's meta-verification tier. Drives scripts/qa/ci-tier.sh against throwaway git repositories under TMPDIR and scripts/qa/governance-result.sh against synthetic outcome tables, so the judge is the real script rather than a re-implementation. Case 12 is the mutation a tolerant aggregator waves through: a meta gate reporting success under the deferred tier, which falsifies the tier claim exactly as a failure would. Cases 19 and 20 derive the four rosters from the two workflows rather than restating them, because a fifth copy here would go stale the day a gate is added. No daemon, no database, no provider, no network."
     },
     {
       "path": "scripts/qa/test-cli-doc-parity.sh",
@@ -671,7 +708,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "FR-154: holds the three CLI documentation surfaces (EN/ZH 07-cli-reference.md, the built-in guide's GuideEntry set) to config/governance/cli-surface.json, the committed CommandFactory dump whose freshness a cargo test enforces in the test job. Ruby over four tracked files plus private copies under a temporary directory; no daemon, no compile, no working-tree write, so no provider binary is reachable."
+      "note": "FR-154: holds the three CLI documentation surfaces (EN/ZH 07-cli-reference.md, the built-in guide's GuideEntry set) to config/governance/cli-surface.json, the committed CommandFactory dump whose freshness a cargo test enforces in the test job. Ruby over four tracked files plus private copies under a temporary directory; no daemon, no compile, no working-tree write, so no provider binary is reachable.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-codex-session-resume.sh",
@@ -682,6 +720,18 @@
         "mode": "no-provider"
       },
       "note": "Asserts against the recorded fixtures/driver/codex-cli-0.144.5-resume.json transcript; it never invokes the real codex CLI. The live counterpart is certify-codex-session-resume.sh."
+    },
+    {
+      "path": "scripts/qa/test-connectivity-path-single-source.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation. These fixtures bracket the run with a before and an after, so a case failing for an unrelated reason cannot read as a case catching its mutation, and each asserts the diagnostic rather than the exit code because an exit code cannot say which of the ledger gate's branches fired.",
+      "note": "Negative fixtures for connectivity-path-single-source.rb, run against a scratch copy of the working tree. Four mutations: a spelling in a comment (must NOT trip the gate, or it is counting prose), a spelling in live code (must), the canonical file moved out of scan range (must trip the mirror condition rather than the presence one), and an emptied tree (must fail closed).",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-control-plane-action-audit.sh",
@@ -735,6 +785,18 @@
       "note": "runs scripts/coverage-governance.sh with cargo, node, npm, npx, rustc and rg shadowed by stubs under a temporary directory, so the shell main path the boundary-coverage job depends on is exercised without collecting coverage."
     },
     {
+      "path": "scripts/qa/test-daemon-artifact-ownership.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts real orchestratord instances and races a predecessor's self-termination against a successor holding the same path, so it needs built binaries and a machine where daemons may be started and killed",
+      "owner": "docs/qa/orchestrator/224-daemon-artifact-ownership.md"
+    },
+    {
+      "path": "scripts/qa/test-daemon-readiness.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance and races a waiter against it, so it needs built binaries and a machine where a daemon may be started and stopped",
+      "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md"
+    },
+    {
       "path": "scripts/qa/test-dependency-policy.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -742,7 +804,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Negative fixtures for every rule of dependency-policy.rb, each paired with a control, since all of them are guards with zero violations today. The --tool-fixtures half runs the real cargo-deny and lives in security.yml's cargo-deny job, where the binary exists. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+      "note": "Negative fixtures for every rule of dependency-policy.rb, each paired with a control, since all of them are guards with zero violations today. The --tool-fixtures half runs the real cargo-deny and lives in security.yml's cargo-deny job, where the binary exists. Scratch trees under TMPDIR; no daemon, no database, no provider, no network.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-doc-lifecycle.sh",
@@ -762,7 +825,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Reads docs/guide, docs/showcases and site/.vitepress/config.ts, and runs scripts/sync-docs.mjs into a $TMPDIR destination so the working tree is never written. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. It also runs in the docs.yml deploy job before the site build. Contract in config/governance/docs-publishing.json."
+      "note": "Reads docs/guide, docs/showcases and site/.vitepress/config.ts, and runs scripts/sync-docs.mjs into a $TMPDIR destination so the working tree is never written. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. It also runs in the docs.yml deploy job before the site build. Contract in config/governance/docs-publishing.json.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-docs-reality-alignment.sh",
@@ -774,24 +838,6 @@
         "mode": "no-provider"
       },
       "note": "FR-155 source-derived onboarding and AGENTS path existence, independently identified root-Web/desktop-shell architecture, canonical proto, tracked-ticket, and retired-YAML checks plus seven isolated negative fixtures, registered-check target completeness, and a synthetic uncovered-check probe. It reads tracked files and temporary copies only; no daemon, database, network, or provider binary."
-    },
-    {
-      "path": "scripts/qa/test-failure-visibility.sh",
-      "enforcement": "manual-runbook",
-      "reason": "starts an orchestratord instance binding 127.0.0.1:19213 (gRPC) and 127.0.0.1:19214 (webhook), runs a real workflow, injects events via sqlite3, and delivers signed/unsigned webhook requests to exercise the FR-162 failure-visibility contract end to end",
-      "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md"
-    },
-    {
-      "path": "scripts/qa/test-attention-routing-doc.sh",
-      "enforcement": "ci-required",
-      "shape": "shape 2 — enumeration standing in for coverage. A hand-written inbox routing table documents exactly the arms its author remembered, and the next arm lands outside it silently; here the table, the resolution rules, and the external-kind list are all derived from the projector source and compared bidirectionally, so an undocumented arm or a documented phantom both fail. Fails closed on zero extracted arms (§4.4 shape 5).",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "invokedBy": "scripts/qa-doc-lint.sh",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "note": "Derives the attention routing table (policy_operations match arms incl. the success==false guard and the low-confidence threshold), the completion/resolution rules (event lists, TASK_SWEEP_PRESERVED_KINDS, resolution reasons), and the external task-less kind set (AttentionCandidate literals across non-test production Rust) and asserts docs/guide/03-workflow-configuration.md's three generated blocks document exactly those rows in both directions, with the ZH mirror equal to EN (FR-162). Read-only: ruby over tracked sources plus two markdown files; no daemon, no network, no provider binary."
     },
     {
       "path": "scripts/qa/test-error-code-glossary.sh",
@@ -811,6 +857,12 @@
       "owner": "docs/qa/orchestrator/169-expert-resources-governed-editing.md"
     },
     {
+      "path": "scripts/qa/test-failure-visibility.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance binding 127.0.0.1:19213 (gRPC) and 127.0.0.1:19214 (webhook), runs a real workflow, injects events via sqlite3, and delivers signed/unsigned webhook requests to exercise the FR-162 failure-visibility contract end to end",
+      "owner": "docs/qa/orchestrator/213-failure-visibility-contract.md"
+    },
+    {
       "path": "scripts/qa/test-filesystem-trigger.sh",
       "enforcement": "ci-required",
       "workflow": ".github/workflows/ci.yml",
@@ -828,7 +880,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+      "note": "Negative fixtures for scripts/lib/gate_fixture.sh and the scanner, including the replay of the recorded incident in which an inert mutation made a fixture report a defect the gate did not have. Scratch trees under TMPDIR; no daemon, no database, no provider, no network.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-fr001-sandbox-matrix.sh",
@@ -841,6 +894,18 @@
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance with bound gRPC ports and exercises privileged control-plane calls",
       "owner": "docs/qa/orchestrator/65-grpc-control-plane-protection.md"
+    },
+    {
+      "path": "scripts/qa/test-gate-daemon-readiness-fallback.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 2 — enumeration standing in for coverage, in the form where the enumeration is implicit. c1060338 migrated 24 readiness polls onto `daemon status --wait-ready` on the assumption that every caller starts the binary being built. One does not: test-slack-skill-automation-vertical.sh pins PREVIOUS_REF to the 0.5.0 cut because its subject IS backward compatibility, so its CLI predates the flag by ten days and answered `error: unexpected argument`, which the helper reported as `daemon not ready within 25s`. Four gates were red for a fortnight on daemons that had started fine. No gate running against the current binary can observe the fallback branch, so it would pass while the compatibility path was broken — which is exactly how the defect survived a 23-gate migration.",
+      "note": "Offline and hermetic: no daemon, no cargo, no network. Drives gate_daemon_wait_ready against stub CLIs whose two capabilities — whether `daemon status --help` advertises --wait-ready, and whether `task list` ever succeeds — are chosen per case, so the modern and legacy binaries differ in exactly one declared thing. Six cases: the probe in both directions, that a capable CLI still takes the Health RPC path (a fallback that swallowed every caller would silently undo FR-163's worker-registration guarantee), the regression itself, that the fallback fails closed after its budget rather than falling through like the pre-FR-163 `&& break`, and that an empty CLI path is still rejected by name. Each asserts the diagnostic rather than the exit code, since four of the cases exit non-zero and a code cannot say which branch produced it.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-governance-ledger-tooling.sh",
@@ -872,7 +937,20 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network."
+      "note": "Negative fixtures for the reader and the scanner, including the end-to-end assertion that the real gate-surface gate rejects a manifest jq cannot parse. Scratch trees under TMPDIR; no daemon, no database, no provider, no network.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
+    },
+    {
+      "path": "scripts/qa/test-manual-gate-freshness.sh",
+      "enforcement": "ci-required",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "shape": "shape 6 — a status field reporting something other than what you are asking. manual-gate-freshness.rb judged a gate fresh on recency alone while gate_runlog.sh had been writing exitStatus and worktreeDirty beside every record since the ledger existed; nothing read them, so a gate recorded as having failed printed `ok` and --strict passed it. Measured at FR-165: test-attention-inbox.sh, exit 1, one day old, reading ok. The fixtures mutate a record rather than deleting one, because deletion was the case the original criterion already handled.",
+      "note": "Offline: builds a scratch tree containing only the gate and a two-entry ledger/manifest pair, so the real repository is never mutated. Nine criterion cases (recorded failure, dirty worktree, aged, never recorded, exemption honoured, exemption not leaking to a neighbour, exemption without a reason, reason orphaned by a removed exemption, derived empty-read count) bracketed by a before-run and an after-run. A tenth parses .github/workflows/release.yml and asserts build and gui-build actually name the freshness job in needs: and that its step carries neither continue-on-error nor a pipe — the edge is the enforcement, and a job nothing depends on blocks nothing.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-markdown-link-integrity.sh",
@@ -882,7 +960,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Resolves relative markdown link targets in `git ls-files '*.md'` with jq, git and awk, and builds its fixtures as a synthetic corpus under $TMPDIR. It reads only, starts no daemon, and reaches no provider binary. Exemptions in config/governance/markdown-links.json."
+      "note": "Resolves relative markdown link targets in `git ls-files '*.md'` with jq, git and awk, and builds its fixtures as a synthetic corpus under $TMPDIR. It reads only, starts no daemon, and reaches no provider binary. Exemptions in config/governance/markdown-links.json.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-non-code-workspace.sh",
@@ -934,7 +1013,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Negative fixtures for pipefail-short-circuit.rb, each paired with a control, since the rule is a guard with zero violations. Case 16 asserts the mechanism deterministically - a producer that sleeps after emitting the match is still writing by construction when the reader leaves, so it reproduces on any machine, where the buffer race measured 8-13 in 400. Scratch git checkouts under TMPDIR; no daemon, no database, no provider, no network."
+      "note": "Negative fixtures for pipefail-short-circuit.rb, each paired with a control, since the rule is a guard with zero violations. Case 16 asserts the mechanism deterministically - a producer that sleeps after emitting the match is still writing by construction when the reader leaves, so it reproduces on any machine, where the buffer race measured 8-13 in 400. Scratch git checkouts under TMPDIR; no daemon, no database, no provider, no network.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-process-console-metrics.sh",
@@ -974,7 +1054,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "negative fixtures for the lifecycle scope predicate FR-149 gave the qa-doc-lint workflow-ID check. Case 1 runs the real lint to observe that the check executes; every other case drives scripts/lib/qa_doc_workflow_ids.sh inside a temporary copy of the three document roots and the fixture corpus. No daemon, no compile, no working-tree write, so no provider binary is reachable."
+      "note": "negative fixtures for the lifecycle scope predicate FR-149 gave the qa-doc-lint workflow-ID check. Case 1 runs the real lint to observe that the check executes; every other case drives scripts/lib/qa_doc_workflow_ids.sh inside a temporary copy of the three document roots and the fixture corpus. No daemon, no compile, no working-tree write, so no provider binary is reachable.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-qa-gate-surface.sh",
@@ -983,7 +1064,8 @@
       "job": "governance",
       "providerIsolation": {
         "mode": "no-provider"
-      }
+      },
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-release-publish-surface.sh",
@@ -993,7 +1075,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Derives the publishable crate set from cargo metadata and asserts release.yml's publish loop matches it in dependency order; asserts one shipped-target set across the build matrix, install.sh and the Homebrew formula; runs install.sh under a stubbed uname with a sentinel curl to prove the unsupported-platform refusal is behavioral; asserts no publishable crate embeds a file from outside its own root via include_str!/include_bytes! (FR-151 — cargo package does not ship such files and the failure surfaces only at publish verify time, after the Release and tap push); and runs install.sh end to end against a stubbed local release to prove the skills install writes only its announced target directory, never the CWD (FR-152). Static file reads plus a network-free subprocess: no daemon, no database, no provider binary reachable."
+      "note": "Derives the publishable crate set from cargo metadata and asserts release.yml's publish loop matches it in dependency order; asserts one shipped-target set across the build matrix, install.sh and the Homebrew formula; runs install.sh under a stubbed uname with a sentinel curl to prove the unsupported-platform refusal is behavioral; asserts no publishable crate embeds a file from outside its own root via include_str!/include_bytes! (FR-151 — cargo package does not ship such files and the failure surfaces only at publish verify time, after the Release and tap push); and runs install.sh end to end against a stubbed local release to prove the skills install writes only its announced target directory, never the CWD (FR-152). Static file reads plus a network-free subprocess: no daemon, no database, no provider binary reachable.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-release-tag-liveness.sh",
@@ -1003,7 +1086,20 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "FR-151: the newest v* tag on the remote must have a GitHub Release or at least a release.yml run — the v0.3.1 phantom signature (tag with neither) fails, naming the tag. Reads the GitHub API via gh (GH_TOKEN in CI); API failure and an empty tag read fail closed. One closed historical exemption: v0.3.1 itself (DD-162). Fixture mode runs the gate under a stubbed gh: phantom signature and API outage must fail with named diagnostics, plus a healthy positive control. No daemon, no database, no provider binary."
+      "note": "FR-151: the newest v* tag on the remote must have a GitHub Release or at least a release.yml run — the v0.3.1 phantom signature (tag with neither) fails, naming the tag. Reads the GitHub API via gh (GH_TOKEN in CI); API failure and an empty tag read fail closed. One closed historical exemption: v0.3.1 itself (DD-162). Fixture mode runs the gate under a stubbed gh: phantom signature and API outage must fail with named diagnostics, plus a healthy positive control. No daemon, no database, no provider binary.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
+    },
+    {
+      "path": "scripts/qa/test-rollback-contract.sh",
+      "enforcement": "ci-required",
+      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation, over two guards that were both new and therefore both unexercised. Every case brackets itself with a before-run and asserts the diagnostic rather than the exit code, because the schema guard has three distinct failure branches — a removed object, an unapplicable snapshot, and an empty read — that an exit code cannot tell apart. Writing them contradicted the design twice, which is the argument for having them: a table commented out without its indexes reaches the unapplicable-statement branch and not the removal branch, and a self-citing statement cannot shed its citation without the mirror condition firing first, so reaching the citation-content branch needs a ledger entry repointed at a real line that names nothing.",
+      "workflow": ".github/workflows/ci.yml",
+      "job": "governance",
+      "providerIsolation": {
+        "mode": "no-provider"
+      },
+      "note": "mutates copies of the two schema snapshots and a scratch copy of the tree under a temporary directory, and runs one cargo unit test against them. It starts no daemon and never writes the working tree, so no provider binary is reachable.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
@@ -1025,7 +1121,8 @@
       "providerIsolation": {
         "mode": "no-provider"
       },
-      "note": "Reads .claude/skills and the declared mirror roots and runs its negative fixtures on a temp copy. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. Contract in config/governance/skill-mirrors.json."
+      "note": "Reads .claude/skills and the declared mirror roots and runs its negative fixtures on a temp copy. It starts no daemon and applies no manifest bundle, so no provider binary is reachable. Contract in config/governance/skill-mirrors.json.",
+      "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
       "path": "scripts/qa/test-slack-dedicated-app-provisioning.sh",
@@ -1110,6 +1207,12 @@
       "owner": "docs/qa/orchestrator/156-source-task-template-skill-invocation.md"
     },
     {
+      "path": "scripts/qa/test-stale-socket-discovery.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts and hard-kills orchestratord instances and binds a TCP control-plane port, so it needs release binaries and a machine where a daemon may crash",
+      "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md"
+    },
+    {
       "path": "scripts/qa/test-webhook-trigger.sh",
       "enforcement": "manual-runbook",
       "reason": "starts an orchestratord instance and binds a webhook listener port",
@@ -1126,57 +1229,6 @@
       "enforcement": "manual-runbook",
       "reason": "Layer 4 of the self-bootstrap survival mechanism: it polls the binary on disk, health-checks it with `--help`, and copies the .stable snapshot back after WATCHDOG_MAX_FAILURES consecutive failures. It runs as an unbounded foreground loop that overwrites target/release/orchestratord, so no CI job can execute it; the runbook drives it with a two-second poll against a deliberately corrupted binary. Classified here rather than as a developer-tool because it does make a claim — that a corrupt build is repaired — and QA self-bootstrap/02 is the procedure that checks it.",
       "owner": "docs/qa/self-bootstrap/02-survival-enforcement-watchdog.md"
-    },
-    {
-      "path": "scripts/qa/connectivity-path-single-source.rb",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "shape": "shape 2 — enumeration standing in for coverage, in its most expensive form: the set of places that spell a filename is exactly the set someone remembered, and the second speller is invisible because it breaks nothing today. FR-163 measured three pairs that had already drifted — a layout heuristic sending SecretStore reads and writes to different directories, a watcher skip that never fired in the default deployment, and a client bundle written one character away from where auto-discovery looked — and not one of them failed a test. The scanned set is derived from the tree, never listed, and the mirror condition fails when an allowlisted site stops matching, so the gate cannot go green by going blind.",
-      "note": "Offline: reads tracked Rust source with inline cfg(test) modules stripped. Asserts each runtime-layout name — data dir, socket, pidfile, database, control-plane dir, client dir, data-dir env var — is spelled in exactly one production file. Reads each file twice, masked and raw: the subjects are string literals that masking blanks, while comments must not be counted. Re-derives on every run whether rust_source.rb's test*.rs basename exclusion is hiding a spelling from it, rather than inheriting that known defect silently."
-    },
-    {
-      "path": "scripts/qa/test-connectivity-path-single-source.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "shape": "shape 7 — a negative fixture that cannot show it applied its mutation. These fixtures bracket the run with a before and an after, so a case failing for an unrelated reason cannot read as a case catching its mutation, and each asserts the diagnostic rather than the exit code because an exit code cannot say which of the ledger gate's branches fired.",
-      "note": "Negative fixtures for connectivity-path-single-source.rb, run against a scratch copy of the working tree. Four mutations: a spelling in a comment (must NOT trip the gate, or it is counting prose), a spelling in live code (must), the canonical file moved out of scan range (must trip the mirror condition rather than the presence one), and an emptied tree (must fail closed)."
-    },
-    {
-      "path": "scripts/qa/test-gate-daemon-readiness-fallback.sh",
-      "enforcement": "ci-required",
-      "workflow": ".github/workflows/ci.yml",
-      "job": "governance",
-      "providerIsolation": {
-        "mode": "no-provider"
-      },
-      "shape": "shape 2 — enumeration standing in for coverage, in the form where the enumeration is implicit. c1060338 migrated 24 readiness polls onto `daemon status --wait-ready` on the assumption that every caller starts the binary being built. One does not: test-slack-skill-automation-vertical.sh pins PREVIOUS_REF to the 0.5.0 cut because its subject IS backward compatibility, so its CLI predates the flag by ten days and answered `error: unexpected argument`, which the helper reported as `daemon not ready within 25s`. Four gates were red for a fortnight on daemons that had started fine. No gate running against the current binary can observe the fallback branch, so it would pass while the compatibility path was broken — which is exactly how the defect survived a 23-gate migration.",
-      "note": "Offline and hermetic: no daemon, no cargo, no network. Drives gate_daemon_wait_ready against stub CLIs whose two capabilities — whether `daemon status --help` advertises --wait-ready, and whether `task list` ever succeeds — are chosen per case, so the modern and legacy binaries differ in exactly one declared thing. Six cases: the probe in both directions, that a capable CLI still takes the Health RPC path (a fallback that swallowed every caller would silently undo FR-163's worker-registration guarantee), the regression itself, that the fallback fails closed after its budget rather than falling through like the pre-FR-163 `&& break`, and that an empty CLI path is still rejected by name. Each asserts the diagnostic rather than the exit code, since four of the cases exit non-zero and a code cannot say which branch produced it."
-    },
-    {
-      "path": "scripts/qa/test-stale-socket-discovery.sh",
-      "enforcement": "manual-runbook",
-      "reason": "starts and hard-kills orchestratord instances and binds a TCP control-plane port, so it needs release binaries and a machine where a daemon may crash",
-      "owner": "docs/qa/orchestrator/215-connectivity-path-single-source.md"
-    },
-    {
-      "path": "scripts/qa/test-daemon-artifact-ownership.sh",
-      "enforcement": "manual-runbook",
-      "reason": "starts real orchestratord instances and races a predecessor's self-termination against a successor holding the same path, so it needs built binaries and a machine where daemons may be started and killed",
-      "owner": "docs/qa/orchestrator/224-daemon-artifact-ownership.md"
-    },
-    {
-      "path": "scripts/qa/test-daemon-readiness.sh",
-      "enforcement": "manual-runbook",
-      "reason": "starts an orchestratord instance and races a waiter against it, so it needs built binaries and a machine where a daemon may be started and stopped",
-      "owner": "docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md"
     }
   ]
 }

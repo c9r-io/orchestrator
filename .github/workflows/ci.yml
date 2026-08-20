@@ -204,11 +204,43 @@ jobs:
       - name: Install failing provider stubs
         uses: ./.github/actions/provider-stubs
 
+      # FR-174. Meta-verification — the `* negative fixtures` steps that prove a
+      # gate can still block something — answers a question whose answer changes
+      # only when a gate changes. Running all 19 of them on a PR that touches no
+      # gate spends 561s of this job's 1335s verifying a property that PR cannot
+      # affect. This step decides which tier the run is in; the 19 steps carry an
+      # `if:` on its output, and nightly-governance.yml runs them unconditionally.
+      #
+      # Fails closed in every direction. An unreadable base ref, a git failure, a
+      # push, a workflow_dispatch, or anything not a pull_request all yield
+      # `full`. The only path to `deferred` is a diff that was read successfully
+      # and contained nothing under the four roots.
+      #
+      # .github/workflows/** is in the trigger set and is not in FR-174's list of
+      # three: a PR that edits a workflow is editing the tiering mechanism, and a
+      # mechanism that can exempt its own edits from verification is the one shape
+      # this must not have.
+      - name: Decide meta-verification tier
+        id: tier
+        shell: bash
+        run: ./scripts/qa/ci-tier.sh
+
       # Every step below reports independently. A serial job stops at its first
       # failure, so one red gate hides every diagnosis after it: FR-134's
       # workspace-scope defect sat invisible behind the ledger tooling's
       # self-lock for two runs. `continue-on-error` lets one run surface every
       # problem, and the aggregate step at the end is what fails the job.
+
+      # First, because it governs the condition every meta gate below is
+      # deferred by. Deliberately *not* tier-conditional: a gate that can defer
+      # its own verification is the deadlock FR-174 must not build, and
+      # test-ci-tier.sh case 20 asserts that this stays true of the tier step,
+      # the aggregator and itself.
+      - name: Meta-verification tier and aggregator fixtures
+        id: ci-tier
+        continue-on-error: true
+        run: ./scripts/qa/test-ci-tier.sh
+
       - name: Verify CI job liveness
         id: liveness
         continue-on-error: true
@@ -216,6 +248,7 @@ jobs:
 
       - name: Verify CI job liveness negative fixtures
         id: liveness-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-ci-liveness.sh
 
@@ -226,6 +259,7 @@ jobs:
 
       - name: Verify gate enforcement surface negative fixtures
         id: surface-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-qa-gate-surface.sh --fixture-test
 
@@ -236,6 +270,7 @@ jobs:
 
       - name: Verify skill mirror integrity negative fixtures
         id: mirror-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-skill-mirror-integrity.sh --fixture-test
 
@@ -246,6 +281,7 @@ jobs:
 
       - name: Verify docs publishing integrity negative fixtures
         id: publishing-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-docs-publishing-integrity.sh --fixture-test
 
@@ -256,6 +292,7 @@ jobs:
 
       - name: Verify release publish surface negative fixtures
         id: release-surface-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-release-publish-surface.sh --fixture-test
 
@@ -268,6 +305,7 @@ jobs:
 
       - name: Verify release tag liveness negative fixtures
         id: tag-liveness-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-release-tag-liveness.sh --fixture-test
 
@@ -278,6 +316,7 @@ jobs:
 
       - name: Verify markdown link integrity fixtures
         id: links-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-markdown-link-integrity.sh --fixture-test
 
@@ -288,6 +327,7 @@ jobs:
 
       - name: QA doc lint workflow-ID scope negative fixtures
         id: doc-lint-scope
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-qa-doc-lint-workflow-scope.sh
 
@@ -349,6 +389,7 @@ jobs:
       # that release.yml still depends on the freshness job.
       - name: Manual-gate freshness fixtures
         id: manual-gate-freshness-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-manual-gate-freshness.sh
 
@@ -368,6 +409,7 @@ jobs:
       # ledger would stop checking the first.
       - name: Rollback contract fixtures
         id: rollback-contract-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-rollback-contract.sh
 
@@ -376,6 +418,7 @@ jobs:
       # can observe that branch.
       - name: Daemon readiness fallback fixtures
         id: gate-daemon-readiness-fallback
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-gate-daemon-readiness-fallback.sh
 
@@ -386,6 +429,7 @@ jobs:
 
       - name: CLI documentation parity fixtures
         id: cli-doc-parity-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-cli-doc-parity.sh --fixture-test
 
@@ -405,6 +449,7 @@ jobs:
 
       - name: Governance execution cost negative fixtures
         id: cost-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-ci-cost.sh
 
@@ -415,16 +460,19 @@ jobs:
 
       - name: JSON read status negative fixtures
         id: jq-status-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-jq-status-observed.sh
 
       - name: Negative fixtures prove they applied a mutation
         id: fixture-drift
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/fixture-target-drift.rb
 
       - name: Fixture target drift negative fixtures
         id: fixture-drift-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-fixture-target-drift.sh
 
@@ -438,6 +486,7 @@ jobs:
 
       - name: Runtime layout ledger negative fixtures
         id: path-single-source-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-connectivity-path-single-source.sh
 
@@ -451,6 +500,7 @@ jobs:
 
       - name: Dependency policy negative fixtures
         id: dependency-policy-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-dependency-policy.sh
 
@@ -466,6 +516,7 @@ jobs:
 
       - name: Pipefail short-circuit negative fixtures
         id: pipefail-short-circuit-fixtures
+        if: steps.tier.outputs.tier == 'full'
         continue-on-error: true
         run: ./scripts/qa/test-pipefail-short-circuit.sh
 
@@ -513,11 +564,50 @@ jobs:
       # outcome and keeps going, so one run reports every problem instead of
       # only the first — which is how FR-134's workspace-scope defect stayed
       # invisible behind the ledger tooling's self-lock across two runs.
+      #
+      # FR-174 made this step assert the *expected* set rather than tolerate
+      # whatever it is handed. Before tiering, no gate here carried an `if:`, so
+      # `skipped` could only mean a cancelled job and accepting it was free. Once
+      # 19 gates became conditional that tolerance turns into §4.4 shape 5 — a
+      # check that reports PASS having read no input. A tier predicate that
+      # wrongly returned `deferred` would skip all 19, print 19 green-looking
+      # lines, exit 0, and no meta-verification would have run anywhere.
+      #
+      # So the rule is two-sided and per gate: under `deferred` every META gate
+      # must be `skipped` — a *success* is as much a violation as a failure,
+      # because it means the condition did not do what the tier says it did —
+      # and under `full` none of them may be. Non-META gates must always succeed.
+      # The META roster is cross-checked against OUTCOMES in both directions, so
+      # a renamed id fails here instead of silently reclassifying a gate; and
+      # scripts/qa/test-ci-tier.sh derives the roster from the `if:` conditions
+      # in this file and fails when the two disagree.
       - name: Governance result
         if: always()
         shell: bash
         env:
+          TIER: ${{ steps.tier.outputs.tier }}
+          META: |
+            liveness-fixtures
+            surface-fixtures
+            mirror-fixtures
+            publishing-fixtures
+            release-surface-fixtures
+            tag-liveness-fixtures
+            links-fixtures
+            doc-lint-scope
+            manual-gate-freshness-fixtures
+            rollback-contract-fixtures
+            gate-daemon-readiness-fallback
+            cli-doc-parity-fixtures
+            cost-fixtures
+            jq-status-fixtures
+            fixture-drift
+            fixture-drift-fixtures
+            path-single-source-fixtures
+            dependency-policy-fixtures
+            pipefail-short-circuit-fixtures
           OUTCOMES: |
+            ci-tier=${{ steps.ci-tier.outcome }}
             liveness=${{ steps.liveness.outcome }}
             liveness-fixtures=${{ steps.liveness-fixtures.outcome }}
             surface=${{ steps.surface.outcome }}
@@ -565,22 +655,7 @@ jobs:
             filesystem-trigger=${{ steps.filesystem-trigger.outcome }}
             parity=${{ steps.parity.outcome }}
             execution-migration=${{ steps.execution-migration.outcome }}
-        run: |
-          set -uo pipefail
-          failed=0
-          while IFS= read -r line; do
-            [[ -z "$line" ]] && continue
-            gate="${line%%=*}"
-            outcome="${line#*=}"
-            printf '%-22s %s\n' "$gate" "$outcome"
-            [[ "$outcome" == "success" || "$outcome" == "skipped" ]] || failed=1
-          done <<< "$OUTCOMES"
-          echo ""
-          if [[ "$failed" -ne 0 ]]; then
-            echo "one or more governance gates failed; each is reported above and in its own step" >&2
-            exit 1
-          fi
-          echo "all governance gates passed"
+        run: ./scripts/qa/governance-result.sh
 
   ci-environment-parity:
     name: CI environment parity
