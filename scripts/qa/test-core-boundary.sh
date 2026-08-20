@@ -392,6 +392,45 @@ echo ""
 # this case passed for the wrong reason against mutation M7 during the FR-130
 # mutation run. Requiring both to pass first is what makes the failure
 # attributable to the removal.
+# --- Case 8b: the emitted form does not depend on the json gem -----------------
+# Case 2 compares bytes, so `ledger_json` has to render the same text on every
+# interpreter. It did not: an empty object is `{\n  }` on json 2.1, `{}` on 2.21
+# and `{\n\n  }` on older gems, and the original normaliser collapsed only the
+# third. When the runner image moved to json 2.21.2 on 2026-08-20 both gates went
+# red on every branch, main included, and the ledgers had not changed.
+#
+# Case 2 cannot catch that: it compares this interpreter's emit against a ledger
+# written by the same interpreter, so it is green on any single machine and red
+# only across a version boundary. This asserts the property directly — all three
+# renderings normalise to the compact form — and is therefore version-independent
+# rather than a second sample of whatever json happens to be installed.
+#
+# The prose case is not decoration: `\{\s*\}` would have been the obvious
+# normaliser and would silently rewrite a `{ }` inside a `reason` string. A JSON
+# string cannot hold a real newline, which is what makes `\{\n\s*\}` structural.
+echo "Case 8b: ledger_json normalises empty containers on any json version"
+LJ_OUT="$WORK/ledger-json-probe.txt"
+# Through fixture_produce: this derives a fixture input from a command, which is
+# exactly that helper's contract — the command must succeed and must leave a
+# non-empty file where there was none. A hand-rolled `if ...; then` asserted only
+# the first half, and fixture-target-drift.rb was right to flag it (a bare
+# `ruby -e` writing into the scratch tree is indistinguishable, to a scanner,
+# from an unproven in-place mutation).
+if fixture_produce "ledger_json rendering probe" "$LJ_OUT" \
+  ruby -r"$REPO_ROOT/scripts/lib/rust_source" -rjson -e '
+    include RustSource
+    File.write(ARGV[0], ledger_json({
+      "empty" => {}, "list" => [], "reason" => "prose with { } inside"
+    }))
+  ' "$LJ_OUT"; then
+  lj_ok=1
+  grep -q '"empty": {}' "$LJ_OUT" || { fail "an empty object did not normalise to {}"; lj_ok=0; }
+  grep -q '"list": \[\]' "$LJ_OUT" || { fail "an empty array did not normalise to []"; lj_ok=0; }
+  grep -q 'prose with { } inside' "$LJ_OUT" || { fail "normalising rewrote a { } inside a string"; lj_ok=0; }
+  [ "$lj_ok" -eq 1 ] && pass "empty containers render compactly and prose braces are untouched"
+fi
+echo ""
+
 echo "Case 9: neither gate can run without the shared scanner"
 DIR="$(new_case shared-scanner)"
 set +e

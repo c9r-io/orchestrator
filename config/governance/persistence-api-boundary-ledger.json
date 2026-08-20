@@ -73,10 +73,8 @@
       "reason": "opens SLACK_GATEWAY_DB with no workspace dependencies at all. A different database is not this boundary; scanned by nothing here"
     }
   },
-  "yields": {
-  },
-  "demands": {
-  },
+  "yields": {},
+  "demands": {},
   "testOnlyYields": {
     "crates/orchestrator-persistence/src/test_support.rs::fn open_conn": {
       "crate": "crates/orchestrator-persistence",
@@ -249,8 +247,7 @@
       ]
     }
   },
-  "holds": {
-  },
+  "holds": {},
   "totals": {
     "yields": 0,
     "demands": 0,

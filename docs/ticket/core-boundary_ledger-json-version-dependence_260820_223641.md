@@ -116,24 +116,57 @@ bash scripts/qa/test-core-boundary.sh; git status --porcelain
    代价是失去「emit 可直接提交」这条性质，而 Case 2 的注释说那正是它存在的理由。
 3. 缺陷 2 独立于以上：`--write` 的失败路径无论如何都不该留下改动。
 
-## 未解释的部分（明确标注）
+## 曾经「未解释」的部分 —— 已查明，是我自己的测量错误
 
-**同样的输入下，main 绿而 PR #131 红，这一点我没能解释。** 逐项核对过：
+本文档初版写道：同样的输入下 main 绿而 PR #131 红，无法解释。**那个矛盾不存在**，
+它来自我的一处误测，记录在此因为它正是 §4.4 shape 6 的形状。
 
-| 项 | 结论 |
-|---|---|
-| `core-boundary-ledger.json` | `origin/main..HEAD` 无差异（md5 `7b968e88…`） |
-| `scripts/lib/rust_source.rb`（`ledger_json` 所在） | 无改动 |
-| `core/`、`crates/` | 无改动 |
-| `scripts/qa/core-boundary.rb` | 无改动 |
-| 解释器 | 两边均 ruby 3.2.3 / json 2.21.2（实测打印） |
-| main 今天重跑（run 32099510921，`e6081c6d`） | **14 passed, 0 failed** |
-| PR #131（run 32372530924，`f4e93f8c`） | **12 passed, 2 failed** |
+我当时断言「两边解释器相同」，依据是两次 run 的 apt 输出都写着
+`ruby is already the newest version (1:3.2~ubuntu1)`。但那是 **apt 包版本**，
+而出问题的是 **json gem 版本** —— 一个随 runner 镜像滚动更新、apt 包版本却不变的量。
+main 那次 PASS，所以诊断从未打印过它的 json 版本，我把「没测到」当成了「相同」。
 
-相同输入产生稳定相反的结果，逻辑上要求还存在一个未被发现的输入差异。上面缺陷 1 的
-机制是**实测确证**的（版本与渲染形式都打印了出来），但它**不足以解释这个分叉** ——
-如果它是全部原因，main 也该红。实现者应当把「找出那个差异」当作第一步，
-而不是接受本文档已给出的机制就动手。
+时间戳挑明了这一点：
+
+| run | 时间 | 结果 |
+|---|---|---|
+| main governance 重跑（job 95939493389） | 2026-08-19 **02:44** | 14 passed, 0 failed |
+| PR #131（job 96436169466） | 2026-08-20 **13:07** | 12 passed, 2 failed |
+
+相差 34 小时，期间 ubuntu-latest 镜像更新。**在当前镜像上重跑 main 的同一个 job：
+core-boundary 与 persistence-api-boundary 同样失败，diff 逐字节相同（`11,12c11`）。**
+
+所以这不是分支特有的问题，而是镜像更新触发的全仓缺陷，main 早已中招，只是在这次重跑
+之前没有人碰过它。缺陷 1 的机制就是全部原因。
+
+教训是可迁移的：**一个字段回答的不是你问的问题**。`1:3.2~ubuntu1` 回答「apt 包是哪个」，
+被拿去当「`JSON.pretty_generate` 如何渲染空对象」的答案。判断两个环境「相同」之前，
+要测的是那个真正决定行为的量，而不是它旁边那个容易读到的量。
+
+## 修复（已实施）
+
+1. **`ledger_json` 版本稳定化**（`scripts/lib/rust_source.rb`）：正则从
+   `\{\n\s*\n\s*\}`（只收带空行的形式）放宽为 `\{\n\s*\}`，三种渲染
+   （`{}`、`{\n  }`、`{\n\n  }`）统一收成紧凑形式，数组同理。
+   **刻意不用 `\{\s*\}`** —— JSON 字符串字面量里不可能有真换行（会转义成 `\n` 两字符），
+   要求换行保证它只改结构；宽松形式会静默改写 `reason` 散文里的 `{ }`。
+2. **两个 ledger 重新生成**并提交为规范化后的形式。
+3. **新增 Case 8b**（`test-core-boundary.sh`）直接断言这条性质：三种空容器渲染都规范化、
+   且散文里的 `{ }` 不被改动。这条与 json 版本无关 —— Case 2 做不到，因为它拿本机的 emit
+   和本机写的 ledger 比，在任何单台机器上都绿，只在跨版本时才红。
+4. 该 case 经 `fixture_produce` 派生输入，`fixture-target-drift.rb` 的告警是对的：
+   手写的 `if ...; then` 只断言了命令成功，没断言产出非空。
+
+**缺陷 2（`--write` 改写 ledger）的触发条件随之消失** —— emit 恢复与 ledger 一致后
+Case 7 重新是 no-op。但「只读门禁在失败路径写入受版本控制的文件」这个形状本身未加固：
+若将来 emit 再次与 ledger 分歧，它还会写。留作后续项，见下。
+
+## 遗留项（未做，非阻塞）
+
+`test-core-boundary.sh` Case 7 在真实仓库上跑 `--write`，因此它的失败路径会改写
+`config/governance/core-boundary-ledger.json`。当前 emit == ledger，所以是 no-op；
+但正确的形状应当是在 scratch tree 上跑，或在失败路径上恢复。本次不做，因为它需要重排
+Case 7 的断言语义（它现在测的正是「no-op 写入不改变字节」这一性质本身）。
 
 ## 影响
 

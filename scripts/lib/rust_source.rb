@@ -293,12 +293,30 @@ module RustSource
     strip_test_modules(masked, masked)
   end
 
-  # Ruby's JSON.pretty_generate writes an empty array as "[\n\n]". The reviewed
-  # ledgers use "[]", so a --write round trip would otherwise move lines that no
-  # reviewer asked to change and bury the real edit.
+  # An empty container is the one thing `JSON.pretty_generate` renders
+  # differently across json gem versions, and two ci-required gates compare this
+  # output against a committed ledger with `cmp`. Unnormalised, the verdict
+  # depends on whoever ran it.
+  #
+  # Measured:
+  #   json 2.1.0  (macOS system ruby 2.6)     "{\n  }"
+  #   json 2.21.2 (ubuntu-24.04 runner, 3.2)  "{}"
+  #   older gems                              "{\n\n  }"
+  #
+  # The original pair collapsed only the third. When the GitHub runner image
+  # moved to json 2.21.2 between 2026-08-19 and 2026-08-20, the ledgers — written
+  # from a json 2.1 era interpreter, carrying `{\n  }` — stopped matching the
+  # emit, and `core-boundary` and `persistence-api-boundary` went red on every
+  # branch including main. See
+  # docs/ticket/core-boundary_ledger-json-version-dependence_260820_223641.md.
+  #
+  # `\{\n\s*\}` and deliberately not `\{\s*\}`: a JSON string literal cannot hold
+  # a real newline — it is escaped as the two characters \n — so requiring one
+  # guarantees this only ever rewrites structure. The looser form would also
+  # rewrite a `{ }` sitting inside a `reason` string, silently editing prose.
   def ledger_json(value)
     JSON.pretty_generate(value)
-      .gsub(/\[\n\s*\n\s*\]/, "[]")
-      .gsub(/\{\n\s*\n\s*\}/, "{}") + "\n"
+      .gsub(/\[\n\s*\]/, "[]")
+      .gsub(/\{\n\s*\}/, "{}") + "\n"
   end
 end

@@ -238,16 +238,22 @@ gates used to die at the `diff` line under `set -euo pipefail` — the FR-146 sh
 — so Cases 3–12 never ran and the `--write` defect had never once been reached.
 That truncation is fixed in `f4e93f8c`.
 
-What is **not** explained, and is recorded as unexplained rather than guessed at:
-the ledger bytes, `scripts/lib/`, `core/`, `crates/`, the gate script and the
-interpreter are all identical between the two, yet main passes 14/14 and this
-branch fails 12/14. The version dependency is real and measured; it does not
-account for the divergence.
+The apparent divergence — main green, this branch red — turned out to be a
+measurement error of mine rather than a real difference, and it is worth naming
+because it is §4.4 shape 6 again. I claimed both ran the same interpreter on the
+strength of apt printing `ruby is already the newest version (1:3.2~ubuntu1)`.
+That is the **apt package**; the quantity that decides the rendering is the
+**json gem**, which moves with the runner image while the package version does
+not. Main's run passed, so its json version had never been printed, and I read
+"not measured" as "identical". The two runs were 34 hours apart. Re-running
+main's own job on the current image fails identically, byte for byte.
 
-Filed as
-`docs/ticket/core-boundary_ledger-json-version-dependence_260820_223641.md`,
-which carries the measurements, the reproduction and the open question. This FR
-does not merge past it.
+Filed and fixed under
+`docs/ticket/core-boundary_ledger-json-version-dependence_260820_223641.md`:
+`ledger_json` now normalises all three empty-container renderings, both ledgers
+were regenerated, and `test-core-boundary.sh` Case 8b asserts the property
+directly — version-independently, which Case 2 cannot, since it compares one
+machine's emit against a ledger that machine wrote.
 
 ## Accepted costs
 
