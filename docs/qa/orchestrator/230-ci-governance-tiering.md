@@ -149,8 +149,17 @@ bash scripts/qa/test-ci-cost.sh
 
 ### Expected
 
-- `critical path: 1335s full / 774s deferred (19 tiered step(s), 561s)` plus the
-  longest chain.
+- A `critical path: <full>s full / <deferred>s deferred (N tiered step(s), Ms)`
+  line plus the longest chain for each tier. **Do not assert the numbers** — they
+  are samples and move with every refresh; assert that the gate recomputes them
+  from the `needs` graph and agrees with what the ledger records, which is what
+  `test-ci-cost.sh`'s drift case covers.
+- The chain is the part worth reading. Measured at run `32384727129`
+  (head `f1637d4a`): `1153s full / 820s deferred`, and **`deferred` now names
+  `ci-environment-parity`, not `governance`** — with 454s of meta-verification
+  removed, governance falls to 699s and stops being the longest job. Once that
+  handover has happened, tiering more of `governance` buys nothing until parity
+  moves.
 - `test-ci-cost.sh` reports `12 passed, 0 failed`, including the drift case,
   which mutates the **`needs` graph** rather than the recorded number: adding
   `parity needs governance` makes the chain 400s and the recorded 300s stale
@@ -183,10 +192,14 @@ ruby scripts/qa/ci-liveness.rb
 
 ### Known state
 
-**Not yet satisfied.** The workflow has never run, so no honest record exists —
-every entry in that ledger is a real run, and a fabricated `headSha` is the entry
-the ledger exists to prevent. Until this passes, the 19 deferred gates have a
-declared home and no evidence of arriving there, and FR-174 stays In Progress.
+**Satisfied 2026-08-21.** `nightly-governance.yml` ran as
+`workflow_dispatch` run `32384754659` at `f1637d4a`, immediately after the merge
+that registered it: **19 of 19 gates, 0 skipped**, `all 19 governance gates
+passed, including 19 meta-verification gates`. `ci-job-liveness.json` records
+that real conclusion and the workflow is `inScope: true`; the temporary
+`inScope: false` exclusion and the `governance` `knownFailing` annotation were
+both removed in the same commit, which is the condition each of their reasons
+named.
 
 **It cannot be satisfied before the branch merges**, which is a platform
 constraint and was measured rather than assumed:
@@ -226,5 +239,5 @@ the gate passes here and fails in CI.
 | 1 | S1 predicate returns work, and fails closed | ☑ | 23/23; one case per root; four fail-closed paths |
 | 2 | S2 deferral asserted in both directions | ☑ | 11 aggregator states exercised on bash 3.2 |
 | 3 | S3 rosters cannot drift; coverage did not shrink | ☑ | 3 mutations, each named; 58 → 61 ci-required |
-| 4 | S4 critical path recomputed | ☑ | 12/12; 1335s full / 774s deferred |
-| 5 | S5 deferred gates have a running home | ☐ | **outstanding** — the nightly has never run |
+| 4 | S4 critical path recomputed | ☑ | 12/12; at `32384727129` 1153s full / 820s deferred, deferred chain = ci-environment-parity |
+| 5 | S5 deferred gates have a running home | ☑ | nightly run `32384754659`: 19/19 gates, 0 skipped, recorded in ci-job-liveness.json |

@@ -135,6 +135,33 @@ critical path: 1335s full / 774s deferred (19 tiered steps, 561s)
   longest chain: governance
 ```
 
+### Measured after merge, and the bound moved as predicted
+
+Second sample, run `32384727129` (head `f1637d4a`), the first CI run on `main`
+carrying the tiering:
+
+```
+critical path: 1153s full / 820s deferred (19 tiered step(s), 454s)
+  full     chain=governance
+  deferred chain=ci-environment-parity
+```
+
+The numbers below were taken at `32099510921` and are left as they were — they
+name their run and their head, and a sample is not a function of the tree
+(FR-140). What matters is not that they moved but **which way the chain moved**:
+under `deferred`, `governance` falls to 699s and the longest chain is no longer
+`governance` at all. It is `ci-environment-parity`.
+
+That is the bound this document predicted, arriving one sample later and without
+anyone re-deriving it. `criticalPath` is computed from the `needs` graph on every
+run rather than stored, so the handover showed up in the gate's own output the
+first time it was true. A recorded 774s would have been a number nobody
+recomputed, describing a chain that had already changed.
+
+It also sharpens the next step for whoever takes it: tiering more of
+`governance` now buys nothing until `ci-environment-parity` moves, because the
+critical path stops being governance's to spend.
+
 ### What the remaining gap is made of, since the FR asked
 
 `774s` is still `governance`. The comparison the criterion should have asked for
