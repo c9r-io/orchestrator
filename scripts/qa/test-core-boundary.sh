@@ -112,7 +112,23 @@ else
 # (FR-146). Measured: a 129 KB producer into `| head -1` dies 10 times out of 10.
   # The `|| true` went with it: it was there to survive `head`'s SIGPIPE, and it also
   # swallowed a real `diff` failure (FR-144's class).
-  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | sed -n '1,20p' >&2
+  # `diff` exits 1 when the files differ, which is the only reason we are here.
+  # Under this file's `set -euo pipefail` that 1 becomes the pipeline's status
+  # and `set -e` ends the run *on this line* — no diagnostic below, no remaining
+  # cases, no summary. Measured on CI run 32211460901: the step printed the diff
+  # and exited, and a truncated run is indistinguishable from a complete one to
+  # anything reading the exit code. That is the FR-146 defect the comment above
+  # describes as fixed; removing `| head` fixed half of it.
+  #
+  # Not `|| true`: that is what was removed here for swallowing a real `diff`
+  # failure (FR-144's class). Status is captured instead, so 0/1 pass through and
+  # anything >=2 — diff itself in trouble — is still named.
+  diff_status=0
+  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" > "$WORK/ledger.diff" 2>&1 || diff_status=$?
+  sed -n '1,20p' "$WORK/ledger.diff" >&2
+  if [ "$diff_status" -gt 1 ]; then
+    echo "  diff itself failed (status $diff_status); the comparison above is not trustworthy" >&2
+  fi
   # Which interpreter produced that, because this comparison is byte-exact and
   # `ledger_json` is not version-stable. It collapses `{\n\n}` to `{}` but not
   # `{\n  }`, so an empty object renders differently across json gem versions and

@@ -193,7 +193,17 @@ else
 # `sed -n` reads to end of input; `head` leaves early and kills the producer, and under
 # `set -o pipefail` that status reaches `set -e` and ends the run with no summary line
 # (FR-146). Measured: a 129 KB producer into `| head -1` dies 10 times out of 10.
-  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" | sed -n '1,20p' >&2
+  # Same as test-core-boundary.sh Case 2: `diff` exits 1 when the files differ,
+  # `set -euo pipefail` turns that into the pipeline's status, and `set -e` ends
+  # the run on this line — no diagnostic, no summary, a truncated run that reads
+  # like a complete one. Status captured rather than `|| true`, so a diff tool in
+  # real trouble (>=2) is still named.
+  diff_status=0
+  diff "$REPO_ROOT/$LEDGER" "$WORK/emitted.json" > "$WORK/ledger.diff" 2>&1 || diff_status=$?
+  sed -n '1,20p' "$WORK/ledger.diff" >&2
+  if [ "$diff_status" -gt 1 ]; then
+    echo "  diff itself failed (status $diff_status); the comparison above is not trustworthy" >&2
+  fi
   # Same reason as test-core-boundary.sh Case 2: the comparison is byte-exact and
   # `ledger_json` collapses `{\n\n}` to `{}` but not `{\n  }`, so empty objects
   # render differently across json gem versions. A diff showing only that is an
