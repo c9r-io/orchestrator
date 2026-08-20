@@ -1,6 +1,7 @@
 # 文档站自 2026-08-18 起构建失败：跨行的行内代码让 Vue 把 `<store>` 当成未闭合标签
 
-**Status**: open
+**Status**: fixed，待合并后由 `docs.yml` 验证（该 workflow 只在 push 到 `main`
+且路径命中 `docs/guide/**` 时运行，PR 上不触发，所以本 ticket 到那时才能删）
 **Found**: 2026-08-21，在 FR-174 收尾刷新 `ci-job-liveness.json` 时（`docs.yml` 的
 `deploy` job 记录为 failure，此前被分支限定的 refresh 掩盖）
 **Severity**: medium —— 文档站已经三天没有发布过；不影响产品运行
@@ -47,7 +48,35 @@ cd site && npm ci && npm run build                          # 复现构建失败
 
 `docs.yml` 的 `deploy` 通过，文档站恢复发布。
 
-## 建议修法（未验证）
+## 已修（实测验证）
+
+改动两处，**en 与 zh 各一处**：`docs/guide/03-workflow-configuration.md:231-232`
+与 `docs/guide/zh/03-workflow-configuration.md:229-230`，把跨行的行内代码收进一行。
+
+两处都要改这一点不是顺手：en 先失败，构建就停了，zh 那处**从未有机会暴露**。
+只修 en 会让下一次构建红在 zh 上，看起来像「修了没用」。这类缺陷按定义会成对出现
+——同一段落的两个语言版本由同一份原文翻译而来。
+
+**验证方式是真的跑构建，不是读 markdown**：
+
+| 步骤 | 结果 |
+|---|---|
+| 修改前 `cd site && npm run build` | `exit=1`，`Element is missing end tag` —— 与 CI 逐字相同 |
+| `node scripts/sync-docs.mjs` | `Synced 68 files` |
+| 修改后扫描两个生成物的裸露标签 | 各 0 处 |
+| 修改后 `cd site && npm run build` | **`exit=0`**，`✓ building client + server bundles`、`✓ rendering pages` |
+
+### 一处把我引偏的读数，值得记下
+
+Vue 报的 `en/guide/workflow-configuration.md (391:9)` **不是源 markdown 的行号**，
+而是编译后 SFC 的位置。第 391 行在一个闭合良好的 YAML 围栏里，我据此一度认为
+「机制推断错了」并准备推翻重来。真正有效的定位是**扫描围栏与行内代码之外的裸露标签**，
+它给出唯一的一处（第 232 行），与最初的机制推断一致。
+
+教训与本 ticket 的缺陷同形：**一个数字回答的不是你问的问题**。把编译产物的行号
+当成源文件的行号读，会让人放弃一个正确的判断。
+
+## 原建议修法（保留，供对照）
 
 把跨行的行内代码收进一行：
 
