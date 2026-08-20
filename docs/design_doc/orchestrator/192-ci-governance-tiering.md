@@ -223,6 +223,32 @@ window is one nightly cycle at most, and `ci-liveness.rb` is red for the whole o
 it — which is the correct signal rather than a nuisance, since it is exactly the
 claim "these gates run somewhere" going unevidenced.
 
+## A red on this PR that is not this FR's
+
+`core-boundary` and `persistence-api-boundary` are red on PR #131 and green on
+`main`, and the cause is not the tiering. Both compare `--emit-baseline` against
+their ledger with `cmp`, and `ledger_json` (`scripts/lib/rust_source.rb:299`)
+renders an empty object differently across json gem versions — measured, CI is
+json 2.21.2 and emits `{}` while the committed ledgers carry the multi-line form.
+When that comparison fails, the same gate's Case 7 then **writes the ledger**,
+so a read-only gate leaves a modified tracked file behind.
+
+Neither defect is caused by this FR, and one of them this FR made visible: both
+gates used to die at the `diff` line under `set -euo pipefail` — the FR-146 shape
+— so Cases 3–12 never ran and the `--write` defect had never once been reached.
+That truncation is fixed in `f4e93f8c`.
+
+What is **not** explained, and is recorded as unexplained rather than guessed at:
+the ledger bytes, `scripts/lib/`, `core/`, `crates/`, the gate script and the
+interpreter are all identical between the two, yet main passes 14/14 and this
+branch fails 12/14. The version dependency is real and measured; it does not
+account for the divergence.
+
+Filed as
+`docs/ticket/core-boundary_ledger-json-version-dependence_260820_223641.md`,
+which carries the measurements, the reproduction and the open question. This FR
+does not merge past it.
+
 ## Accepted costs
 
 - **A 24-hour window on `main`.** A PR that defers, merges, and breaks a gate's
