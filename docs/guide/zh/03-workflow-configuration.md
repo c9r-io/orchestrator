@@ -227,8 +227,9 @@ behavior:
 
 这三个就是全集。`behavior.captures`、`generate_items`、`spawn_tasks` 与 `store_put`
 随协调收敛退休，并在 v0.7 窗口被移除；声明其中任何一个的步骤会被具名拒绝。需要读取
-前序步骤产出的步骤，请自己从 store 读 —— `orchestrator store get <store> <key>
---project {project_id}` —— 而不是让引擎代为传递。
+前序步骤产出的步骤，请自己从 store 读 ——
+`orchestrator store get <store> <key> --project {project_id}` ——
+而不是让引擎代为传递。
 
 ## 失败去了哪里
 

@@ -2,10 +2,11 @@
 
 ## 优先级: P2
 
-## 状态: In Progress
+## 状态: Implemented
 
-五条验收标准中四条已完成；未完成的是需求 2 —— `nightly-governance.yml` 尚未运行过，
-因而 `ci-job-liveness.json` 中没有它的记录。设计与验证信息由
+五条验收标准全部完成。需求 2 于 2026-08-21 闭合：`nightly-governance.yml` 在合并后
+以 `workflow_dispatch` run `32384754659`（`f1637d4a`）首次运行，**19/19 门禁通过、
+0 skipped**，`ci-job-liveness.json` 记下该真实结论。设计与验证信息由
 [DD-192](../design_doc/orchestrator/192-ci-governance-tiering.md) 与
 [QA 230](../qa/orchestrator/230-ci-governance-tiering.md) 承载。
 
@@ -168,9 +169,12 @@ FR-163/FR-165 落地后没有人跑 `--refresh --write`。本 FR 写于 2026-08-
       步骤变成条件式之后这条容忍就是 §4.4 shape 5 —— 谓词误判 `deferred` 会
       跳过全部 19 个、打印 19 行、退出 0，验证归零而日志无异常。现在两个方向
       逐门禁断言：`deferred` 下 `success` 与 `failure` 同样是违规
-- [ ] 每一个移出 PR 路径的步骤在新位置有执行证据，且纳入
+- [x] 每一个移出 PR 路径的步骤在新位置有执行证据，且纳入
       `ci-job-liveness.json` 的活性检查
-      —— **未完成，且这是唯一未完成项。** `nightly-governance.yml` 已建立并
+      —— **已完成（2026-08-21）**：nightly run `32384754659` 跑满 19 个门禁、0 skipped，
+      台账记录 `conclusion=success / headSha=f1637d4a`，`inScope` 已从临时的 `false`
+      翻为 `true`，governance 的 `knownFailing` 同一提交内删除 —— 那正是这两条注解的
+      reason 里各自写明的移除条件。**原文如下（保留以记录当时的阻塞）：** `nightly-governance.yml` 已建立并
       与 `ci.yml` 的 19 个步骤逐条比对（id 与命令双向相等），但它**从未运行
       过**，因此 `ci-job-liveness.json` 里没有它的记录。该台账里每一条都是真实
       运行；为一次没有发生的运行写下 headSha，正是这个台账存在的意义所要阻止

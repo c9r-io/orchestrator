@@ -228,8 +228,9 @@ behavior:
 These three are the whole set. `behavior.captures`, `generate_items`, `spawn_tasks`
 and `store_put` were retired with the coordination collapse and removed at the v0.7
 window; a step declaring any of them is refused by name. A step that needs a value
-from an earlier step reads it from the store itself — `orchestrator store get
-<store> <key> --project {project_id}` — rather than having the engine route it.
+from an earlier step reads it from the store itself —
+`orchestrator store get <store> <key> --project {project_id}` — rather than
+having the engine route it.
 
 ## Where Failures Go
 
