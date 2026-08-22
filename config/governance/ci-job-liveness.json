@@ -8,63 +8,63 @@
       "jobs": {
         "async-lock-governance": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "fmt": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "clippy": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "test": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "coordination-strangler": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "governance": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "ci-environment-parity": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "coverage-policy-fixtures": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "slack-certification-recorded": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "boundary-coverage": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "miri": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "cross-compile": {
           "conclusion": "success",
-          "runId": "32384727129",
-          "headSha": "f1637d4a52e9f1b92bbe00b19256361231b40dbf"
+          "runId": "32591019036",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         }
       }
     },
@@ -84,18 +84,14 @@
       "inScope": true,
       "jobs": {
         "cargo-audit": {
-          "conclusion": "failure",
-          "runId": "32581467403",
-          "headSha": "767441ad56717e018ecbb31a8b1d40b29af7292f",
-          "knownFailing": {
-            "reference": "https://rustsec.org/advisories/RUSTSEC-2026-0258",
-            "reason": "RUSTSEC-2026-0258, `h2` 0.4.15, 'unbounded empty DATA frames'; the fix is >=0.4.16 and h2 is transitive. Not caused by this branch, which touches no Cargo.toml or Cargo.lock: cargo audit fetches the advisory database live, so the failure is time-varying rather than branch-varying — the same commit passed on main's last four runs, before this advisory was published. Remove when the h2 bump lands; it needs its own change and must not be absorbed into FR-174."
-          }
+          "conclusion": "success",
+          "runId": "32591018986",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         },
         "cargo-deny": {
           "conclusion": "success",
-          "runId": "32581467403",
-          "headSha": "767441ad56717e018ecbb31a8b1d40b29af7292f"
+          "runId": "32591018986",
+          "headSha": "349de1abcae8df146664a4b907ac75f11bfa337d"
         }
       }
     },
