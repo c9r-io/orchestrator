@@ -139,9 +139,13 @@ Why solution B (gate by `lookup().is_some()`) instead of solution A
 - Minimizes blast radius — only custom-id wrapper steps (e.g.
   `benchmark_eval`, `evo_benchmark`) are affected
 - Audit confirmed only one production step uses `id != type` with a
-  qa_testing-family capability (`fixtures/workflow/self-evolution.yaml`'s
-  `evo_benchmark`), and it explicitly declares `scope: item`, so its
-  behavior is unchanged
+  qa_testing-family capability (`docs/workflow/self-evolution.yaml`'s
+  `evo_benchmark`: `id: evo_benchmark`, `type: qa_testing`), and it
+  explicitly declares `scope: item`, so its behavior is unchanged.
+  The audit result is unchanged; only the path is corrected — it named
+  `fixtures/workflow/self-evolution.yaml`, a fork of this file that has
+  since stopped applying altogether and whose fate is undecided pending
+  [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md)
 
 ### Fix 2 — Make `workflow_step_config_to_spec` preserve all explicit scopes
 

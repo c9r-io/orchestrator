@@ -216,12 +216,28 @@ rather than assumed: `reject_retired_authoring` already bailed on both with
 `[legacy_coordination_removed]` and `[legacy_json_path_removed]`. They have not
 applied for weeks. `fixture_corpus_tests.rs` globs `fixtures/manifests/bundles/*.yaml`
 and nothing else, so no test parses them and no ledger says whether they are meant
-to be valid — which is why a grep found this and no gate did. Converting them is a
-design decision about the self-evolution flow (the JSONPath mapping produces the
-items `select_best` ranks, and `captures` produces the score it ranks by), not a
-find and replace, so it is filed as
-`docs/ticket/fixtures-workflow_ungoverned-dead-blueprints_260818_071500.md` rather
-than done here under cover of a retirement.
+to be valid — which is why a grep found this and no gate did. It was filed as a
+ticket rather than done here under cover of a retirement.
+
+**Follow-up, 2026-08-18.** The ticket was triaged as a feature gap and is now
+[FR-176](../../feature_request/FR-176-manifest-corpus-scope.md). Two of the notes
+above did not survive reproduction, and the
+correction belongs next to the claim:
+
+- **The conversion is not an open design decision.** It was already made and
+  shipped in the production originals: `docs/workflow/self-evolution.yaml` drives
+  item generation and scoring through `mcp__orch__generate_items` and
+  `mcp__orch__record_metric` while keeping `metric_var: score`. The
+  `fixtures/workflow/` files are stale forks of those originals, created in
+  `71f8bf3b` only to redirect `ticket_dir`, and never re-synced.
+- **The directory is three files, not two.** `fixtures/workflow/full-qa.yaml` is
+  also refused (`unknown execution profile 'host'`). "Unaffected" was true of
+  retired constructs and false of validity.
+
+The durable finding stands and is what FR-176 governs: the corpus's scope is a
+listed directory rather than a derived one, and `fixtures/workflow/` is one of
+four ungoverned directories holding 34 tracked manifests, 15 of which the product
+refuses.
 
 ## A fingerprint block that could not tell a renamed test from a passing one
 

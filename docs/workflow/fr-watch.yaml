@@ -94,6 +94,7 @@ spec:
   steps:
     # Step 1: Triage the new FR
     - id: fr_triage
+      type: fr_triage
       scope: task
       required_capability: fr_triage
       template: fr_triage
@@ -101,14 +102,14 @@ spec:
       repeatable: false
     # Step 2: Draft implementation plan
     - id: fr_plan
+      type: fr_plan
       scope: task
       required_capability: fr_plan
       template: fr_plan
       enabled: true
       repeatable: false
   loop:
-    mode: fixed
-    max_cycles: 1
+    mode: once
 ---
 # ── Trigger ───────────────────────────────────────────────────────────
 # Native filesystem trigger: the daemon monitors docs/feature_request/

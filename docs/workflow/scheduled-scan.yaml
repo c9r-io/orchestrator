@@ -16,9 +16,10 @@ kind: Workspace
 metadata:
   name: default
 spec:
-  root_path: "."
-  qa_targets: []
-  ticket_dir: ""
+  work_dir: "."
+  qa_targets:
+    - docs/qa
+  ticket_dir: docs/ticket
 ---
 # ── Step Templates ────────────────────────────────────────────────────
 # Two-phase audit: agent-driven analysis first, then static tooling.
@@ -90,6 +91,7 @@ spec:
   steps:
     # Step 1: Agent-driven security analysis (high-value, reasoning-based)
     - id: agent_audit
+      type: agent_audit
       scope: task
       required_capability: audit
       template: agent_audit
@@ -97,14 +99,14 @@ spec:
       repeatable: false
     # Step 2: Static tooling checks (complement agent analysis)
     - id: static_check
+      type: static_check
       scope: task
       required_capability: static_check
       template: static_check
       enabled: true
       repeatable: false
   loop:
-    mode: fixed
-    max_cycles: 1
+    mode: once
 ---
 # ── Trigger ───────────────────────────────────────────────────────────
 # Cron trigger: creates a new task automatically on schedule.
@@ -118,9 +120,9 @@ spec:
   cron:
     schedule: "0 3 * * 1"
     timezone: "UTC"
+  # Weekly automated security audit.
   action:
     workflow: scheduled_scan
     workspace: default
-    goal: "Weekly automated security audit"
     start: true
-  concurrency_policy: Forbid
+  concurrencyPolicy: Forbid
