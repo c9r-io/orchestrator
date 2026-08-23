@@ -38,6 +38,13 @@ const BUNDLE_GLOB: &str = "fixtures/manifests/bundles/*.yaml";
 
 **修订版本**：`764b93de`（工单开具时的 HEAD）。
 
+**复验（2026-08-23，`778b587a`）**：该基线在 33 个提交之后依然成立。目录分布未变
+（`fixtures/manifests/bundles` 48 / `docs/workflow` 14 / `fixtures/benchmarks` 11 /
+`crates/integration-tests/tests/common/manifests` 6 / `fixtures/workflow` 3），
+治理外仍是 34 份；被拒数从 15 降到 **12**，差额正是下文「已完成的部分」修好的那三份
+用户可见模板，它们现在都被接受。剩下 12 份的构成不变：10 份合法依赖形态、
+2 份 `fixtures/workflow/` 的真腐烂。方法同上，隔离 daemon，跑完无泄漏。
+
 全仓 82 个受追踪 v2 清单文件，分布在 5 个目录。语料库 glob 覆盖 1 个目录 / 48 个文件。
 **34 个文件在治理之外，其中 15 个被产品拒绝。**
 
