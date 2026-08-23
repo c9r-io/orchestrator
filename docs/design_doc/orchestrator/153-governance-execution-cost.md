@@ -378,3 +378,26 @@ looks like.
   Worth stating plainly because a fail-safe that reports honestly and waits
   indefinitely is indistinguishable, in a green log, from one that is enforcing:
   the `NOT ENFORCED` line is printed by a step whose outcome is `success`.
+
+  Seventh sample, run `32591019036`: **2535 s, 6% headroom** — and eighth, taken
+  three runs earlier at `32384727129`: **1973 s, 27%**. **No gate was added or
+  removed between them.** The pair moved 21 points on an unchanged set, which is
+  three times the ±7% band this file reasoned the ceiling from, and it puts the
+  budget within 165 s of binding on a measurement that nobody's change caused.
+  The same two runs give critical paths of 1643 s and 1153 s.
+
+  This is the strongest evidence yet for the rule stated at the top — a duration
+  is a sample, not a function of the tree — and it retires the slope. Six samples
+  were read as a trend (14 → 13 → 12 → 11 → 9%), the sixth reversed it to 29%,
+  and this pair shows the quantity moving further on no change at all than any
+  FR ever moved it deliberately. **A series that swings 21 points between
+  adjacent readings cannot support a projection**, and the earlier note's "the
+  review condition is one FR away" should be read as what it was: arithmetic on
+  noise. Whoever next adds a gate should measure at that moment rather than
+  inherit a headroom figure from here — including this one.
+
+  What is *not* being claimed: that the ceiling is too tight. 2535 s is a real
+  reading and 6% is real headroom, but a single reading in a distribution this
+  wide is not grounds to raise a limit either. The honest position is that the
+  variance is now known to be much larger than recorded, and that a decision to
+  move the ceiling needs several readings rather than the next alarming one.
