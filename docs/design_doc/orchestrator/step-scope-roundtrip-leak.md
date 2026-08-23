@@ -144,8 +144,10 @@ Why solution B (gate by `lookup().is_some()`) instead of solution A
   explicitly declares `scope: item`, so its behavior is unchanged.
   The audit result is unchanged; only the path is corrected — it named
   `fixtures/workflow/self-evolution.yaml`, a fork of this file that has
-  since stopped applying altogether and whose fate is undecided pending
-  [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md)
+  since stopped applying altogether. Its fate is still undecided, but no longer
+  unwatched: [DD-193](193-manifest-corpus-scope.md) brought that directory into
+  the fixture corpus, where the fork is declared `rotted` under a ratchet that
+  only moves down.
 
 ### Fix 2 — Make `workflow_step_config_to_spec` preserve all explicit scopes
 
