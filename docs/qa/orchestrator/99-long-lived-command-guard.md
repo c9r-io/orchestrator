@@ -129,9 +129,10 @@ Verifies FR-045: `task watch --timeout`, stall auto-termination, and QA agent ti
 > point at `fixtures/workflow/self-bootstrap.yaml`, a copy forked in `71f8bf3b`
 > solely to redirect `ticket_dir` away from `docs/ticket`. The fork was never
 > re-synced and no longer applies at all — `manifest validate` refuses it with
-> `[parse_error] unknown field 'captures'`. Nothing parses that directory, which
-> is the gap [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md) exists
-> to close; until it lands, the fork's fate is undecided. Grep for the guidance
+> `[parse_error] unknown field 'captures'`. Nothing parsed that directory until
+> [DD-193](../../design_doc/orchestrator/193-manifest-corpus-scope.md) closed
+> that gap; the fork is now declared `rotted` in the fixture ledger, so its fate
+> stays undecided but can no longer be forgotten quietly. Grep for the guidance
 > rather than citing line numbers — the previous `lines 165-167` citation was
 > carried over from the production file when the path was switched, so it named
 > a location in a file the scenario had stopped reading.

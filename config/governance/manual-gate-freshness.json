@@ -12,8 +12,8 @@
     "scripts/qa/test-agent-driver-abstraction.sh": {
       "owner": "docs/qa/orchestrator/164-agent-driver-abstraction.md",
       "lastRun": {
-        "date": "2026-08-18",
-        "revision": "526c13c067dbb961e1ee82b4c211e47345a7e837",
+        "date": "2026-08-23",
+        "revision": "9ff4f0b485dec24049bbb47f19549544e06204f5",
         "exitStatus": 0,
         "worktreeDirty": false
       }

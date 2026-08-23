@@ -219,8 +219,10 @@ and nothing else, so no test parses them and no ledger says whether they are mea
 to be valid — which is why a grep found this and no gate did. It was filed as a
 ticket rather than done here under cover of a retirement.
 
-**Follow-up, 2026-08-18.** The ticket was triaged as a feature gap and is now
-[FR-176](../../feature_request/FR-176-manifest-corpus-scope.md). Two of the notes
+**Follow-up, 2026-08-18.** The ticket was triaged as a feature gap, filed as
+FR-176, and closed on 2026-08-23 — the corpus now derives its scope by content
+and covers 83 manifests, these two among them, each carrying a ledger
+declaration. See [DD-193](193-manifest-corpus-scope.md). Two of the notes
 above did not survive reproduction, and the
 correction belongs next to the claim:
 

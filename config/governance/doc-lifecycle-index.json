@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 495,
-    "active": 480,
+    "documents": 497,
+    "active": 482,
     "superseded": 15,
-    "withRelatedFr": 338
+    "withRelatedFr": 340
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -584,6 +584,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-174"
+      ]
+    },
+    "docs/design_doc/orchestrator/193-manifest-corpus-scope.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-176"
       ]
     },
     "docs/design_doc/orchestrator/20-workflow-primitives-wp02-wp03-wp04.md": {
@@ -2033,6 +2039,12 @@
         "FR-174"
       ]
     },
+    "docs/qa/orchestrator/231-manifest-corpus-scope.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-176"
+      ]
+    },
     "docs/qa/orchestrator/24-exec-interactive-simulation.md": {
       "lifecycle": "active"
     },
@@ -3195,6 +3207,10 @@
     "FR-174": [
       "docs/design_doc/orchestrator/192-ci-governance-tiering.md",
       "docs/qa/orchestrator/230-ci-governance-tiering.md"
+    ],
+    "FR-176": [
+      "docs/design_doc/orchestrator/193-manifest-corpus-scope.md",
+      "docs/qa/orchestrator/231-manifest-corpus-scope.md"
     ]
   },
   "supersedes": {

@@ -68,9 +68,10 @@ Expected:
 > point at `fixtures/workflow/self-evolution.yaml`, a copy forked in `71f8bf3b`
 > solely to redirect `ticket_dir` away from `docs/ticket`. The fork was never
 > re-synced and no longer applies at all — `manifest validate` refuses it with
-> `[parse_error] unknown variant 'generate_items'`. Nothing parses that directory,
-> which is the gap [FR-176](../../feature_request/FR-176-manifest-corpus-scope.md)
-> exists to close; until it lands, the fork's fate is undecided. The assertions
+> `[parse_error] unknown variant 'generate_items'`. Nothing parsed that directory
+> until [DD-193](../../design_doc/orchestrator/193-manifest-corpus-scope.md)
+> closed that gap; the fork is now declared `rotted` in the fixture ledger, so
+> its fate stays undecided but can no longer be forgotten quietly. The assertions
 > above are unchanged and all three hold against the production manifest.
 
 ---

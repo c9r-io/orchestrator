@@ -27,8 +27,31 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-/// Pathspec for the corpus, relative to the repository root.
-const BUNDLE_GLOB: &str = "fixtures/manifests/bundles/*.yaml";
+/// Every tracked YAML file is a candidate; what makes one a manifest is its
+/// content, not its path.
+const YAML_PATHSPECS: [&str; 2] = ["*.yaml", "*.yml"];
+
+/// A manifest is a tracked YAML whose `apiVersion` names this product.
+///
+/// FR-176. The scope used to be `fixtures/manifests/bundles/*.yaml`, which is a
+/// derived *listing* of one hard-coded *directory* — so whether a manifest was
+/// governed depended on where it sat, and nothing declared which directories
+/// should be. Measured at the time: 34 tracked manifests outside it across four
+/// directories, 12 of them refused by the product, including three published
+/// templates that had never applied even once.
+///
+/// **Both ends are named on purpose.** The obvious predicate — `orchestrator.dev/v2`
+/// — is wrong in a direction that is easy to miss: `crd-test-invalid.yaml` is
+/// `extensions.orchestrator.dev/v1`, is in the corpus today, and has a ledger
+/// entry, so matching only v2 would drop it and orphan its declaration. Relaxing
+/// the other way, to any `apiVersion:`, swallows the four Kubernetes manifests in
+/// `project-bootstrap`'s template. Widening a matcher to catch what it missed
+/// opens the opposite end unless the opposite end is stated (§4.4 shape 10).
+///
+/// Measured over the tree: 449 `orchestrator.dev/v2`, 2
+/// `extensions.orchestrator.dev/v1`, 2 `apps/v1`, 2 `v1`.
+const MANIFEST_API_MARKER: &str = "orchestrator.dev/";
+
 /// The declaration every rejected bundle has to appear in.
 const LEDGER_PATH: &str = "config/governance/fixture-bundle-validity.json";
 
@@ -199,8 +222,10 @@ fn repo_root() -> PathBuf {
 /// Every failure here is an assertion failure. A skip would leave the suite
 /// green having compared nothing.
 fn tracked_bundles(root: &Path) -> Vec<String> {
+    let mut args = vec!["ls-files", "-z"];
+    args.extend_from_slice(&YAML_PATHSPECS);
     let output = std::process::Command::new("git")
-        .args(["ls-files", "-z", BUNDLE_GLOB])
+        .args(&args)
         .current_dir(root)
         .output()
         .expect("git ls-files must run: the corpus scope is derived from the index");
@@ -210,15 +235,37 @@ fn tracked_bundles(root: &Path) -> Vec<String> {
         output.status,
         String::from_utf8_lossy(&output.stderr)
     );
-    let paths: Vec<String> = String::from_utf8(output.stdout)
+    let candidates: Vec<String> = String::from_utf8(output.stdout)
         .expect("git ls-files emits utf-8 paths")
         .split('\0')
         .filter(|path| !path.is_empty())
         .map(str::to_string)
         .collect();
     assert!(
+        !candidates.is_empty(),
+        "git ls-files matched no YAML at all: the index is unreadable and this check is now \
+         scanning nothing"
+    );
+
+    // Read to classify. A path predicate is what FR-176 removed, so this cannot
+    // fall back to one: a file is a manifest because of what it declares.
+    // Unreadable is a failure rather than a skip — a corpus that silently drops
+    // what it cannot open is the green-and-worthless state above.
+    let paths: Vec<String> = candidates
+        .into_iter()
+        .filter(|path| {
+            let content = std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+                panic!("cannot read tracked YAML {path}, so it cannot be classified: {error}")
+            });
+            content
+                .lines()
+                .any(|line| line.starts_with("apiVersion:") && line.contains(MANIFEST_API_MARKER))
+        })
+        .collect();
+    assert!(
         !paths.is_empty(),
-        "no bundles matched {BUNDLE_GLOB}: the corpus moved and this check is now scanning nothing"
+        "no tracked YAML declares an {MANIFEST_API_MARKER} apiVersion: the corpus moved and this \
+         check is now scanning nothing"
     );
     paths
 }
@@ -600,6 +647,84 @@ fn an_injected_retired_construct_is_rejected_by_its_own_diagnostic() {
             .iter()
             .any(|violation| violation.contains("undeclared rejection")
                 && violation.contains(target)),
+        "evaluator did not report {target} as an undeclared rejection; got: {violations:?}"
+    );
+}
+
+/// FR-176: the widening is only real if a manifest *outside* the old directory
+/// is actually judged.
+///
+/// The fixture above derives its target as "the first accepted, undeclared
+/// manifest", and `git ls-files` order puts `fixtures/manifests/bundles/` early
+/// — so it can keep passing on a bundle while every newly-scoped directory goes
+/// unexamined, which is exactly the state this FR exists to end. This one
+/// therefore excludes the old root by construction and fails if no manifest
+/// outside it is available to mutate.
+///
+/// It asserts the same two halves: the product refuses the injected construct by
+/// name, and the evaluator surfaces the file as undeclared rot rather than
+/// passing it through. Both are needed — a corpus that scanned the new
+/// directories but had no ledger opinion about them would satisfy the first
+/// alone.
+#[test]
+fn a_manifest_outside_the_old_bundle_root_is_judged_too() {
+    const OLD_ROOT: &str = "fixtures/manifests/bundles/";
+
+    let root = repo_root();
+    let paths = tracked_bundles(&root);
+    let observed = observe(&root, &paths);
+    let ledger = load_ledger(&root);
+    let declared: BTreeSet<&str> = ledger
+        .bundles
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect();
+
+    let outside: Vec<&String> = paths
+        .iter()
+        .filter(|path| !path.starts_with(OLD_ROOT))
+        .collect();
+    assert!(
+        !outside.is_empty(),
+        "the corpus scanned nothing outside {OLD_ROOT}, so the FR-176 widening is not in effect"
+    );
+
+    let target = outside
+        .iter()
+        .find(|path| {
+            observed.get(**path) == Some(&Outcome::Valid) && !declared.contains(path.as_str())
+        })
+        .expect(
+            "no accepted, undeclared manifest outside the old bundle root left to mutate — the \
+             premise this fixture rests on no longer holds, which is a failure and not a reason \
+             to skip",
+        );
+
+    let mut content = std::fs::read_to_string(root.join(target)).expect("read target");
+    content.push_str(RETIRED_CONSTRUCT_DOCUMENT);
+
+    let mut fixture = TestState::new().without_seeded_agents_and_workflows();
+    let state = fixture.build();
+    let report = validate_manifests(&state, &content, None).expect("validate mutated manifest");
+
+    assert!(
+        !report.valid,
+        "{target} still validates after a retired construct was appended to it"
+    );
+    assert!(
+        report.errors.iter().any(|error| error.contains("captures")),
+        "expected the refusal to name the retired field; got: {:?}",
+        report.errors
+    );
+
+    let mut mutated = observed.clone();
+    mutated.insert((*target).clone(), Outcome::Invalid(report.errors));
+    let violations = evaluate(&mutated, &ledger);
+    assert!(
+        violations
+            .iter()
+            .any(|violation| violation.contains("undeclared rejection")
+                && violation.contains(*target)),
         "evaluator did not report {target} as an undeclared rejection; got: {violations:?}"
     );
 }

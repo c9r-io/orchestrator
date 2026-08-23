@@ -20,8 +20,95 @@
     "dropped, because 0 is a claim — a bundle that rots tomorrow has to move it back up,",
     "and a ceiling of 0 would read the same while accepting the first regression silently."
   ],
-  "rotted_count": 0,
+  "rotted_count": 2,
   "bundles": [
+    {
+      "path": "docs/workflow/full-qa.yaml",
+      "status": "dependent",
+      "expect": [
+        "workflow 'full-qa' step 'qa_testing' references unknown execution profile 'host'"
+      ],
+      "reason": "The `host` and `sandbox_write` profiles it names are declared in docs/workflow/execution-profiles.yaml, and scripts/run-full-qa.sh applies that file first. Standalone it has no profiles to resolve against.",
+      "consumers": [
+        "scripts/run-full-qa.sh"
+      ]
+    },
+    {
+      "path": "docs/workflow/self-bootstrap.yaml",
+      "status": "dependent",
+      "expect": [
+        "workflow 'self-bootstrap' step 'implement' references unknown execution profile 'sandbox_write'"
+      ],
+      "reason": "Same pairing as full-qa.yaml: the profile comes from docs/workflow/execution-profiles.yaml. Also read at runtime by the self-test phase, which validates it against a daemon that already has them.",
+      "consumers": [
+        "scripts/run-full-qa.sh",
+        "crates/orchestrator-scheduler/src/scheduler/safety/self_test.rs"
+      ]
+    },
+    {
+      "path": "docs/workflow/self-evolution.yaml",
+      "status": "environment",
+      "expect": [
+        "env fromRef 'claude-opus' references unknown store",
+        "env fromRef 'minimax' references unknown store"
+      ],
+      "reason": "`claude-opus` comes from docs/workflow/claude-secret.yaml, but `minimax` comes from docs/workflow/minimax-secret.yaml, which is gitignored (.gitignore:13) — a developer's local secrets file. This manifest therefore can never be accepted from the index alone, and that is not a defect to fix: the alternative is committing a secrets file. Environment rather than dependent because the missing half is not in the repository at all. Either alternative may fire first; the merge order is not stable.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/agent-claude-opus.yaml",
+      "status": "dependent",
+      "expect": [
+        "agent 'bench-claude-opus'(project 'default') env fromRef 'claude-opus' references unknown store"
+      ],
+      "reason": "Its `claude-opus` store is declared in fixtures/benchmarks/secrets-claude-opus.yaml, applied first by the benchmark run. Verified present in the index rather than assumed — unlike docs/workflow/self-evolution.yaml, whose missing store is gitignored and which is therefore environment, not dependent.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/agent-codex-gpt54.yaml",
+      "status": "dependent",
+      "expect": [
+        "agent 'bench-codex-gpt54'(project 'default') env fromRef 'openai-gpt54mini' references unknown store"
+      ],
+      "reason": "Its `openai-gpt54mini` store is declared in fixtures/benchmarks/secrets-openai.yaml, applied first by the benchmark run. Verified present in the index rather than assumed — unlike docs/workflow/self-evolution.yaml, whose missing store is gitignored and which is therefore environment, not dependent.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/agent-gemini-pro.yaml",
+      "status": "dependent",
+      "expect": [
+        "agent 'bench-gemini-pro'(project 'default') env fromRef 'gemini-flash' references unknown store"
+      ],
+      "reason": "Its `gemini-flash` store is declared in fixtures/benchmarks/secrets-gemini.yaml, applied first by the benchmark run. Verified present in the index rather than assumed — unlike docs/workflow/self-evolution.yaml, whose missing store is gitignored and which is therefore environment, not dependent.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/agent-opencode-glm5.yaml",
+      "status": "dependent",
+      "expect": [
+        "agent 'bench-opencode-minimax'(project 'default') env fromRef 'minimax' references unknown store"
+      ],
+      "reason": "Its `minimax` store is declared in fixtures/benchmarks/secrets-glm5.yaml, applied first by the benchmark run. Verified present in the index rather than assumed — unlike docs/workflow/self-evolution.yaml, whose missing store is gitignored and which is therefore environment, not dependent.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/agent-opencode-opus.yaml",
+      "status": "dependent",
+      "expect": [
+        "agent 'bench-opencode-opus'(project 'default') env fromRef 'claude-opus' references unknown store"
+      ],
+      "reason": "Its `claude-opus` store is declared in fixtures/benchmarks/secrets-claude-opus.yaml, applied first by the benchmark run. Verified present in the index rather than assumed — unlike docs/workflow/self-evolution.yaml, whose missing store is gitignored and which is therefore environment, not dependent.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/benchmarks/workflow-benchmark-bootstrap.yaml",
+      "status": "dependent",
+      "expect": [
+        "no agent supports capability for step 'plan' used by workflow 'benchmark-bootstrap'"
+      ],
+      "reason": "The benchmark workflow is applied after the agent-*.yaml files that supply its capabilities; standalone there is no agent to satisfy `plan`.",
+      "consumers": []
+    },
     {
       "path": "fixtures/manifests/bundles/coordination-legacy-baseline.yaml",
       "status": "intentional",
@@ -163,6 +250,33 @@
       "consumers": [
         "docs/qa/orchestrator/01-cli-agent-orchestration.md"
       ]
+    },
+    {
+      "path": "fixtures/workflow/full-qa.yaml",
+      "status": "dependent",
+      "expect": [
+        "workflow 'full-qa' step 'qa_testing' references unknown execution profile 'host'"
+      ],
+      "reason": "A 71f8bf3b fork of docs/workflow/full-qa.yaml carrying ticket_dir: fixtures/ticket, and it inherits that original's dependency on execution-profiles.yaml. Unlike its two siblings in this directory it uses no retired construct, so it is dependent rather than rotted — the ticket that opened FR-176 called it unaffected, which was true of retired constructs and false of validity.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/workflow/self-bootstrap.yaml",
+      "status": "rotted",
+      "expect": [
+        "unknown field `captures`"
+      ],
+      "reason": "A 71f8bf3b fork of the maintained docs/workflow/self-bootstrap.yaml, never re-synced. The original moved to the mcp__orch__generate_items and record_metric coordination tools; this copy still declares behavior.captures, which FR-173 retired. Whether the forks should exist at all is FR-176's open decision — they were created solely to redirect ticket_dir away from docs/ticket.",
+      "consumers": []
+    },
+    {
+      "path": "fixtures/workflow/self-evolution.yaml",
+      "status": "rotted",
+      "expect": [
+        "unknown variant `generate_items`"
+      ],
+      "reason": "Same fork, same cause: the post-action variant FR-173 retired. The production original at docs/workflow/self-evolution.yaml drives item generation through the coordination tool instead and keeps metric_var: score, so the conversion the source ticket called an open design decision was already shipped.",
+      "consumers": []
     }
   ]
 }
