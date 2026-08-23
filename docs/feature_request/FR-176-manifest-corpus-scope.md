@@ -129,9 +129,29 @@ step 默认是 item scope，这正是 `scope: task` 那一行要挡住的。
 ## 需求
 
 1. **语料库范围改为导出。** 把 `BUNDLE_GLOB` 换成对 `git ls-files` 全量 YAML 的扫描，
-   过滤条件是**文件内容含 `apiVersion: orchestrator.dev/v2`**，而不是路径前缀。
-   明天新增的目录因此明天就在范围内。既有的空扫描失败断言
-   （`fixture_corpus_tests.rs:219-222`）必须保留并覆盖新范围。
+   按**文件内容**过滤而不是路径前缀。明天新增的目录因此明天就在范围内。既有的空扫描
+   失败断言（`fixture_corpus_tests.rs:219-222`）必须保留并覆盖新范围。
+
+   **谓词更正（治理 step 0，2026-08-23）。** 本条原写「内容含
+   `apiVersion: orchestrator.dev/v2`」，那是错的，且错在本文档没预见的方向：
+   `fixtures/manifests/bundles/crd-test-invalid.yaml` 用的是
+   `apiVersion: extensions.orchestrator.dev/v1`（CRD 扩展资源 `PromptLibrary`），
+   它**当前在**语料库内、且台账里有一条 `dependent` 声明。按原谓词它会**掉出**范围，
+   声明随之变成孤儿，门禁报 `declaration names a path outside the corpus`。
+
+   正确谓词是 `^apiVersion:` 且值含 **`orchestrator.dev/`**：
+
+   | 谓词 | bundles | 新纳入 | 合计 |
+   |---|---|---|---|
+   | 原文 `orchestrator.dev/v2` | 48（**掉 1**） | 34 | 82 |
+   | 更正后 `orchestrator.dev/` | **49** | 34 | **83** |
+
+   全树 `apiVersion` 只有四种取值：`orchestrator.dev/v2`（449）、
+   `extensions.orchestrator.dev/v1`（2）、`apps/v1`（2）、`v1`（2）。后两者是
+   `project-bootstrap` 模板里的 Kubernetes 清单，必须排除 —— 这也是不能退而用
+   「含 `apiVersion:`」的原因。**两端都要点名**：放宽到能接住 CRD 扩展，同时不接住
+   Kubernetes。这是 §4.4 shape 10 的形状 —— 修好 under-reach 会开出 over-reach，
+   只有同时写下两端才是对的。
 2. **34 个文件各自获得一条判定**：被接受，或在台账里有一条带 `expect` 诊断与
    `reason` 的声明。`Status` 枚举已够用，不需要新增变体 —— 若实施者认为需要，
    要写下为什么现有五个不够。
