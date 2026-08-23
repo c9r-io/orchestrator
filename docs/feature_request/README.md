@@ -398,5 +398,6 @@
 - FR-158 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/172-governance-expansion-boundary.md` 与 `docs/design_doc/orchestrator/173-ratchet-masking-and-surface-closure.md` 与 `docs/qa/orchestrator/210-governance-system-introspection.md` 承载。
 - FR-159 与 FR-150~158 的审计批次不同源：它来自 2026-08-02 对开发机运行态的一次直接观测（`ps` 实测 28 个存活 19 天的 fixture 会话进程与 6 个 `ppid=1` 仍在 LISTEN 的 orchestratord），而非文档或门禁面的静态审计。
 - FR-163 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/178-runtime-layout-single-source.md` 与 `docs/qa/orchestrator/215-connectivity-path-single-source.md` 与 `docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md` 承载。
+- FR-176 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/193-manifest-corpus-scope.md` 与 `docs/qa/orchestrator/231-manifest-corpus-scope.md` 承载。语料库范围改为按内容导出，覆盖 83 份；谓词两端都点名，因为只匹配 v2 会漏掉一份 CRD 扩展，放宽到任意 apiVersion 又会吞进 Kubernetes 清单。
 - FR-174 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/192-ci-governance-tiering.md` 与 `docs/qa/orchestrator/230-ci-governance-tiering.md` 承载。两条路径均有生产证据：`full` 与 `deferred` 各自实测，nightly 首跑 19/19 后 cron 已自行触发两次。
 - FR-173 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/191-legacy-retirement-window-v07.md` 与 `docs/qa/orchestrator/229-legacy-retirement-window-v07.md` 承载。
