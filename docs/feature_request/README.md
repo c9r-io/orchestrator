@@ -180,7 +180,7 @@
 | FR-173 | v0.7 兼容层退休窗口 —— 六个 legacy 码、两个别名，以及「可解析拒绝」自身何时退休 | P2 | Closed | git history |
 | FR-174 | PR 反馈延迟由治理决定 —— 关键路径 22 分钟，其中最长的产品 job 5 分钟 | P2 | Closed | git history |
 | FR-175 | 脱敏边界画在持久化时，而不是出网时 —— 两条已授权的读命令输出明文密钥 | P2 | Proposed | git history |
-| FR-176 | fixture 语料库的范围是列举出来的，不是导出来的 —— 四个目录 34 份清单没有任何测试解析过 | P2 | Proposed | git history |
+| FR-176 | fixture 语料库的范围是列举出来的，不是导出来的 —— 四个目录 34 份清单没有任何测试解析过 | P2 | Closed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
 ## 说明
