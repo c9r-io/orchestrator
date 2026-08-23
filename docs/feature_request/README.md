@@ -178,7 +178,7 @@
 | FR-171 | 四种资源可以写入但读不出来 | P1 | Closed | git history |
 | FR-172 | 治理记录只增不减 —— 闭环尾注 17 倍膨胀与 superseded 文档的无限留存 | P1 | Closed | git history |
 | FR-173 | v0.7 兼容层退休窗口 —— 六个 legacy 码、两个别名，以及「可解析拒绝」自身何时退休 | P2 | Closed | git history |
-| FR-174 | PR 反馈延迟由治理决定 —— 关键路径 22 分钟，其中最长的产品 job 5 分钟 | P2 | Implemented | git history |
+| FR-174 | PR 反馈延迟由治理决定 —— 关键路径 22 分钟，其中最长的产品 job 5 分钟 | P2 | Closed | git history |
 | FR-175 | 脱敏边界画在持久化时，而不是出网时 —— 两条已授权的读命令输出明文密钥 | P2 | Proposed | git history |
 <!-- END GENERATED FR REGISTRY -->
 
@@ -397,4 +397,5 @@
 - FR-158 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/172-governance-expansion-boundary.md` 与 `docs/design_doc/orchestrator/173-ratchet-masking-and-surface-closure.md` 与 `docs/qa/orchestrator/210-governance-system-introspection.md` 承载。
 - FR-159 与 FR-150~158 的审计批次不同源：它来自 2026-08-02 对开发机运行态的一次直接观测（`ps` 实测 28 个存活 19 天的 fixture 会话进程与 6 个 `ppid=1` 仍在 LISTEN 的 orchestratord），而非文档或门禁面的静态审计。
 - FR-163 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/178-runtime-layout-single-source.md` 与 `docs/qa/orchestrator/215-connectivity-path-single-source.md` 与 `docs/qa/orchestrator/216-daemon-readiness-and-connection-semantics.md` 承载。
+- FR-174 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/192-ci-governance-tiering.md` 与 `docs/qa/orchestrator/230-ci-governance-tiering.md` 承载。两条路径均有生产证据：`full` 与 `deferred` 各自实测，nightly 首跑 19/19 后 cron 已自行触发两次。
 - FR-173 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/191-legacy-retirement-window-v07.md` 与 `docs/qa/orchestrator/229-legacy-retirement-window-v07.md` 承载。
