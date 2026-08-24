@@ -1102,6 +1102,12 @@
       "tieredBy": "scripts/qa/ci-tier.sh"
     },
     {
+      "path": "scripts/qa/test-secret-egress-redaction.sh",
+      "enforcement": "manual-runbook",
+      "reason": "starts an orchestratord instance and applies a SecretStore carrying a real-shaped value, so the run holds a cleartext secret on disk for its duration",
+      "owner": "docs/qa/orchestrator/232-secret-egress-redaction.md"
+    },
+    {
       "path": "scripts/qa/test-self-bootstrap-cycle2-regression.sh",
       "enforcement": "manual-runbook",
       "reason": "builds a release binary and drives the self-bootstrap cycle against the shared data/agent_orchestrator.db working database",

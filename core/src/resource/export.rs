@@ -1,5 +1,6 @@
 use crate::cli_types::{OrchestratorResource, ResourceKind, ResourceSpec};
 use crate::config::OrchestratorConfig;
+use crate::config_load::RedactedConfig;
 
 use super::{
     API_VERSION, AgentResource, EnvStoreResource, ExecutionProfileResource, ProjectResource,
@@ -18,7 +19,14 @@ fn project_metadata(
 }
 
 /// Exports all builtin resources from config as typed manifest resources.
-pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredResource> {
+///
+/// Takes a [`RedactedConfig`] rather than an `OrchestratorConfig`, and that is the whole
+/// mechanism: the in-memory config holds decrypted SecretStore values, an export is a
+/// place they leave the daemon, and before FR-175 whether they left in cleartext depended
+/// on whether the caller remembered to redact first. Two callers did and two did not. The
+/// signature removes the choice — `RedactedConfig` has one constructor and it redacts.
+pub fn export_manifest_resources(redacted: &RedactedConfig) -> Vec<RegisteredResource> {
+    let config = redacted.as_config();
     let mut resources = Vec::new();
     if let Some(runtime_policy) = RuntimePolicyResource::get_from(config, "runtime") {
         resources.push(RegisteredResource::RuntimePolicy(runtime_policy));
@@ -148,7 +156,8 @@ pub fn export_manifest_resources(config: &OrchestratorConfig) -> Vec<RegisteredR
 }
 
 /// Export CRD definitions and custom resource instances as YAML-serializable values.
-pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Value> {
+pub fn export_crd_documents(redacted: &RedactedConfig) -> Vec<serde_yaml::Value> {
+    let config = redacted.as_config();
     let mut docs = Vec::new();
 
     // Export CRD definitions first (sorted by kind for deterministic output)
@@ -213,8 +222,8 @@ pub fn export_crd_documents(config: &OrchestratorConfig) -> Vec<serde_yaml::Valu
 }
 
 /// Exports all builtin resources from config as plain manifest documents.
-pub fn export_manifest_documents(config: &OrchestratorConfig) -> Vec<OrchestratorResource> {
-    export_manifest_resources(config)
+pub fn export_manifest_documents(redacted: &RedactedConfig) -> Vec<OrchestratorResource> {
+    export_manifest_resources(redacted)
         .into_iter()
         .map(|resource| match resource {
             RegisteredResource::Workspace(item) => OrchestratorResource {
@@ -345,7 +354,7 @@ mod tests {
                 },
             );
 
-        let resources = export_manifest_resources(&config);
+        let resources = export_manifest_resources(&RedactedConfig::new(&config));
         let kinds: Vec<ResourceKind> = resources.iter().map(|r| r.kind()).collect();
         assert!(kinds.contains(&ResourceKind::RuntimePolicy));
         assert!(kinds.contains(&ResourceKind::Workspace));
@@ -363,7 +372,7 @@ mod tests {
             .expect("dispatch doc workspace");
         ws.apply(&mut config).expect("apply");
 
-        let docs = export_manifest_documents(&config);
+        let docs = export_manifest_documents(&RedactedConfig::new(&config));
         assert!(!docs.is_empty());
         for doc in &docs {
             assert_eq!(doc.api_version, "orchestrator.dev/v2");
@@ -378,7 +387,7 @@ mod tests {
         use crate::resource::parse::parse_resources_from_yaml;
 
         let config = make_config();
-        let resources = export_manifest_resources(&config);
+        let resources = export_manifest_resources(&RedactedConfig::new(&config));
         let mut yaml_parts: Vec<String> = Vec::new();
         for r in &resources {
             let yaml = r.to_yaml().expect("serialize resource yaml");
@@ -401,7 +410,7 @@ mod tests {
     #[test]
     fn export_crd_documents_empty_config() {
         let config = make_config();
-        let docs = export_crd_documents(&config);
+        let docs = export_crd_documents(&RedactedConfig::new(&config));
         assert!(docs.is_empty(), "no CRDs or CRs should produce empty docs");
     }
 
@@ -428,7 +437,7 @@ mod tests {
             },
         );
 
-        let docs = export_crd_documents(&config);
+        let docs = export_crd_documents(&RedactedConfig::new(&config));
         assert!(docs.is_empty(), "builtin CRDs should be skipped in export");
     }
 
@@ -455,7 +464,7 @@ mod tests {
             },
         );
 
-        let docs = export_crd_documents(&config);
+        let docs = export_crd_documents(&RedactedConfig::new(&config));
         assert_eq!(docs.len(), 1);
         let doc = &docs[0];
         assert_eq!(
@@ -485,7 +494,7 @@ mod tests {
             },
         );
 
-        let docs = export_crd_documents(&config);
+        let docs = export_crd_documents(&RedactedConfig::new(&config));
         assert_eq!(docs.len(), 1);
         let doc = &docs[0];
         assert_eq!(
@@ -530,7 +539,7 @@ mod tests {
                 },
             );
 
-        let docs = export_manifest_documents(&config);
+        let docs = export_manifest_documents(&RedactedConfig::new(&config));
         let kinds: Vec<ResourceKind> = docs.iter().map(|d| d.kind).collect();
         assert!(kinds.contains(&ResourceKind::Workspace));
         assert!(kinds.contains(&ResourceKind::Agent));
@@ -561,7 +570,7 @@ mod tests {
             },
         );
 
-        let resources = export_manifest_resources(&config);
+        let resources = export_manifest_resources(&RedactedConfig::new(&config));
         let project_names: Vec<&str> = resources
             .iter()
             .filter(|r| r.kind() == ResourceKind::Project)
@@ -598,7 +607,7 @@ mod tests {
         let rr = dispatch_resource(resource).expect("dispatch labeled workspace");
         rr.apply(&mut config).expect("apply");
 
-        let exported = export_manifest_resources(&config);
+        let exported = export_manifest_resources(&RedactedConfig::new(&config));
         let ws = exported.iter().find(|r| r.name() == "labeled-ws");
         assert!(ws.is_some());
         // Verify via get_from

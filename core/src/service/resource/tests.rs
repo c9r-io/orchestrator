@@ -1208,3 +1208,296 @@ mod resource_observability_matrix {
         );
     }
 }
+
+// ── FR-175: the egress boundary ──────────────────────────────────────────────
+//
+// The in-memory config holds decrypted SecretStore values. Two authorized read
+// paths serialized it and emitted them in cleartext, one of them reachable by
+// the read-only role, while the user guide documented both as redacted.
+//
+// Every case below asserts the **pair**: the secret is absent *and* the
+// placeholder is present. Absence alone is satisfied by a regression that drops
+// SecretStore from the output entirely, which is a different bug and not a fix.
+// The premise test comes first, because a value that was never in the config is
+// also absent from every rendering of it.
+
+const EGRESS_SECRET: &str = "sk-fr175-egress-cleartext-sentinel";
+const EGRESS_STORE: &str = "fr175-api-keys";
+const EGRESS_KEY: &str = "OPENAI_API_KEY";
+
+fn secret_store_manifest(value: &str) -> String {
+    format!(
+        "apiVersion: orchestrator.dev/v2\nkind: SecretStore\nmetadata:\n  name: {EGRESS_STORE}\nspec:\n  data:\n    {EGRESS_KEY}: \"{value}\"\n"
+    )
+}
+
+fn state_with_secret(fixture: &mut TestState) -> std::sync::Arc<crate::state::InnerState> {
+    let state = fixture.build();
+    let response = apply_manifests(
+        &state,
+        &secret_store_manifest(EGRESS_SECRET),
+        false,
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        false,
+    )
+    .expect("seed secret store");
+    assert!(
+        response.errors.is_empty(),
+        "the fixture's SecretStore must apply cleanly: {:?}",
+        response.errors
+    );
+    state
+}
+
+fn assert_redacted(surface: &str, rendered: &str) {
+    assert!(
+        !rendered.contains(EGRESS_SECRET),
+        "{surface} emitted the SecretStore value in cleartext"
+    );
+    assert!(
+        rendered.contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER),
+        "{surface} must carry the placeholder, not merely omit the value — an output \
+         that dropped the SecretStore entirely would satisfy absence alone"
+    );
+}
+
+/// The before-run. Without it every assertion below is also satisfied by a
+/// daemon that never held the secret, and the suite would go on passing if
+/// `apply` silently stopped storing SecretStore values at all.
+#[test]
+fn the_daemon_holds_the_secret_in_cleartext_before_any_egress() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+
+    let active = read_active_config(&state).expect("read active config");
+    let stored = active
+        .config
+        .projects
+        .get(crate::config::DEFAULT_PROJECT_ID)
+        .and_then(|project| project.secret_stores.get(EGRESS_STORE))
+        .and_then(|store| store.data.get(EGRESS_KEY))
+        .expect("the applied secret must be readable in memory");
+    assert_eq!(
+        stored, EGRESS_SECRET,
+        "the load path decrypts, so the live config carries the value; the egress paths \
+         are what must not"
+    );
+
+    // And it reaches the second store too, which is the one `debug --component
+    // config` renders and `manifest export` does not.
+    let mirrored = active
+        .config
+        .resource_store
+        .list_by_kind("SecretStore")
+        .into_iter()
+        .find(|cr| cr.metadata.name == EGRESS_STORE)
+        .expect("writeback must mirror the store into resource_store");
+    assert_eq!(
+        mirrored
+            .spec
+            .get("data")
+            .and_then(|data| data.get(EGRESS_KEY))
+            .and_then(|value| value.as_str()),
+        Some(EGRESS_SECRET),
+    );
+}
+
+/// AC1 and AC2. Asserted per format rather than once: the two share
+/// `builtin_docs` today, and an assertion that leans on that is asserting an
+/// implementation detail instead of the contract.
+#[test]
+fn manifest_export_redacts_secret_store_values_in_yaml() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+    let exported = export_manifests(&state, "yaml").expect("export yaml");
+    assert_redacted("manifest export -o yaml", &exported);
+}
+
+#[test]
+fn manifest_export_redacts_secret_store_values_in_json() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+    let exported = export_manifests(&state, "json").expect("export json");
+    assert_redacted("manifest export -o json", &exported);
+}
+
+/// AC3. This path serializes the whole config, so it renders `resource_store`
+/// as well as the typed map — the case the export tests above cannot reach.
+#[test]
+fn debug_component_config_redacts_secret_store_values() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+    let rendered =
+        crate::service::system::debug_info(&state, Some("config")).expect("debug config");
+    assert_redacted("debug --component config", &rendered);
+
+    // The mirror specifically: redacting only the typed map would leave this
+    // occurrence, and a whole-document `contains` would not say which half broke.
+    let parsed: serde_yaml::Value = serde_yaml::from_str(
+        rendered
+            .strip_prefix("Active Configuration:\n")
+            .expect("debug config keeps its header"),
+    )
+    .expect("debug config output must still be parseable yaml");
+    let mirrored = parsed
+        .get("resource_store")
+        .and_then(|store| store.get("resources"))
+        .and_then(|resources| resources.as_mapping())
+        .expect("the rendered config must still carry resource_store")
+        .values()
+        .find(|cr| cr.get("kind").and_then(|k| k.as_str()) == Some("SecretStore"))
+        .expect("the mirrored SecretStore must survive redaction, not be dropped");
+    assert_eq!(
+        mirrored
+            .get("spec")
+            .and_then(|spec| spec.get("data"))
+            .and_then(|data| data.get(EGRESS_KEY))
+            .and_then(|value| value.as_str()),
+        Some(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER),
+    );
+}
+
+/// AC4. Both halves again, and the placeholder half is the load-bearing one:
+/// these components must not start emitting config at all, so a *redacted*
+/// config appearing here is as much a regression as a cleartext one.
+#[test]
+fn debug_state_and_dag_do_not_emit_config() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+    for component in ["state", "dag"] {
+        let rendered = crate::service::system::debug_info(&state, Some(component))
+            .unwrap_or_else(|err| panic!("debug {component}: {err:?}"));
+        assert!(
+            !rendered.contains(EGRESS_SECRET),
+            "debug --component {component} emitted the secret"
+        );
+        assert!(
+            !rendered.contains(crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER),
+            "debug --component {component} began emitting config; it carried the \
+             placeholder, which means it is now rendering SecretStore specs"
+        );
+        assert!(
+            !rendered.contains(EGRESS_STORE),
+            "debug --component {component} began naming SecretStore resources"
+        );
+    }
+}
+
+/// AC5. FR-171 redacted these; this pins them against a regression introduced
+/// by the present change rather than re-testing FR-171's work.
+#[test]
+fn get_secret_store_paths_stay_redacted() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+
+    let single = get_resource(
+        &state,
+        &format!("secretstore/{EGRESS_STORE}"),
+        None,
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("get secretstore/<name>");
+    assert_redacted("get secretstore/<name>", &single);
+
+    let listed = get_resource(
+        &state,
+        "secretstores",
+        None,
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("get secretstores");
+    assert!(
+        listed.contains(EGRESS_STORE),
+        "the list surface must still name the store: {listed}"
+    );
+    assert!(
+        !listed.contains(EGRESS_SECRET),
+        "the list surface emitted the secret"
+    );
+
+    // `describe` is asserted separately from `get` even though the two are
+    // served by the same function today. That sharing is what makes them agree
+    // byte for byte, and it is exactly the kind of implementation detail an
+    // assertion must not lean on — `describe` is a surface a user reaches by
+    // name, so it is checked by name.
+    let described = describe_resource(
+        &state,
+        &format!("secretstore/{EGRESS_STORE}"),
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("describe secretstore/<name>");
+    assert_redacted("describe secretstore/<name>", &described);
+
+    // And the CRD fallback cannot route around either of them. `get` sends an
+    // unrecognised kind to `custom_resources`, which holds raw specs — that
+    // branch is closed for builtin kinds by an `is_builtin_kind` guard, and a
+    // regression in the guard would serve this store's spec unredacted from a
+    // map the redactor deliberately does not walk.
+    let via_alias = get_resource(
+        &state,
+        &format!("secret-store/{EGRESS_STORE}"),
+        None,
+        "yaml",
+        Some(crate::config::DEFAULT_PROJECT_ID),
+    )
+    .expect("get secret-store/<name> via the hyphenated alias");
+    assert_redacted("get secret-store/<name>", &via_alias);
+}
+
+/// AC6. Redaction and refusal are two halves of one contract: without the
+/// refusal, a redacted export applied back would overwrite real secrets with the
+/// literal placeholder. Three conditions, because an exit code cannot say which
+/// branch refused — the diagnostic must name the key, and the stored value must
+/// survive the attempt.
+#[test]
+fn applying_a_redacted_export_is_refused_by_name_and_changes_nothing() {
+    let mut fixture = TestState::new();
+    let state = state_with_secret(&mut fixture);
+
+    let exported = export_manifests(&state, "yaml").expect("export yaml");
+    let response = apply_manifests(
+        &state,
+        &exported,
+        false,
+        Some(crate::config::DEFAULT_PROJECT_ID),
+        false,
+    )
+    .expect("apply returns its refusal in the response rather than as an error");
+
+    let refusal = response
+        .errors
+        .iter()
+        .find(|error| error.contains("[secret_value_placeholder_rejected]"))
+        .unwrap_or_else(|| {
+            panic!(
+                "re-applying a redacted export must be refused: {:?}",
+                response.errors
+            )
+        });
+    assert!(
+        refusal.contains(EGRESS_KEY),
+        "the refusal must name the offending key so the operator knows what to supply: \
+         {refusal}"
+    );
+    assert!(
+        response.config_version.is_none(),
+        "a refused apply must not persist a config version"
+    );
+
+    let active = read_active_config(&state).expect("read active config after refusal");
+    assert_eq!(
+        active
+            .config
+            .projects
+            .get(crate::config::DEFAULT_PROJECT_ID)
+            .and_then(|project| project.secret_stores.get(EGRESS_STORE))
+            .and_then(|store| store.data.get(EGRESS_KEY))
+            .map(String::as_str),
+        Some(EGRESS_SECRET),
+        "the refusal must leave the stored value intact rather than overwrite it with \
+         the placeholder"
+    );
+}

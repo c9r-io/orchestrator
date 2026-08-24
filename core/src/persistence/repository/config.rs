@@ -1,10 +1,11 @@
 use crate::config::OrchestratorConfig;
-use crate::config_load::{ConfigSelfHealChange, ResourceRemoval, now_ts};
+use crate::config_load::{
+    ConfigSelfHealChange, ResourceRemoval, now_ts, serialize_config_snapshot,
+};
 use crate::dto::ConfigOverview;
-use crate::resource::export_manifest_resources;
 use crate::secret_store_crypto::{
     SecretEncryption, decrypt_resource_spec_json, encrypt_resource_spec_json, ensure_secret_key,
-    load_existing_secret_key, redact_secret_data_map, resolve_data_dir_from_db_path,
+    load_existing_secret_key, resolve_data_dir_from_db_path,
 };
 use anyhow::{Context, Result};
 use orchestrator_persistence::config_store::{ConfigTx, HealLogRow, ResourceRow};
@@ -86,39 +87,6 @@ impl SqliteConfigRepository {
     fn store(&self) -> orchestrator_persistence::config_store::ConfigStore {
         orchestrator_persistence::config_store::ConfigStore::new(&self.db_path)
     }
-}
-
-fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
-    let sanitized = sanitized_config_snapshot(config);
-    let yaml = export_manifest_resources(&sanitized)
-        .iter()
-        .map(crate::resource::Resource::to_yaml)
-        .collect::<Result<Vec<_>>>()?
-        .join("---\n");
-    let json_raw = serde_json::to_string(&sanitized)?;
-    Ok((yaml, json_raw))
-}
-
-fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig {
-    let mut sanitized = config.clone();
-    for project in sanitized.projects.values_mut() {
-        for store in project.secret_stores.values_mut() {
-            for value in store.data.values_mut() {
-                *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
-            }
-        }
-    }
-    for resource in sanitized.resource_store.resources_mut().values_mut() {
-        if resource.kind != "SecretStore" {
-            continue;
-        }
-        if let Some(spec) = resource.spec.as_object_mut()
-            && let Some(data) = spec.get_mut("data").and_then(|value| value.as_object_mut())
-        {
-            redact_secret_data_map(data);
-        }
-    }
-    sanitized
 }
 
 // Takes the database path rather than the caller's connection. The caller is

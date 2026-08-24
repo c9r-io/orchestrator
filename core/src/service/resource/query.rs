@@ -455,9 +455,9 @@ fn describe_builtin_resource(
         // The in-memory config holds decrypted SecretStore values — the load
         // path runs `decrypt_resource_spec_json` over every resource — so this
         // is the point where they must not escape. Reads render the same
-        // placeholder `sanitized_config_snapshot` writes into a snapshot; the
-        // values are reachable only through env injection, never through a
-        // read command.
+        // placeholder `RedactedConfig` writes into a snapshot and into an
+        // export; the values are reachable only through env injection, never
+        // through a read command.
         "secretstore" | "secret-store" | "secret_store" => {
             SecretStoreResource::get_from_project(config, name, project).map(|mut store| {
                 for value in store.spec.data.values_mut() {

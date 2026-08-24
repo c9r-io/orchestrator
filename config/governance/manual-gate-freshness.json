@@ -189,6 +189,10 @@
         "worktreeDirty": false
       }
     },
+    "scripts/qa/test-secret-egress-redaction.sh": {
+      "owner": "docs/qa/orchestrator/232-secret-egress-redaction.md",
+      "lastRun": null
+    },
     "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md",
       "lastRun": null,

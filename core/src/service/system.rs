@@ -30,12 +30,23 @@ pub fn debug_info(state: &InnerState, component: Option<&str>) -> Result<String>
         "state" => Ok(
             "Debug Information\n=================\n\nAvailable: state, config, dag\n".to_string(),
         ),
+        // The one config-shaped egress a type cannot close. `export_manifests` reaches its
+        // output through helpers that accept only a `RedactedConfig`; this reaches it
+        // through `serde_yaml`, which will serialize whatever it is handed. So the
+        // redaction here is a call-site rule, and what holds it is
+        // `service::resource::tests::debug_component_config_redacts_secret_store_values`
+        // plus the sentinel sweep in scripts/qa/test-secret-egress-redaction.sh — not the
+        // compiler. Recorded as the known residue in DD-194 rather than left implied.
+        //
+        // Redacting the whole config, not just the typed map: this serializes
+        // `resource_store` too, where `crd::writeback` mirrors every SecretStore spec.
         "config" => {
             let config = read_active_config(state)
                 .map_err(|err| classify_system_error("system.debug_info", err))?;
+            let redacted = crate::config_load::RedactedConfig::new(&config.config);
             Ok(format!(
                 "Active Configuration:\n{}",
-                serde_yaml::to_string(&config.config).unwrap_or_default()
+                serde_yaml::to_string(&redacted).unwrap_or_default()
             ))
         }
         "dag" => debug_dag_info(state),
