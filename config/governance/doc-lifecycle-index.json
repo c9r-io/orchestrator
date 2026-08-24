@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "scope": "every Markdown file under docs/design_doc, docs/qa and docs/security, excluding files named README.md and any path containing a component that begins with an underscore",
   "counts": {
-    "documents": 497,
-    "active": 482,
+    "documents": 499,
+    "active": 484,
     "superseded": 15,
-    "withRelatedFr": 340
+    "withRelatedFr": 342
   },
   "documents": {
     "docs/design_doc/orchestrator/01-cli-agent-orchestration.md": {
@@ -590,6 +590,12 @@
       "lifecycle": "active",
       "relatedFr": [
         "FR-176"
+      ]
+    },
+    "docs/design_doc/orchestrator/194-secret-egress-redaction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-175"
       ]
     },
     "docs/design_doc/orchestrator/20-workflow-primitives-wp02-wp03-wp04.md": {
@@ -2045,6 +2051,12 @@
         "FR-176"
       ]
     },
+    "docs/qa/orchestrator/232-secret-egress-redaction.md": {
+      "lifecycle": "active",
+      "relatedFr": [
+        "FR-175"
+      ]
+    },
     "docs/qa/orchestrator/24-exec-interactive-simulation.md": {
       "lifecycle": "active"
     },
@@ -3207,6 +3219,10 @@
     "FR-174": [
       "docs/design_doc/orchestrator/192-ci-governance-tiering.md",
       "docs/qa/orchestrator/230-ci-governance-tiering.md"
+    ],
+    "FR-175": [
+      "docs/design_doc/orchestrator/194-secret-egress-redaction.md",
+      "docs/qa/orchestrator/232-secret-egress-redaction.md"
     ],
     "FR-176": [
       "docs/design_doc/orchestrator/193-manifest-corpus-scope.md",

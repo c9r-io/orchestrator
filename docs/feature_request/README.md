@@ -401,3 +401,4 @@
 - FR-176 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/193-manifest-corpus-scope.md` 与 `docs/qa/orchestrator/231-manifest-corpus-scope.md` 承载。语料库范围改为按内容导出，覆盖 83 份；谓词两端都点名，因为只匹配 v2 会漏掉一份 CRD 扩展，放宽到任意 apiVersion 又会吞进 Kubernetes 清单。
 - FR-174 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/192-ci-governance-tiering.md` 与 `docs/qa/orchestrator/230-ci-governance-tiering.md` 承载。两条路径均有生产证据：`full` 与 `deferred` 各自实测，nightly 首跑 19/19 后 cron 已自行触发两次。
 - FR-173 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/191-legacy-retirement-window-v07.md` 与 `docs/qa/orchestrator/229-legacy-retirement-window-v07.md` 承载。
+- FR-175 已闭环删除；其设计与验证信息现由 `docs/design_doc/orchestrator/194-secret-egress-redaction.md` 与 `docs/qa/orchestrator/232-secret-egress-redaction.md` 承载。脱敏改为类型而非约定：导出助手只接受 `RedactedConfig`，其唯一构造函数即脱敏。

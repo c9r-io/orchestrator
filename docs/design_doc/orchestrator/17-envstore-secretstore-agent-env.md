@@ -130,6 +130,8 @@ A flat struct with optional fields (`name`, `value`, `fromRef`, `refValue`) is u
 
 - **Risk**: Secrets stored in plaintext in SQLite.
   - **Mitigation**: SecretStore values are encrypted at rest (AES-256-GCM-SIV) and redacted in logs via `collect_sensitive_values()` + `redact_text()`. Key rotation, revocation, and audit are governed by FR-012 (`docs/design_doc/orchestrator/27-secretstore-key-lifecycle.md`).
+- **Risk**: Secrets leaving through a read command rather than through a log.
+  - **Mitigation (added by FR-175, not by this design)**: the redaction scope stated below and throughout this document is **logs and task output**, and that scope was taken literally for two years — `manifest export` and `debug --component config` serialized the live config and emitted cleartext, the first of them reachable by the read-only role. There is now a third tier, *egress*: every render of a whole config goes through `RedactedConfig`, whose only constructor redacts and which the manifest-export helpers require by signature. See [DD-194](194-secret-egress-redaction.md).
 - **Risk**: Store deletion while agents still reference it.
   - **Mitigation**: Build-time validation catches dangling references. Runtime resolution returns an error with a clear message.
 
@@ -138,6 +140,7 @@ A flat struct with optional fields (`name`, `value`, `fromRef`, `refValue`) is u
 ## Observability
 
 - **Logs**: SecretStore values are collected by `collect_sensitive_values()` and added to runner `redaction_patterns`, ensuring `[REDACTED]` replacement in task output logs.
+- **Egress** (FR-175): every command that renders a whole config — `manifest export` in either format, `debug --component config`, and the GUI's `manifest_export` — renders `[ENCRYPTED]` in place of each value. This is a separate mechanism from `redaction_patterns` above, and it was missing until FR-175: the "in logs" scoping in this document was the whole of the contract, and the read paths were outside it. See [DD-194](194-secret-egress-redaction.md).
 - **Metrics**: No new metrics. Existing task execution metrics cover env-injected runs.
 - **Tracing**: No new spans. Env resolution happens synchronously before spawn.
 

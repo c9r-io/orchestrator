@@ -91,7 +91,7 @@ CRD 支持两级验证：
 
 ## EnvStore 与 SecretStore
 
-EnvStore 和 SecretStore 是可复用的变量集，代理可以引用。它们共享相同的 `data` 结构；`SecretStore` 在语义上专用于敏感值。
+EnvStore 和 SecretStore 是可复用的变量集，代理可以引用。它们共享相同的 `data` 结构，但 `kind` 不是命名约定：SecretStore 的 spec 静态加密、在**每一条读取路径**上脱敏（包括 `manifest export` 与 `debug --component config`），并由 `orchestrator secret key` 的轮换与吊销面板服务，EnvStore 三样都没有。正因为导出是脱敏的，它不能被 apply 回去——完整对比与这对备份意味着什么，见 [02 - 资源模型](02-resource-model.md#9-secretstore加密存储)。
 
 ```yaml
 apiVersion: orchestrator.dev/v2

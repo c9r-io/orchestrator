@@ -188,11 +188,13 @@ covered`. That is the check this record can claim, and it is the one claimed.
   refused but cannot be told the canonical spelling, because the lookup that
   yields canonical names has no Trigger entry. The scope cross-check runs over the
   intersection and asserts the skipped set is exactly `["Trigger"]`.
-- **`manifest export` still emits SecretStore values in cleartext.** Confirmed by
-  execution and by tracing the chain; carried as
-  `docs/ticket/secretstore_manifest-export_scenario0_260817_224518.md` and not
-  touched here. The read path added by this FR is redacted, which is the one leak
-  this work closes.
+- ~~**`manifest export` still emits SecretStore values in cleartext.**~~ **Closed
+  by FR-175.** Confirmed by execution and by tracing the chain, and left untouched
+  here; the read path added by this FR was redacted, which was the one leak this
+  work closed. FR-175 then found a second cleartext egress this note did not name
+  — `debug --component config` — and closed both behind a `RedactedConfig` type
+  that the manifest-export helpers now require. See
+  [DD-194](194-secret-egress-redaction.md).
 - **The ruling's compile-time barrier is not the first one a new kind meets.**
   `orchestrator-config` rejects an unhandled variant before the crate holding the
   ruling compiles, so a developer adding a kind is told about `cli_types.rs`

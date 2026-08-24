@@ -97,14 +97,17 @@ orchestrator 以方括号形式打印的机器可读错误码，如
 ## `secret_value_placeholder_rejected`
 
 - **含义**：某份 `kind: SecretStore` 清单的值是脱敏占位符 `[ENCRYPTED]` 而不是
-  真实密钥。读取路径会对密钥值脱敏，所以由 `get secretstore/<name>` 或
-  `describe secretstore/<name>` 得到的清单就是这个样子——它并不携带它看上去
-  携带的值。
+  真实密钥。**所有**读取路径都会对密钥值脱敏——`get secretstore/<name>`、
+  `describe secretstore/<name>`、两种格式的 `manifest export`、
+  `debug --component config`，以及 Console 的导出——所以从其中任何一条得到的
+  清单都是这个样子。它并不携带它看上去携带的值。
 - **触发**：对这样的清单执行 `orchestrator apply` 或 `manifest validate`。
-  清单被拒绝，不写入任何东西。
+  清单被拒绝，不写入任何东西。诊断会点名违规的 key。
 - **处置**：为每个 key 补上真实值。apply 是整体替换，所以从 `spec.data` 中
   省略某个 key 是**删除**它而不是保持不变——把占位符那几行删掉并不能修复
-  一份脱敏清单。读取命令用于查看某个 store 定义了哪些 key，它不是这些值的备份。
+  一份脱敏清单。读取命令用于查看某个 store 定义了哪些 key，它不是这些值的备份，
+  `manifest export` 同样不是：没有任何命令能导出一份可以带着密钥原样 apply
+  回去的配置。
 
 ## `FILE_SHARING_GLOBAL_SKILL_UNTRUSTED`
 
