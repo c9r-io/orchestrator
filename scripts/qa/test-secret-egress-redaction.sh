@@ -193,17 +193,28 @@ fi
 # AC4. The placeholder half is the load-bearing one: these components must not
 # begin emitting config at all, so a *redacted* config appearing here is as much
 # a regression as a cleartext one.
+#
+# Each carries a positive condition too. Three absences and nothing else are
+# satisfied by a component that returned the empty string, which is a regression
+# that reads as a pass — "emits no config" has to be distinguished from "emits
+# nothing".
 for component in state dag; do
+  case "$component" in
+    state) expected="Debug Information" ;;
+    dag) expected="DAG Debug Information" ;;
+  esac
   "$ORCH" debug --component "$component" > "$OUT/debug-$component.txt" 2>&1
+  produced=0
   leaked=0
   emitted_config=0
+  rg -q -F -- "$expected" "$OUT/debug-$component.txt" && produced=1
   rg -q -F -- "$SECRET" "$OUT/debug-$component.txt" && leaked=1
   rg -q -F -- "$PLACEHOLDER" "$OUT/debug-$component.txt" && emitted_config=1
   rg -q -F -- "$STORE" "$OUT/debug-$component.txt" && emitted_config=1
-  if [[ "$leaked" -eq 0 && "$emitted_config" -eq 0 ]]; then
-    pass "debug --component $component emits no config, redacted or otherwise"
+  if [[ "$produced" -eq 1 && "$leaked" -eq 0 && "$emitted_config" -eq 0 ]]; then
+    pass "debug --component $component produces its own output and no config, redacted or otherwise"
   else
-    fail "debug --component $component began emitting config (secret=$leaked config=$emitted_config)"
+    fail "debug --component $component: produced=$produced secret=$leaked config=$emitted_config"
   fi
 done
 

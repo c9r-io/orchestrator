@@ -107,6 +107,11 @@ cargo test -p agent-orchestrator --lib debug_state_and_dag_do_not_emit_config
   components must not begin emitting config, so a *redacted* config appearing
   here is as much a regression as a cleartext one. A test that only looked for
   the secret would go green on it.
+- Each also carries a **positive** condition — `state` must still say
+  `Debug Information` and `dag` `DAG Debug Information`. Three absences and
+  nothing else are satisfied by a component that returned the empty string, which
+  is a regression that reads as a pass. "Emits no config" has to be distinguished
+  from "emits nothing".
 
 ---
 

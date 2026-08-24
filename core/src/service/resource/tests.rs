@@ -1364,9 +1364,20 @@ fn debug_component_config_redacts_secret_store_values() {
 fn debug_state_and_dag_do_not_emit_config() {
     let mut fixture = TestState::new();
     let state = state_with_secret(&mut fixture);
-    for component in ["state", "dag"] {
+    for (component, expected) in [
+        ("state", "Debug Information"),
+        ("dag", "DAG Debug Information"),
+    ] {
         let rendered = crate::service::system::debug_info(&state, Some(component))
             .unwrap_or_else(|err| panic!("debug {component}: {err:?}"));
+        // Three absences and nothing else would be satisfied by a component that
+        // returned the empty string — a regression, and one that reads as a pass.
+        // The positive condition is what separates "emits no config" from "emits
+        // nothing".
+        assert!(
+            rendered.contains(expected),
+            "debug --component {component} must still produce its own output; got: {rendered}"
+        );
         assert!(
             !rendered.contains(EGRESS_SECRET),
             "debug --component {component} emitted the secret"
