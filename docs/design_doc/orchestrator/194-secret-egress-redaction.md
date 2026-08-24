@@ -170,8 +170,9 @@ test secret on disk for the run's duration, which is the shape every comparable
 daemon gate in this repository carries (`test-expert-resources-governed-editing`,
 `test-control-plane-action-audit`, `test-attention-inbox` are all
 manual-runbook). The security property itself is **CI-enforced** at the service
-boundary by six behavioural tests that `cargo test --workspace` runs on every
-push. The E2E gate adds the real-daemon, real-CLI evidence that acceptance
+boundary by seven behavioural tests in `service::resource::tests` and five unit
+tests in `config_load::redact`, all of which `cargo test --workspace` runs on
+every push. The E2E gate adds the real-daemon, real-CLI evidence that acceptance
 criterion 7 asks for, and it exists because the originating ticket was first
 probed at the pure-function layer — which is where the leak looked closed and was
 not.
@@ -184,6 +185,50 @@ The sweep carries a **control**. It plants the secret in a file and confirms the
 sweep finds it before reading the real outputs, because a sweep that cannot see a
 secret it is standing on reports clean for the same reason a genuinely clean tree
 does.
+
+### The certification run
+
+Pinned at `39ebb8af` with a clean worktree at both ends and the revision
+unchanged across the run. The gate set was **derived** —
+`jq -r '.scripts[] | select(.enforcement == "ci-required") | .path'` over
+`qa-gate-surface.json`, **61 gates** — never typed, and
+`certify-slack-managed-live.sh` ran as `status` because bare it exits 2 having
+printed its usage. Node was pinned to v24.19.0, inside `gui/package.json`'s
+declared `>=22 <26`, so the coverage gate's GUI leg was real rather than
+environmental.
+
+`cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -D warnings`
+and `cargo test --workspace` (40 suites) were run separately with `$?` captured
+directly, never through a pipe. All three clean.
+
+**57 passed, 4 failed of 61.** The four, each classified by mechanism rather than
+by category:
+
+- `core-boundary.rb` and `test-core-boundary.sh` — **real, and caused by this
+  change.** The new module moved the reviewed core surface from 128 files / 615
+  public items to 129 / 618, which is exactly `RedactedConfig` and its two
+  methods; `pubMod` is unchanged because the module is private and re-exported.
+  The ledger is regenerated and committed with the change that caused it, and
+  both gates are green after. This is the derived sweep earning its cost: a
+  hand-listed one would not have contained either gate.
+- `governance-result.sh` — reads the tier that ci.yml's tier step exports and
+  fails closed without it, so it cannot pass outside CI. Not a regression, and
+  not this FR's.
+- `test-ci-environment-parity.sh` — reported `coverage-governance.sh` exiting 1
+  with CI cleared and 0 with CI set. **Not reproducible.** Run standalone at the
+  same revision under the same Node, `coverage-governance.sh` with the CI
+  variables cleared exits 0, and the parity gate itself then passes 1/0. In the
+  sweep it was the second and third consecutive full llvm-cov + Playwright run;
+  no mechanism was established beyond that, and it is recorded as unexplained
+  rather than as environmental.
+
+That last one exposed a defect in the parity gate, fixed here rather than
+inherited: **it printed the CI side's log for a failure on the non-CI side.**
+`tail -15 "$WORK/with.log"` runs whichever side diverged, so the operator was
+handed a log ending in `coverage governance passed` as the evidence for a
+failure — §4.4 shape 6 inside a governance gate's own reporting, and the case
+that hits a developer machine rather than CI. Both sides are now printed with
+their status.
 
 ## Consequences for users
 
