@@ -191,7 +191,12 @@
     },
     "scripts/qa/test-secret-egress-redaction.sh": {
       "owner": "docs/qa/orchestrator/232-secret-egress-redaction.md",
-      "lastRun": null
+      "lastRun": {
+        "date": "2026-08-24",
+        "revision": "762e429478cfc3c1cbe204dedb75c5f6756acd5f",
+        "exitStatus": 0,
+        "worktreeDirty": false
+      }
     },
     "scripts/qa/test-self-bootstrap-cycle2-regression.sh": {
       "owner": "docs/qa/self-bootstrap/04-cycle2-validation-and-runtime-timestamps.md",
