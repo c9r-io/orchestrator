@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "scope": "non-test Rust source under core/src, excluding inline cfg(test) modules, files under a tests directory, and files whose basename contains test that are also confirmed test-only — their mod declaration is gated on cfg(test) or a test-only feature, or nothing but comments survives stripping their cfg(test) modules — counted on the lexically masked source so that comments and string literals are not code",
   "coreSurface": {
-    "files": 128,
+    "files": 129,
     "pubMod": 49,
-    "publicItems": 615
+    "publicItems": 618
   },
   "rusqlite": {
     "total": 0,

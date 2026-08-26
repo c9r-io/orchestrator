@@ -524,12 +524,20 @@ fn prune_map_entries<T>(
 }
 
 /// Export all resources as manifest documents in JSON or YAML format.
+///
+/// `ManifestExport` is in the read-only role's allowed set, which makes this the widest
+/// of the config-shaped egress paths — wider than `debug --component config`, which
+/// requires admin. Until FR-175 it serialized `active.config` directly and emitted
+/// SecretStore values in cleartext, in both formats, while the user guide documented them
+/// as "replaced with a placeholder before leaving the daemon". The redaction is not
+/// applied here by convention: `export_manifest_documents` and `export_crd_documents`
+/// accept nothing but a `RedactedConfig`.
 pub fn export_manifests(state: &InnerState, output_format: &str) -> Result<String> {
     let active = read_active_config(state)?;
-    let config = &active.config;
+    let config = crate::config_load::RedactedConfig::new(&active.config);
 
-    let builtin_docs = crate::resource::export_manifest_documents(config);
-    let crd_docs = crate::resource::export_crd_documents(config);
+    let builtin_docs = crate::resource::export_manifest_documents(&config);
+    let crd_docs = crate::resource::export_crd_documents(&config);
 
     match output_format {
         "json" => {

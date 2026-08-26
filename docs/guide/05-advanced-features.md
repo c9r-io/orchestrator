@@ -93,7 +93,7 @@ CRDs support two levels of validation:
 
 ## EnvStore & SecretStore
 
-EnvStore and SecretStore are reusable variable sets that agents can reference. They share the same `data` structure, but the kind is not a naming convention: a SecretStore spec is encrypted at rest, redacted on export, and served by the `orchestrator secret key` rotation and revocation surface, while an EnvStore is none of those things. See [02 - Resource Model](02-resource-model.md#9-secretstore) for the full comparison before choosing.
+EnvStore and SecretStore are reusable variable sets that agents can reference. They share the same `data` structure, but the kind is not a naming convention: a SecretStore spec is encrypted at rest, redacted on every read path including `manifest export` and `debug --component config`, and served by the `orchestrator secret key` rotation and revocation surface, while an EnvStore is none of those things. Because the export is redacted, it cannot be applied back — see [02 - Resource Model](02-resource-model.md#9-secretstore) for the full comparison and for what that means for backups.
 
 ```yaml
 apiVersion: orchestrator.dev/v2

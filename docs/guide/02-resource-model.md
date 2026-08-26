@@ -331,6 +331,8 @@ A SecretStore has the same spec structure as EnvStore. The two are not interchan
 | Export and overview | Values shown | Values replaced with a placeholder before leaving the daemon |
 | Key operations | None | `orchestrator secret key status\|list\|rotate\|revoke\|history\|bootstrap` |
 
+Redaction on the way out means the export is not a backup on the way back in. An exported manifest re-applied is refused with [`secret_value_placeholder_rejected`](error-codes.md#secret_value_placeholder_rejected), naming the key that carries the placeholder — deliberately, because the alternative is overwriting a real secret with the literal string `[ENCRYPTED]`. No command exports a config that can be applied back with its secrets intact; keep those where you keep your other secrets.
+
 Choosing the wrong kind therefore has consequences you cannot see in the manifest: a secret written into an EnvStore is stored in the clear and is printed by export. Moving it later is not a rename — you must delete the EnvStore and apply a SecretStore, because the audit trail records `resource.env_store.apply` and `resource.secret_store.apply` as distinct actions and those action names are permanent. Since FR-167 the delete half is recorded the same way, as `resource.env_store.delete` and `resource.secret_store.delete`, so the move leaves a complete two-row trail rather than a create with no matching removal.
 
 ```yaml
@@ -597,6 +599,8 @@ orchestrator get workspaces -l env=dev
 # Export all config as YAML
 orchestrator manifest export
 ```
+
+SecretStore values come out as `[ENCRYPTED]`, so an export is a resource inventory rather than a restorable backup — see [SecretStore](#9-secretstore).
 
 ## Multi-Document Manifests
 

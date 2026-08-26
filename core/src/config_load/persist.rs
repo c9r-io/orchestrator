@@ -1,8 +1,8 @@
 use crate::config::OrchestratorConfig;
+use crate::config_load::RedactedConfig;
 use crate::dto::ConfigOverview;
 use crate::persistence::repository::{ConfigRepository, HealLogEntry, SqliteConfigRepository};
 use crate::resource::export_manifest_resources;
-use crate::secret_store_crypto::redact_secret_data_map;
 use anyhow::{Context, Result};
 #[cfg(test)]
 use orchestrator_persistence::test_support::open_conn;
@@ -15,38 +15,22 @@ use super::{
     validate_agent_command_rules, validate_agent_env_store_refs,
 };
 
+/// Renders a config as the (yaml, json) pair persisted in a snapshot row.
+///
+/// The single implementation. `persistence::repository::config` carried a byte-identical
+/// private copy of this and of the redactor it called until FR-175 collapsed them; only
+/// this one was ever under test, which is the drift the duplication was going to produce
+/// and had already produced by the time anyone looked.
 pub(crate) fn serialize_config_snapshot(config: &OrchestratorConfig) -> Result<(String, String)> {
-    let sanitized = sanitized_config_snapshot(config);
-    let yaml = export_manifest_resources(&sanitized)
+    let redacted = RedactedConfig::new(config);
+    let yaml = export_manifest_resources(&redacted)
         .iter()
         .map(crate::resource::Resource::to_yaml)
         .collect::<Result<Vec<_>>>()?
         .join("---\n");
     let json_raw =
-        serde_json::to_string(&sanitized).context("failed to serialize redacted config json")?;
+        serde_json::to_string(&redacted).context("failed to serialize redacted config json")?;
     Ok((yaml, json_raw))
-}
-
-fn sanitized_config_snapshot(config: &OrchestratorConfig) -> OrchestratorConfig {
-    let mut sanitized = config.clone();
-    for project in sanitized.projects.values_mut() {
-        for store in project.secret_stores.values_mut() {
-            for value in store.data.values_mut() {
-                *value = crate::secret_store_crypto::ENCRYPTED_PLACEHOLDER.to_string();
-            }
-        }
-    }
-    for resource in sanitized.resource_store.resources_mut().values_mut() {
-        if resource.kind != "SecretStore" {
-            continue;
-        }
-        if let Some(spec) = resource.spec.as_object_mut()
-            && let Some(data) = spec.get_mut("data").and_then(|value| value.as_object_mut())
-        {
-            redact_secret_data_map(data);
-        }
-    }
-    sanitized
 }
 
 /// Query the latest heal summary for a given config version.

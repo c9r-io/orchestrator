@@ -135,7 +135,16 @@ compare_environments() {
     return 0
   fi
   echo "    $path: exit $without with CI cleared, exit $with with CI set" >&2
-  echo "    --- output under CI ---" >&2
+  # Both sides, labelled with their status. Printing only the CI side is §4.4
+  # shape 6 in this gate's own reporting: when the *non*-CI run is the one that
+  # failed — which is the case the gate exists to catch on a developer machine —
+  # the operator is handed the output of the run that passed and has to rebuild
+  # the failing one by hand. Measured during the FR-175 certification sweep,
+  # where this gate reported `coverage-governance.sh` as divergent and printed a
+  # log ending in "coverage governance passed".
+  echo "    --- output with CI cleared (exit $without) ---" >&2
+  tail -15 "$WORK/without.log" >&2
+  echo "    --- output under CI (exit $with) ---" >&2
   tail -15 "$WORK/with.log" >&2
   return 1
 }

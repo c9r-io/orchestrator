@@ -316,7 +316,17 @@ spec:
 
 ## 9. SecretStore（加密存储）
 
-SecretStore 与 EnvStore 结构相同，但用于敏感值。通过 `kind` 字段在资源层面区分。
+SecretStore 与 EnvStore 结构完全相同，两者不可互换。`kind` 不是一个标签，它是三种行为共同读取的开关：
+
+| | EnvStore | SecretStore |
+|---|---|---|
+| 静态存储 | 明文 JSON | AEAD 加密，绑定到项目与资源名 |
+| 导出与总览 | 显示值 | 值在离开 daemon 前被替换为占位符 |
+| 密钥操作 | 无 | `orchestrator secret key status\|list\|rotate\|revoke\|history\|bootstrap` |
+
+因此选错 kind 的后果在清单里是看不见的：写进 EnvStore 的密钥以明文存储，并且会被 export 打印出来。事后搬迁不是改名——必须删掉 EnvStore 再 apply 一个 SecretStore，因为审计记录把 `resource.env_store.apply` 与 `resource.secret_store.apply` 记为两个不同的动作，而这些动作名是永久的。
+
+出网时脱敏，意味着导出的清单不能作为可还原的备份。把一份导出的清单 apply 回去会被 [`secret_value_placeholder_rejected`](error-codes.md#secret_value_placeholder_rejected) 拒绝，并点名携带占位符的 key——这是刻意的，否则真实密钥会被字面量 `[ENCRYPTED]` 覆盖。**没有任何命令**能导出一份可以带着密钥原样 apply 回去的配置；请把密钥放在你存放其他密钥的地方。
 
 ```yaml
 apiVersion: orchestrator.dev/v2
@@ -529,6 +539,8 @@ orchestrator get workspaces -l env=dev
 # 导出所有配置为 YAML
 orchestrator manifest export
 ```
+
+SecretStore 的值导出为 `[ENCRYPTED]`，所以一份导出是资源清单而不是可还原的备份 —— 见 [SecretStore](#9-secretstore加密存储)。
 
 ## 多文档清单
 

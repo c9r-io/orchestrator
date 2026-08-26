@@ -1,6 +1,7 @@
 mod build;
 mod normalize;
 mod persist;
+mod redact;
 mod self_heal;
 mod state;
 mod validate;
@@ -9,6 +10,7 @@ mod workspace;
 pub use build::*;
 pub use normalize::*;
 pub use persist::*;
+pub use redact::*;
 pub use self_heal::*;
 pub use state::*;
 pub use validate::*;

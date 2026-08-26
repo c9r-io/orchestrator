@@ -14,9 +14,15 @@ self_referential_safe: true
 
 ## Background
 
-Two new resource kinds (`EnvStore` and `SecretStore`) allow declaring reusable environment variable sets in YAML manifests. Both share the same `spec.data` shape (`HashMap<String, String>`) but differ in the `sensitive` flag: EnvStore is non-sensitive, SecretStore is sensitive (values are redacted in logs).
+Two resource kinds (`EnvStore` and `SecretStore`) allow declaring reusable environment
+variable sets in YAML manifests. Both share the same `spec.data` shape
+(`HashMap<String, String>`), and the `kind` is the switch three real behaviours read:
+a SecretStore spec is encrypted at rest, redacted on every read path, and served by
+the `orchestrator secret key` surface; an EnvStore is none of those.
 
-Both resources use the standard `apply` / `manifest export` / `delete` CLI commands and are stored in the unified `env_stores` config map.
+Both use the standard `apply` / `manifest export` / `delete` CLI commands. They are
+stored in **separate** project maps — `env_stores` and `secret_stores` — not in one
+unified map; the earlier wording here said otherwise and was wrong.
 
 ---
 
@@ -164,37 +170,25 @@ Verify that `get_from` for EnvStore skips sensitive entries, and `get_from` for 
 
 ## Known Limitations
 
-### `manifest export` and `debug --component config` emit SecretStore values in cleartext
+### ~~`manifest export` and `debug --component config` emit SecretStore values in cleartext~~ — closed by FR-175
 
-**This is a design gap, not a test error.** The implementation follows the design:
-`docs/design_doc/orchestrator/17-envstore-secretstore-agent-env.md` bounds redaction
-to *at rest* (`:132`) and *in logs* (`:140`, `:175`), and lists export as an
-acceptance criterion (`:171`). Nothing in the design says an authorized read command
-redacts. Routed to
-[FR-175](../../feature_request/FR-175-secret-redaction-at-egress.md).
+Measured end-to-end at `e6081c6d` against an isolated daemon, this document recorded
+`manifest export` in both formats, `debug --component config` and the GUI's
+`manifest_export` as emitting cleartext, and routed the gap to FR-175 rather than
+treating it as a test error. FR-175 closed all four behind a `RedactedConfig` type
+whose only constructor redacts and which the manifest-export helpers require by
+signature.
 
-Measured end-to-end at `e6081c6d` against an isolated daemon — a real SecretStore
-applied, then each read path grepped:
+The redaction is not a free win: a redacted export cannot be applied back, and is
+refused by `secret_value_placeholder_rejected` naming the key. See
+[DD-194](../../design_doc/orchestrator/194-secret-egress-redaction.md).
 
-| Read path | Cleartext? |
-|---|---|
-| `manifest export -o yaml` | **yes** |
-| `manifest export -o json` | **yes** |
-| `debug --component config` | **yes** |
-| GUI `manifest_export` Tauri command | **yes** (same RPC) |
-| `get secretstore <name>` / `get secretstores` | no |
-| `debug --component state` / `--component dag` | no |
-| database at rest | no |
+### ~~No scenario covers what `manifest export` actually emits~~ — covered by QA 232
 
-Until FR-175 lands, treat the output of those three as secret material: do not
-redirect it into a file you will commit, attach, or paste.
-
-### No scenario covers what `manifest export` actually emits
-
-This document's **Scope** names export, and the five scenarios above check apply,
-idempotency, delete, name validation and cross-kind isolation — none reads the
-export output's *content*. That absence is why the leak above survived unnoticed,
-and it is why FR-175 carries a requirement for the coverage rather than leaving it
-to be added here: this document is already at the five-scenario ceiling that
-`qa-doc-lint` enforces, so adding one means replacing one, which is a decision for
-that FR's governance.
+This document's **Scope** names export, and its five scenarios check apply,
+idempotency, delete, name validation and cross-kind isolation — none read the export
+output's *content*, which is why the leak above survived unnoticed. This document is
+at the five-scenario ceiling `qa-doc-lint` enforces, so FR-175's governance put the
+coverage in a new document rather than displacing a CRUD scenario:
+[QA 232 — Secret Egress Redaction](232-secret-egress-redaction.md), seven scenarios
+mapped to that FR's seven acceptance criteria.
